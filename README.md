@@ -1,50 +1,64 @@
-# Welcome to your Expo app 👋
+# quattro4maggi
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A collection of React Native animation experiments built with **Skia** and **Reanimated**.
 
-## Get started
+🌐 [quattro4maggi.com](https://quattro4maggi.com) · 𝕏 [@m090009](https://x.com/m090009)
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## Demos
 
-2. Start the app
+| Demo | Preview | Description |
+|------|---------|-------------|
+| [Shared Element](/src/app/shared-element) | ![shared-element](./assets/demos/shared-element.gif) | Smooth shared element transitions |
+| [Ripple Shader](/src/app/ripple-shader) | ![ripple-shader](./assets/demos/ripple-shader.gif) | Custom ripple effect using Skia shaders |
+| [Final Ripple](/src/app/final-ripple) | ![final-ripple](./assets/demos/final-ripple.gif) | Polished ripple with advanced timing |
+| [Shader Wrapper](/src/app/shader-wrapper) | ![shader-wrapper](./assets/demos/shader-wrapper.gif) | Reusable wrapper for Skia shader effects |
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Quick Start
 
 ```bash
-npm run reset-project
+# Clone
+git clone https://github.com/m090009/quattro4maggi.git
+cd quattro4maggi
+
+# Install
+bun install
+
+# Run
+bun run start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-## Learn more
+## Tech Stack
 
-To learn more about developing your project with Expo, look at the following resources:
+- [Expo](https://expo.dev) + [Expo Router](https://expo.github.io/router)
+- [React Native Skia](https://shopify.github.io/react-native-skia/)
+- [Reanimated](https://docs.swmansion.com/react-native-reanimated/)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+---
 
-## Join the community
+## Structure
 
-Join our community of developers creating universal apps.
+```
+src/
+├── app/                    # Expo Router routes
+│   ├── index.tsx           # Home gallery
+│   ├── shared-element/
+│   ├── ripple-shader/
+│   ├── final-ripple/
+│   └── shader-wrapper/
+├── components/             # Demo-specific components
+│   └── [demo-name]/
+├── hooks/
+└── lib/shaders/
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## License
+
+MIT – feel free to use in your projects. A ⭐ or mention is appreciated!
