@@ -1,23 +1,39 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { PortalProvider } from "@gorhom/portal";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ title: 'quattro4maggi' }} />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <PortalProvider>
+        <ThemeProvider
+          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+        >
+          <Stack>
+            {/* <Stack.Screen name="index" options={{ title: 'quattro4maggi' }} />
         <Stack.Screen name="shared-element" options={{ title: 'Shared Element' }} />
         <Stack.Screen name="ripple-shader" options={{ title: 'Ripple Shader' }} />
         <Stack.Screen name="final-ripple" options={{ title: 'Final Ripple' }} />
-        <Stack.Screen name="shader-wrapper" options={{ title: 'Shader Wrapper' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+        <Stack.Screen name="shader-wrapper" options={{ title: 'Shader Wrapper' }} /> */}
+            <Stack.Screen
+              name="scale-flip-card"
+              options={{ title: "Scale Flip Card" }}
+            />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </PortalProvider>
+    </GestureHandlerRootView>
   );
 }

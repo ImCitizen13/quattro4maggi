@@ -1,12 +1,13 @@
 import { Link } from 'expo-router';
-import { StyleSheet, View, Text, Pressable } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const demos = [
-  { name: 'Shared Element', href: '/shared-element' as const },
-  { name: 'Ripple Shader', href: '/ripple-shader' as const },
-  { name: 'Final Ripple', href: '/final-ripple' as const },
-  { name: 'Shader Wrapper', href: '/shader-wrapper' as const },
+  // { name: 'Shared Element', href: '/shared-element' as const },
+  // { name: 'Ripple Shader', href: '/ripple-shader' as const },
+  // { name: 'Final Ripple', href: '/final-ripple' as const },
+  // { name: 'Shader Wrapper', href: '/shader-wrapper' as const },
+  { name: 'Scale Flip Card', href: '/scale-flip-card' as const }
 ];
 
 export default function HomeScreen() {
