@@ -7,7 +7,8 @@ const demos = [
   // { name: 'Ripple Shader', href: '/ripple-shader' as const },
   // { name: 'Final Ripple', href: '/final-ripple' as const },
   // { name: 'Shader Wrapper', href: '/shader-wrapper' as const },
-  { name: 'Scale Flip Card', href: '/scale-flip-card' as const }
+  { name: 'Scale Flip Card', href: '/scale-flip-card' as const },
+  { name: 'Text Flyin', href: '/text-flyin' as const }
 ];
 
 export default function HomeScreen() {
@@ -22,6 +23,8 @@ export default function HomeScreen() {
               <Text style={styles.cardTitle}>{demo.name}</Text>
             </Pressable>
           </Link>
+          
+          
         ))}
       </View>
     </SafeAreaView>
