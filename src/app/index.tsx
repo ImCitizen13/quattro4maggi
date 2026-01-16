@@ -13,6 +13,7 @@ const demos = [
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
+      
       <Text style={styles.title}>Demos</Text>
       <View style={styles.grid}>
         {demos.map((demo) => (

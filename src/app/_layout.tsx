@@ -26,10 +26,10 @@ export default function RootLayout() {
         <Stack.Screen name="ripple-shader" options={{ title: 'Ripple Shader' }} />
         <Stack.Screen name="final-ripple" options={{ title: 'Final Ripple' }} />
         <Stack.Screen name="shader-wrapper" options={{ title: 'Shader Wrapper' }} /> */}
-            <Stack.Screen
+            {/* <Stack.Screen
               name="scale-flip-card"
-              options={{ title: "Scale Flip Card" }}
-            />
+              options={{ title: "Scale Flip Card", headerShown: false }}
+            /> */}
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>
