@@ -2,17 +2,25 @@ import {
   KineticText,
   KineticTextHandle,
 } from "@/components/text-flyin/TextCanvas";
-import { ThemeButton, ThemeHeaderTitle, ThemeText } from "@/components/Theme";
-import { Host, Slider } from "@expo/ui/swift-ui";
+import { ThemeButton, ThemeHeaderTitle } from "@/components/Theme";
+import { Host, Slider, Switch, VStack } from "@expo/ui/swift-ui";
+import { disabled, opacity, padding } from "@expo/ui/swift-ui/modifiers";
 import { Stack } from "expo-router";
 import React, { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { useDerivedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function TextFlyinDemo() {
   const textRef = useRef<KineticTextHandle>(null);
   const [sliderValue, setSliderValue] = useState(0);
+  const [checked, setChecked] = useState(false);
+  const [lagChecked, setLagChecked] = useState(false);
 
+
+  const useAnimatedProgress = useDerivedValue(() => {
+    return sliderValue;
+  });
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen
@@ -25,12 +33,15 @@ export default function TextFlyinDemo() {
       <View style={styles.demoContainer}>
         <KineticText
           ref={textRef}
-          text="Reminders"
+          text="motivation"
           fontSize={48}
           color="#fff"
           staggerDelay={0.08}
           duration={Math.max(1000, sliderValue * 5000)}
           autoStart={false}
+          progress={useAnimatedProgress}
+          withSliderControl={checked}
+          laggy={lagChecked}
           onAnimationStart={() => {
             "worklet";
             // console.log("Animation started");
@@ -40,6 +51,27 @@ export default function TextFlyinDemo() {
             // console.log("Animation completed");
           }}
         />
+        {/* <KineticText
+          ref={textRef}
+          text="motivation"
+          fontSize={48}
+          color="#646799"
+          bgcolor="#D1D1D1"
+          staggerDelay={0.08}
+          duration={Math.max(1000, sliderValue * 5000)}
+          autoStart={false}
+          progress={useAnimatedProgress}
+          withSliderControl={checked}
+          onAnimationStart={() => {
+            "worklet";
+            // console.log("Animation started");
+          }}
+          onAnimationComplete={() => {
+            "worklet";
+            // console.log("Animation completed");
+          }}
+        /> */}
+
         {/* <KineticText/> */}
       </View>
 
@@ -50,17 +82,52 @@ export default function TextFlyinDemo() {
       </View>
 
       <View style={styles.durationContainer}>
-        <ThemeText
-          text={`Duration: ${Math.max(1000, sliderValue * 5000).toFixed(1).toString()}ms`}
-        />
         <Host style={{ width: "80%", height: 100 }}>
-          <Slider
-            value={sliderValue}
-            onValueChange={(value) => {
-              setSliderValue(value);
-            }}
-            color="purple"
-          />
+          <VStack
+            modifiers={[
+              // glassEffect({
+              //   glass: {
+              //     variant: "regular",
+              //     interactive: true,
+              //     // tint: "#ffffff",
+              //   },
+              //   shape: "rectangle",
+              // }),
+              padding({ all: 10 }),
+            ]}
+            spacing={10}
+          >
+            <Switch
+              value={lagChecked}
+              onValueChange={(checked) => {
+                setLagChecked(checked);
+              }}
+              color="purple"
+              label="Make it laggy"
+              variant="switch"
+            />
+            <Switch
+              value={checked}
+              onValueChange={(checked) => {
+                setChecked(checked);
+              }}
+              color="purple"
+              label="Use Slider"
+              variant="switch"
+            />
+            <Slider
+              max={1}
+              min={0}
+              value={sliderValue}
+              onValueChange={(value) => {
+                setSliderValue(value);
+              }}
+              color="purple"
+              modifiers={[opacity(checked ? 1 : 0.5), disabled(!checked)]}
+            />
+
+
+          </VStack>
         </Host>
       </View>
       {/* <SkiaMorphingButton /> */}

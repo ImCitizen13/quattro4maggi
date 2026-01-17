@@ -24,6 +24,7 @@
  * textRef.current?.reset();
  */
 
+import { SPRING_TEXT_CONFIG } from "@/lib/animations/constants";
 import { forwardRef, useImperativeHandle, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 import Animated, {
@@ -58,16 +59,19 @@ export type KineticTextProps = {
   // --- Styling ---
   fontSize?: number;
   color?: string;
-
+  bgcolor?: string;
   duration?: number;
 
   // --- Animation Configuration ---
   staggerDelay?: number;
   autoStart?: boolean; // Auto-start animation on mount (default: true)
-
+  progress?: SharedValue<number>;
+  withSliderControl?: boolean;
   // --- Callbacks ---
   onAnimationStart?: () => void;
   onAnimationComplete?: () => void;
+
+  laggy?: boolean;
 };
 
 // ============================================================================
@@ -82,6 +86,7 @@ type AnimatedCharProps = {
   staggerDelay: number;
   progress: SharedValue<number>;
   withWarp?: boolean;
+  steps?: number;
 };
 
 const AnimatedChar = ({
@@ -92,6 +97,7 @@ const AnimatedChar = ({
   staggerDelay,
   progress,
   withWarp = true,
+  steps,
 }: AnimatedCharProps) => {
   const animatedStyle = useAnimatedStyle(() => {
     // Calculate stagger offset for this character
@@ -127,21 +133,39 @@ const AnimatedChar = ({
       Extrapolation.CLAMP
     );
 
+    // Quantize progress into steps for choppy effect
+
+    const quantizedProgress = steps
+      ? Math.floor(localProgress * steps) / steps
+      : localProgress;
     // 2. Warp Physics
     const opacity = localProgress;
-    const translateY = interpolate(localProgress, [0, 1], [40, 0]);
-    const scale = interpolate(localProgress, [0, 1], [0.2, 1]);
+    const translateY = interpolate(
+      quantizedProgress,
+      [0, 0.5, 1],
+      [50, -15, 0]
+    );
 
+    // const scale = interpolate(localProgress, [0, 1], [0.2, 1]);
+    const perspective = 400; //interpolate(localProgress, [0, 1], [400, 100]);
     // The "Warp": Rotate from 90 degrees (flat/invisible) to 0 (facing user)
-    const rotateX = `${interpolate(localProgress, [0, 1], [90, 0])}deg`;
+    const rotateX = `${interpolate(
+      quantizedProgress,
+      [0, 0.5, 1],
+      [90, 0, 0]
+    )}deg`;
+    // const rotateY = `${interpolate(localProgress, [0, 1], [90, 0])}deg`;
+    const rotateZ = `${interpolate(quantizedProgress, [0, 1], [-20, 0])}deg`;
 
     return {
       opacity,
       transform: [
-        { perspective: 400 }, // Critical: Must be first for the 3D effect
+        { perspective: perspective }, // Critical: Must be first for the 3D effect
         { translateY },
         { rotateX },
-        { scale },
+        // { rotateY },
+        { rotateZ },
+        // { scale },
       ],
     };
   });
@@ -163,11 +187,15 @@ export const KineticText = forwardRef<KineticTextHandle, KineticTextProps>(
       text = "Reminders",
       fontSize = 48,
       color = "#fff",
-      staggerDelay = 0.08, // More is less
+      bgcolor = "#000",
+      staggerDelay = 0.01, // More is less
       autoStart = true,
       duration = 3000,
       onAnimationStart,
       onAnimationComplete,
+      progress: progressValue,
+      withSliderControl = false,
+      laggy = false,
     },
     ref
   ) {
@@ -191,11 +219,8 @@ export const KineticText = forwardRef<KineticTextHandle, KineticTextProps>(
 
       progress.value = withSpring(
         totalTarget,
-        {
-          duration: duration,
-          dampingRatio: 1,
-          mass: 4,
-        },
+
+        SPRING_TEXT_CONFIG,
         (finished) => {
           if (finished) {
             isAnimating.value = false;
@@ -228,7 +253,7 @@ export const KineticText = forwardRef<KineticTextHandle, KineticTextProps>(
     }
 
     return (
-      <Animated.View style={styles.container}>
+      <Animated.View style={[styles.container, { backgroundColor: bgcolor }]}>
         {chars.map((char, index) => (
           <AnimatedChar
             key={`${char}-${index}`}
@@ -237,7 +262,8 @@ export const KineticText = forwardRef<KineticTextHandle, KineticTextProps>(
             fontSize={fontSize}
             color={color}
             staggerDelay={staggerDelay}
-            progress={progress}
+            progress={withSliderControl ? progressValue ?? progress : progress}
+            steps={ laggy ? 8 : undefined}
           />
         ))}
       </Animated.View>
