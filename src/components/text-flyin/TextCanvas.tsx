@@ -2,26 +2,87 @@
  * KineticText Component
  *
  * A text animation component that creates a kinetic "fly-in" effect where each
- * character animates in with a staggered delay, scaling and translating smoothly.
+ * character animates in with a staggered delay. Supports two animation modes:
+ * a simple scale/translate effect and a 3D "warp" effect with perspective rotation.
  *
+ * ============================================================================
  * FLOW:
- * 1. Text is split into individual characters
- * 2. Each character animates independently with staggered timing
- * 3. Parent can control animation via ref (start, pause, stop, reset)
- * 4. Characters scale, translate, and fade in smoothly
+ * ============================================================================
+ * 1. Text string is split into individual characters
+ * 2. A shared `progress` value (0 → 1) drives all character animations
+ * 3. Each character calculates its `localProgress` based on index and stagger delay
+ * 4. Characters animate with opacity, translateY, and scale (or 3D rotations in warp mode)
+ * 5. Parent can control animation via ref methods (start, reset)
+ * 6. Optional slider control allows manual progress scrubbing
  *
+ * ============================================================================
  * KEY FEATURES:
- * - Staggered character animations
- * - Smooth spring-based transitions
- * - Imperative controls via ref (start, pause, stop, reset)
- * - Customizable text and styling
+ * ============================================================================
+ * - Staggered character animations with configurable delay
+ * - Two animation modes: simple (scale/translate) and warp (3D perspective rotation)
+ * - Spring-based animations for natural motion
+ * - Imperative control via forwardRef (start, reset)
+ * - External progress control via SharedValue for slider/gesture integration
+ * - "Laggy" mode with quantized steps for retro/choppy effect
+ * - Worklet-compatible callbacks (onAnimationStart, onAnimationComplete)
+ * - Fully runs on UI thread for 60fps performance
  *
- * USAGE:
+ * ============================================================================
+ * ANIMATION MODES:
+ * ============================================================================
+ *
+ * **Simple Mode (withWarp=false):**
+ * - Opacity: 0 → 1
+ * - TranslateY: 30 → 0 (drops down into place)
+ * - Scale: 0.3 → 1
+ *
+ * **Warp Mode (withWarp=true, default):**
+ * - Opacity: 0 → 1
+ * - TranslateY: 50 → -15 → 0 (overshoots then settles)
+ * - RotateX: 90° → 0° (flips from flat to facing user)
+ * - RotateZ: -20° → 0° (slight rotation correction)
+ * - Perspective: 400px for 3D depth
+ *
+ * ============================================================================
+ * USAGE EXAMPLES:
+ * ============================================================================
+ *
+ * **Basic Usage (auto-start):**
+ * ```tsx
+ * <KineticText text="Hello" fontSize={48} color="#fff" />
+ * ```
+ *
+ * **With Ref Control:**
+ * ```tsx
  * const textRef = useRef<KineticTextHandle>(null);
+ *
+ * <KineticText
+ *   ref={textRef}
+ *   text="Animate Me"
+ *   autoStart={false}
+ * />
+ *
+ * // Trigger animation
  * textRef.current?.start();
- * textRef.current?.pause();
- * textRef.current?.stop();
  * textRef.current?.reset();
+ * ```
+ *
+ * **With Slider Control:**
+ * ```tsx
+ * const progress = useDerivedValue(() => sliderValue);
+ *
+ * <KineticText
+ *   text="Scrub Me"
+ *   progress={progress}
+ *   withSliderControl={true}
+ *   autoStart={false}
+ * />
+ * ```
+ *
+ * **With Laggy Effect:**
+ * ```tsx
+ * <KineticText text="Retro" laggy={true} />
+ * ```
  */
 
 import { SPRING_TEXT_CONFIG } from "@/lib/animations/constants";
@@ -43,34 +104,99 @@ import Animated, {
 
 /**
  * Methods exposed to parent via ref
- * Usage: const textRef = useRef<KineticTextHandle>(null);
- *        textRef.current?.start();
+ *
+ * @example
+ * const textRef = useRef<KineticTextHandle>(null);
+ * textRef.current?.start();   // Start the animation
+ * textRef.current?.reset();   // Reset to initial state
+ * textRef.current?.isAnimating; // Check if currently animating
  */
 export type KineticTextHandle = {
+  /** Starts the fly-in animation from current progress */
   start: () => void;
+  /** Resets animation to initial state (progress = 0) */
   reset: () => void;
+  /** Returns true if animation is currently running */
   isAnimating: boolean;
 };
 
+/**
+ * Props for the KineticText component
+ */
 export type KineticTextProps = {
-  // --- Content ---
+  // -------------------------------------------------------------------------
+  // Content
+  // -------------------------------------------------------------------------
+
+  /** The text string to animate (default: "Reminders") */
   text?: string;
 
-  // --- Styling ---
+  // -------------------------------------------------------------------------
+  // Styling
+  // -------------------------------------------------------------------------
+
+  /** Font size in pixels (default: 48) */
   fontSize?: number;
+
+  /** Text color (default: "#fff") */
   color?: string;
+
+  /** Background color of the container (default: "#000") */
   bgcolor?: string;
+
+  /** Animation duration in milliseconds - currently unused, spring config controls timing */
   duration?: number;
 
-  // --- Animation Configuration ---
+  // -------------------------------------------------------------------------
+  // Animation Configuration
+  // -------------------------------------------------------------------------
+
+  /**
+   * Delay between each character's animation start.
+   * Higher values = more spread out, lower values = more simultaneous.
+   * Range: 0-1 where 0.08 is a good default (default: 0.01)
+   */
   staggerDelay?: number;
-  autoStart?: boolean; // Auto-start animation on mount (default: true)
+
+  /** Whether to auto-start animation on mount (default: true) */
+  autoStart?: boolean;
+
+  /**
+   * External SharedValue to control animation progress (0-1).
+   * Use with `withSliderControl={true}` for manual scrubbing.
+   */
   progress?: SharedValue<number>;
+
+  /**
+   * When true, uses the external `progress` prop instead of internal animation.
+   * Enables slider/gesture-based control (default: false)
+   */
   withSliderControl?: boolean;
-  // --- Callbacks ---
+
+  // -------------------------------------------------------------------------
+  // Callbacks (must be worklets!)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Called when animation starts. Must be a worklet!
+   * @example onAnimationStart={() => { "worklet"; console.log("started"); }}
+   */
   onAnimationStart?: () => void;
+
+  /**
+   * Called when animation completes. Must be a worklet!
+   * @example onAnimationComplete={() => { "worklet"; console.log("done"); }}
+   */
   onAnimationComplete?: () => void;
 
+  // -------------------------------------------------------------------------
+  // Effects
+  // -------------------------------------------------------------------------
+
+  /**
+   * Enables "laggy" effect by quantizing animation into discrete steps.
+   * Creates a retro/choppy visual effect (default: false)
+   */
   laggy?: boolean;
 };
 
@@ -78,14 +204,26 @@ export type KineticTextProps = {
 // ANIMATED CHARACTER COMPONENT
 // ============================================================================
 
+/**
+ * Internal component that renders and animates a single character.
+ * Calculates its own localProgress based on the shared progress value and stagger offset.
+ */
 type AnimatedCharProps = {
+  /** The character to render */
   char: string;
+  /** Index in the text string (used for stagger calculation) */
   index: number;
+  /** Font size in pixels */
   fontSize: number;
+  /** Text color */
   color: string;
+  /** Stagger delay factor (0-1) */
   staggerDelay: number;
+  /** Shared progress value from parent (0-1) */
   progress: SharedValue<number>;
+  /** Use 3D warp animation instead of simple scale/translate (default: true) */
   withWarp?: boolean;
+  /** Number of discrete steps for quantized/laggy effect (undefined = smooth) */
   steps?: number;
 };
 

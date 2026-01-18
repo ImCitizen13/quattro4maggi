@@ -3,5 +3,7 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "claudeCode.respectGitIgnore": false,
+  "claudeCode.selectedModel": "opus"
 }
