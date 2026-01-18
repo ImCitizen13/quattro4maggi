@@ -1,12 +1,12 @@
 import { PressableScale } from "pressto";
 import React from "react";
 import {
-    StyleProp,
-    StyleSheet,
-    Text,
-    TextStyle,
-    View,
-    ViewStyle,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextStyle,
+  View,
+  ViewStyle,
 } from "react-native";
 
 export default function Theme() {
@@ -19,12 +19,10 @@ export default function Theme() {
 
 export const ThemeView = ({
   children,
-  style,
-  itemsAlignment = "center",
+  style
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-  itemsALignment?: "center" | "start" | "end";
 }) => {
   return (
     <View style={[styles.container, styles.centerAlignment, style]}>

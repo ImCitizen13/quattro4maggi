@@ -25,3 +25,13 @@ export const SPRING_TEXT_CONFIG = {
   velocity: 0,
   reduceMotion: ReduceMotion.System,
 };
+
+export const SPRING_BOUNCE_ANIMATION = {
+  duration: 1000,
+  dampingRatio: 0.5,
+  mass: 48,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};

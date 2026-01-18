@@ -8,7 +8,8 @@ const demos = [
   // { name: 'Final Ripple', href: '/final-ripple' as const },
   // { name: 'Shader Wrapper', href: '/shader-wrapper' as const },
   { name: 'Scale Flip Card', href: '/scale-flip-card' as const },
-  { name: 'Text Flyin', href: '/text-flyin' as const }
+  { name: 'Text Flyin', href: '/text-flyin' as const },
+  { name: 'Bouncy Scale Ball', href: '/bouncy-scale-ball' as const }
 ];
 
 export default function HomeScreen() {
