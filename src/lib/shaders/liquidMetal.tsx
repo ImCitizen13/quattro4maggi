@@ -4,6 +4,15 @@
  * Ported from paper-design/shaders liquid-metal shader.
  * Creates a liquid metal effect with animated flowing patterns and chromatic aberration.
  *
+ *  * ORIGINAL SOURCE:
+ * https://github.com/paper-design/shaders
+ *
+ * LICENSE:
+ * PolyForm Shield License 1.0.0
+ * https://github.com/paper-design/shaders/blob/main/LICENSE
+ *
+ * This is a derivative work for educational/demo purposes.
+ * Not for use in competing shader libraries or products.
  * UNIFORMS:
  * - iResolution: float2 - Canvas resolution (width, height)
  * - iTime: float - Animation time in seconds
