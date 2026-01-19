@@ -1,6 +1,5 @@
 import { LiquidMetalShader } from "@/components/liquid-metal/LiquidMetalShader";
-import { ThemeHeaderTitle, ThemeText, ThemeView } from "@/components/Theme";
-import { colors } from "@/lib/theme/Colors";
+import { ThemeHeaderTitle, ThemeView } from "@/components/Theme";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack } from "expo-router";
@@ -53,10 +52,8 @@ export default function LiquidMetalDemo() {
               width: size * .92,
               height: size * .92,
             }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              
-              <Ionicons name="chatbubbles-outline" size={size/4} color="rgb(193, 184, 182)" />
-              
-              <ThemeText text="Chat" style={{ color: "rgb(193, 184, 182)" }}/>
+
+              <Ionicons name="chatbubbles-outline" size={size / 3} color="rgb(193, 184, 182)" />
             </LinearGradient>
           </PressableScale>
           <LiquidMetalShader width={size} height={size} />
@@ -70,7 +67,7 @@ export default function LiquidMetalDemo() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.lightBackground,
+    backgroundColor: "white",
   },
   shaderContainer: {
     flexDirection: "row",
@@ -79,7 +76,7 @@ const styles = StyleSheet.create({
     padding: 16,
     justifyContent: "center",
     alignItems: "center",
-
+    backgroundColor: "white",
   },
   buttonContainer: {
     padding: 10,
