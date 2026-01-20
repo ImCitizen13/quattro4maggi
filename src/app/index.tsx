@@ -7,12 +7,16 @@ const demos = [
   // { name: 'Ripple Shader', href: '/ripple-shader' as const },
   // { name: 'Final Ripple', href: '/final-ripple' as const },
   // { name: 'Shader Wrapper', href: '/shader-wrapper' as const },
-  { name: 'Scale Flip Card', href: '/scale-flip-card' as const }
+  { name: 'Scale Flip Card', href: '/scale-flip-card' as const },
+  { name: 'Text Flyin', href: '/text-flyin' as const },
+  { name: 'Bouncy Scale Ball', href: '/bouncy-scale-ball' as const },
+  { name: 'Liquid Metal', href: '/liquid-metal' as const }
 ];
 
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
+      
       <Text style={styles.title}>Demos</Text>
       <View style={styles.grid}>
         {demos.map((demo) => (
@@ -21,6 +25,8 @@ export default function HomeScreen() {
               <Text style={styles.cardTitle}>{demo.name}</Text>
             </Pressable>
           </Link>
+          
+          
         ))}
       </View>
     </SafeAreaView>

@@ -43,3 +43,8 @@ app-example
 /ios
 /android
 
+/.clauderc
+/.claude
+/.vscode
+
+temp/

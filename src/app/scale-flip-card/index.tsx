@@ -3,6 +3,7 @@ import Card, {
   CoinInfo,
   SwapScreen,
 } from "@/components/scale-flip-card/Card";
+import { Stack } from "expo-router";
 import React from "react";
 import {
   FlatList,
@@ -87,6 +88,7 @@ const usdCoin: CoinInfo = {
 export default function ScaleFlipCardDemo() {
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <Text style={styles.title}>Scale Flip Card</Text>
 
       <FlatList

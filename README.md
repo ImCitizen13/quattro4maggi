@@ -10,10 +10,8 @@ A collection of React Native animation experiments built with **Skia** and **Rea
 
 | Demo | Preview | Description |
 |------|---------|-------------|
-| [Shared Element](/src/app/shared-element) | ![shared-element](./assets/demos/shared-element.gif) | Smooth shared element transitions |
-| [Ripple Shader](/src/app/ripple-shader) | ![ripple-shader](./assets/demos/ripple-shader.gif) | Custom ripple effect using Skia shaders |
-| [Final Ripple](/src/app/final-ripple) | ![final-ripple](./assets/demos/final-ripple.gif) | Polished ripple with advanced timing |
-| [Shader Wrapper](/src/app/shader-wrapper) | ![shader-wrapper](./assets/demos/shader-wrapper.gif) | Reusable wrapper for Skia shader effects |
+| [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Animated card with 3D flip and portal expansion |
+| [Text Flyin](/src/components/text-flyin/README.md) | ![text-flyin](./assets/demos/text-flyin.gif) | Kinetic text animation with staggered character fly-in |
 
 ---
 
@@ -47,14 +45,19 @@ bun run start
 src/
 ├── app/                    # Expo Router routes
 │   ├── index.tsx           # Home gallery
-│   ├── shared-element/
-│   ├── ripple-shader/
-│   ├── final-ripple/
-│   └── shader-wrapper/
+│   ├── bouncy-scale-ball/  # Bouncy ball with scale animation
+│   ├── final-ripple/       # Polished ripple effect
+│   ├── ripple-shader/      # Custom Skia ripple shader
+│   ├── scale-flip-card/    # 3D flip card with portal
+│   ├── shader-wrapper/     # Reusable shader wrapper
+│   ├── shared-element/     # Shared element transitions
+│   └── text-flyin/         # Kinetic text animation
 ├── components/             # Demo-specific components
 │   └── [demo-name]/
 ├── hooks/
-└── lib/shaders/
+└── lib/
+    ├── animations/         # Animation constants
+    └── shaders/            # Skia shader definitions
 ```
 
 ---
