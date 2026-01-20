@@ -1,11 +1,12 @@
-import { LiquidMetalShader } from "@/components/liquid-metal/LiquidMetalShader";
-import { ThemeHeaderTitle, ThemeView } from "@/components/Theme";
-import { Ionicons } from "@expo/vector-icons";
+import { PerlinLiquidMetalShader } from "@/components/liquid-metal/PerlinLiquidMetalShader";
+import { ThemeHeaderTitle, ThemeText, ThemeView } from "@/components/Theme";
+import { MetalPresetName } from "@/lib/shaders/ColorsLiquidMetal";
+import { SimpleLineIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack } from "expo-router";
 import { PressableScale } from "pressto";
-import React from "react";
-import { StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { FlatList, StyleSheet } from "react-native";
 import { useAnimatedStyle } from "react-native-reanimated";
 
 /**
@@ -24,7 +25,8 @@ import { useAnimatedStyle } from "react-native-reanimated";
  * - Smooth liquid metal animation
  * - Customizable metallic properties
  */
-const size = 200;
+const BG_COLOR = "rgb(64 64 64)";
+const size = 150;
 const gradientColors = ["#2E2E2E", "#000000"];
 export default function LiquidMetalDemo() {
   const gradientContainerAnimatedStyle = useAnimatedStyle(() => {
@@ -35,6 +37,8 @@ export default function LiquidMetalDemo() {
       borderRadius: size / 2,
     };
   });
+  const [metal, setMetal] = useState<MetalPresetName>("bronze");
+
   return (
     <ThemeView style={styles.container}>
       <Stack.Screen
@@ -45,7 +49,7 @@ export default function LiquidMetalDemo() {
       />
       <ThemeView style={styles.shaderContainer}>
         <LinearGradient colors={["#2E2E2E", "#000000"]} style={[styles.buttonContainer,
-        { width: size, height: size, padding: 10, borderRadius: size / 2 }]}>
+        { width: size, height: size, borderRadius: size / 2 }]}>
           <PressableScale onPress={() => { }} style={styles.button}>
             <LinearGradient colors={["#2E2E2E", "#000000"]} style={[styles.buttonGradient, {
               borderRadius: (size * .9) / 2,
@@ -53,13 +57,29 @@ export default function LiquidMetalDemo() {
               height: size * .92,
             }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
 
-              <Ionicons name="chatbubbles-outline" size={size / 3} color="rgb(193, 184, 182)" />
+              
+              <SimpleLineIcons name="ghost" size={size / 3} color="white" />
             </LinearGradient>
           </PressableScale>
-          <LiquidMetalShader width={size} height={size} />
+          <PerlinLiquidMetalShader width={size} height={size} metal={metal as MetalPresetName} customHighlight={[0.9, 0.5, 0.8]} customShadow={[0.3, 0.1, 0.2]} />
         </LinearGradient>
 
       </ThemeView>
+
+      <FlatList
+        style={{ padding: 16 }}
+        numColumns={3}
+        columnWrapperStyle={{ width: "100%", gap: 5, paddingVertical: 16, justifyContent: "space-around" }}
+        // contentContainerStyle={{ gap: 16 }}
+        data={["silver", "gold", "copper", "roseGold", "bronze", "platinum", "chrome", "titanium", "brass", "custom"]}
+        renderItem={({ item }) => (
+          <PressableScale onPress={() => { setMetal(item as MetalPresetName) }} style={styles.buttonItem}>
+            <PerlinLiquidMetalShader width={size / 2} height={size / 2} metal={item as MetalPresetName} customHighlight={[0.9, 0.5, 0.8]} customShadow={[0.3, 0.1, 0.2]} />
+            <ThemeText text={item.toLocaleUpperCase()} style={{ fontSize: 16, fontWeight: "bold", color: "white" }} />
+          </PressableScale>
+        )}
+      />
+
     </ThemeView>
   );
 }
@@ -67,7 +87,7 @@ export default function LiquidMetalDemo() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
+    backgroundColor: "black",
   },
   shaderContainer: {
     flexDirection: "row",
@@ -76,13 +96,13 @@ const styles = StyleSheet.create({
     padding: 16,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "white",
+    backgroundColor: "black",
   },
   buttonContainer: {
     padding: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "red",
+    // backgroundColor: "red",
   },
   button: {
     position: "absolute",
@@ -94,6 +114,16 @@ const styles = StyleSheet.create({
     // padding: 10,
     justifyContent: "center",
     alignItems: "center",
-
+  },
+  buttonItem: {
+    width: "30%",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 30,
+    gap: 10,
+    borderRadius: 10,
+    // backgroundColor: "black",
+    borderWidth: 1,
+    borderColor: "#2E2E2E",
   },
 });
