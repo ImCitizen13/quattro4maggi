@@ -19,7 +19,7 @@ export default function RootLayout() {
     "BebasNeue-Regular": require("@/assets/fonts/BebasNeue-Regular.ttf"),
     "IndieFlower-Regular": require("@/assets/fonts/IndieFlower-Regular.ttf"),
     "LobsterTwo-Regular": require("@/assets/fonts/LobsterTwo-Regular.ttf"),
-    "Merriweather": require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
+    Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
   });
 
   return (
@@ -29,11 +29,31 @@ export default function RootLayout() {
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
           <Stack>
-            {/* <Stack.Screen name="index" options={{ title: 'quattro4maggi' }} />
-        <Stack.Screen name="shared-element" options={{ title: 'Shared Element' }} />
-        <Stack.Screen name="ripple-shader" options={{ title: 'Ripple Shader' }} />
-        <Stack.Screen name="final-ripple" options={{ title: 'Final Ripple' }} />
-        <Stack.Screen name="shader-wrapper" options={{ title: 'Shader Wrapper' }} /> */}
+            <Stack.Screen name="index" options={{ title: "quattro4maggi" }} />
+            <Stack.Screen
+              name="shared-element"
+              options={{ title: "Shared Element" }}
+            />
+            <Stack.Screen
+              name="ripple-shader"
+              options={{ title: "Ripple Shader" }}
+            />
+            <Stack.Screen
+              name="final-ripple"
+              options={{ title: "Final Ripple" }}
+            />
+            <Stack.Screen
+              name="shader-wrapper"
+              options={{ title: "Shader Wrapper" }}
+            />
+            <Stack.Screen
+              name="scale-flip-card"
+              options={{ title: "Scale Flip Card" }}
+            />
+            <Stack.Screen
+              name="live-border-card"
+              options={{ title: "Live Border Card" }}
+            />
             {/* <Stack.Screen
               name="scale-flip-card"
               options={{ title: "Scale Flip Card", headerShown: false }}

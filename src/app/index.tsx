@@ -10,7 +10,8 @@ const demos = [
   { name: 'Scale Flip Card', href: '/scale-flip-card' as const },
   { name: 'Text Flyin', href: '/text-flyin' as const },
   { name: 'Bouncy Scale Ball', href: '/bouncy-scale-ball' as const },
-  { name: 'Liquid Metal', href: '/liquid-metal' as const }
+  { name: 'Liquid Metal', href: '/liquid-metal' as const },
+  { name: 'Live Border Card', href: '/live-border-card' as const }
 ];
 
 export default function HomeScreen() {
@@ -25,7 +26,7 @@ export default function HomeScreen() {
               <Text style={styles.cardTitle}>{demo.name}</Text>
             </Pressable>
           </Link>
-          
+
           
         ))}
       </View>
