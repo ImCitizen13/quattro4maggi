@@ -1,16 +1,13 @@
 import React, { PropsWithChildren, useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, {
+import {
   Easing,
-  useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { SkiaColorWheelBlurred } from "./ColorWheels";
 import { AnimatedSkiaRingBorder } from "./SkiaRingBorder";
-
-const scaleFactor = 2;
+import { SkiaRingGlow } from "./SkiaRingGlow";
 
 type AdaptableSkiaLiveBorderCardProps = {
   width: number;
@@ -26,6 +23,17 @@ type AdaptableSkiaLiveBorderCardProps = {
   /** Blur radius for the glow effect */
   glowBlurRadius?: number;
   innerPaddingPercentage?: number;
+  /** Use uniform solid colors instead of smooth gradient */
+  uniformColors?: boolean;
+  /** Enable pulsating glow animation */
+  pulsateGlow?: boolean;
+  /** Duration of one pulse cycle in ms */
+  pulsateDuration?: number;
+  /** Minimum opacity during pulse */
+  pulsateMinOpacity?: number;
+  /** Maximum opacity during pulse */
+  pulsateMaxOpacity?: number;
+  borderRadius?: number;
 };
 
 export default function AdaptableSkiaLiveBorderCard({
@@ -35,91 +43,82 @@ export default function AdaptableSkiaLiveBorderCard({
   duration = 2000,
   innerPaddingPercentage = 0.05,
   showGlow = true,
-  glowIntensity = 0.8,
-  glowSpread = 0.7,
-  glowBlurRadius = 30,
+  glowIntensity = 1,
+  glowSpread = 1.4,
+  glowBlurRadius = 15,
+  uniformColors = false,
+  pulsateGlow = false,
+  pulsateDuration = 2000,
+  pulsateMinOpacity = 0.3,
+  pulsateMaxOpacity = 1.0,
+  borderRadius = 16,
   children,
 }: PropsWithChildren<AdaptableSkiaLiveBorderCardProps>) {
-  const rotateX = useSharedValue(0);
-
-  const innerBborderRadius = 16;
+  const innerBorderRadius = borderRadius;
   const innerPadding = Math.min(width, height) * innerPaddingPercentage;
-  const outerBorderRadius = innerBborderRadius + innerPadding;
+  const outerBorderRadius = innerBorderRadius + innerPadding;
 
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ rotate: `${rotateX.value}deg` }],
-    };
-  });
-
-  // Animated rotation for SkiaRingBorder
+  // Animated rotation for both glow and ring border
   const rotation = useSharedValue(0);
 
-  const glowRotation = () => {
-    // Continuous clockwise rotation
-    rotateX.value = withRepeat(
-      withTiming(360, { duration: duration, easing: Easing.linear }),
-      -1, // infinite repeats
-      false // no reverse - always clockwise
-    );
-  };
-
-  const ringBorderRotation = () => {
+  const startRotation = () => {
     rotation.value = withRepeat(
-      withTiming(360, { duration: 2500, easing: Easing.linear }),
+      withTiming(360, { duration: duration, easing: Easing.linear }),
       -1, // infinite
       false // no reverse
     );
   };
 
   useEffect(() => {
-    glowRotation();
-    ringBorderRotation();
+    startRotation();
   }, []);
 
-
-  // Glow layer sizing - elliptical to match card proportions
-  const glowWidth = width * scaleFactor * glowSpread;
-  const glowHeight = height * scaleFactor * glowSpread;
+  // Glow layer sizing - scales with glowSpread
+  const glowWidth = width * glowSpread;
+  const glowHeight = height * glowSpread;
+  const glowStrokeWidth = innerPadding * glowSpread;
+  const glowBorderRadius = outerBorderRadius * glowSpread;
   const glowOffsetX = (glowWidth - width) / 2;
   const glowOffsetY = (glowHeight - height) / 2;
 
   return (
     <View style={styles.wrapper}>
-      {/* Glow layer - blurred elliptical color wheel behind the card */}
+      {/* Glow layer - ring-shaped blur matching card border */}
       {showGlow && (
-        <Animated.View
+        <View
           style={[
             styles.glowLayer,
             {
-              width: glowWidth,
-              height: glowHeight,
               left: -glowOffsetX,
               top: -glowOffsetY,
             },
-            animatedStyle,
-            // glowAnimatedStyle,
           ]}
         >
-          <SkiaColorWheelBlurred
+          <SkiaRingGlow
             width={glowWidth}
             height={glowHeight}
-            colors={colors}
+            colors={[...colors, colors[0]]}
+            borderRadius={glowBorderRadius}
+            strokeWidth={glowStrokeWidth}
             blurRadius={glowBlurRadius}
-            opacity={1}
+            opacity={glowIntensity}
+            rotation={rotation}
+            uniformColors={uniformColors}
+            pulsate={pulsateGlow}
+            pulsateDuration={pulsateDuration}
+            pulsateMinOpacity={pulsateMinOpacity}
+            pulsateMaxOpacity={pulsateMaxOpacity}
           />
-        </Animated.View>
+        </View>
       )}
 
-      {/* Main card with clipped elliptical color wheel */}
+      {/* Main card with ring border */}
       <View
         style={[
           styles.outerContainer,
           { width, height, borderRadius: outerBorderRadius },
         ]}
       >
-        {/* SkiaRingBorder - uses same padding & radii as inner/outer card */}
         <AnimatedSkiaRingBorder
           width={width}
           height={height}
@@ -127,21 +126,21 @@ export default function AdaptableSkiaLiveBorderCard({
           strokeWidth={innerPadding}
           borderRadius={outerBorderRadius}
           rotation={rotation}
+          uniformColors={uniformColors}
         />
-          <View
-            style={[
-              styles.innerContent,
-              {
-                borderRadius: innerBborderRadius,
-                inset: innerPadding,
-                backgroundColor: "yellow",
-                overflow: "hidden",
-              },
-            ]}
-          >
-            {children}
-          </View>
-        
+        <View
+          style={[
+            styles.innerContent,
+            {
+              borderRadius: innerBorderRadius,
+              inset: innerPadding,
+              backgroundColor: "yellow",
+              overflow: "hidden",
+            },
+          ]}
+        >
+          {children}
+        </View>
       </View>
     </View>
   );
@@ -159,7 +158,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
     justifyContent: "center",
     alignItems: "center",
-
   },
   innerContent: {
     position: "absolute",

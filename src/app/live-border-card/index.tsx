@@ -75,20 +75,17 @@ export default function Index() {
       <AdaptableSkiaLiveBorderCard
         width={size}
         height={size}
-        colors={colors[selectedColors]}
-        duration={2500}
-        innerPaddingPercentage={0.05}
         showGlow={true}
-        glowIntensity={0.5}
-        glowSpread={.5}
-      >
-        <LinearGradient
-          style={{ width: "100%", height: "100%" }}
-          colors={["#000000", "#ffffff"]}
-          start={starts[0]}
-          end={ends[0]}
-        />
-      </AdaptableSkiaLiveBorderCard>
+        glowIntensity={0.8}
+        glowSpread={1.2}
+        glowBlurRadius={20}
+
+        colors={colors[selectedColors]}
+        uniformColors={false} // solid color segments
+        pulsateGlow={false} // enable pulsating
+        pulsateDuration={2000} // 2 second cycle
+      />
+
 
       <View style={{ height: size * 2 }}>
         <FlatList

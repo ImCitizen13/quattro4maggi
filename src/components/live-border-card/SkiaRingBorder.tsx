@@ -53,14 +53,39 @@ type SkiaRingBorderBaseProps = {
   borderRadius?: number;
   /** Background color inside the ring (optional) */
   backgroundColor?: string;
+  /** Use uniform solid colors instead of smooth gradient */
+  uniformColors?: boolean;
 };
 
-type SkiaRingBorderProps = SkiaRingBorderBaseProps & {
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Creates color stops for uniform (non-gradient) colors.
+ * Each color occupies an equal segment with hard transitions.
+ */
+function createUniformColorStops(colors: string[]) {
+  const n = colors.length;
+  const resultColors: string[] = [];
+  const positions: number[] = [];
+
+  colors.forEach((color, i) => {
+    const start = i / n;
+    const end = (i + 1) / n;
+    resultColors.push(color, color);
+    positions.push(start, end);
+  });
+
+  return { colors: resultColors, positions };
+}
+
+export type SkiaRingBorderProps = SkiaRingBorderBaseProps & {
   /** Rotation angle in degrees for animating the gradient */
   rotation?: number;
 };
 
-type AnimatedSkiaRingBorderProps = SkiaRingBorderBaseProps & {
+export type AnimatedSkiaRingBorderProps = SkiaRingBorderBaseProps & {
   /** Animated rotation value (SharedValue) in degrees */
   rotation: SharedValue<number>;
 };
@@ -96,6 +121,7 @@ export const SkiaRingBorder = ({
   borderRadius = 0,
   rotation = 0,
   backgroundColor = "transparent",
+  uniformColors = false,
 }: SkiaRingBorderProps) => {
   const center = vec(width / 2, height / 2);
 
@@ -141,6 +167,14 @@ export const SkiaRingBorder = ({
     return m;
   }, [rotation, center.x, center.y]);
 
+  // Prepare colors and positions for gradient
+  const gradientProps = useMemo(() => {
+    if (uniformColors) {
+      return createUniformColorStops(colors);
+    }
+    return { colors, positions: undefined };
+  }, [colors, uniformColors]);
+
   return (
     <View style={styles.container}>
       <Canvas style={{ width, height }}>
@@ -151,7 +185,12 @@ export const SkiaRingBorder = ({
           )}
           {/* Ring with sweep gradient */}
           <Fill>
-            <SweepGradient c={center} colors={colors} matrix={gradientMatrix} />
+            <SweepGradient
+              c={center}
+              colors={gradientProps.colors}
+              positions={gradientProps.positions}
+              matrix={gradientMatrix}
+            />
           </Fill>
         </Group>
       </Canvas>
@@ -177,6 +216,7 @@ export const AnimatedSkiaRingBorder = ({
   borderRadius = 0,
   rotation,
   backgroundColor = "transparent",
+  uniformColors = false,
 }: AnimatedSkiaRingBorderProps) => {
   const centerX = width / 2;
   const centerY = height / 2;
@@ -221,19 +261,30 @@ export const AnimatedSkiaRingBorder = ({
     return m;
   }, [rotation]);
 
-  return (
+  // Prepare colors and positions for gradient
+  const gradientProps = useMemo(() => {
+    if (uniformColors) {
+      return createUniformColorStops(colors);
+    }
+    return { colors, positions: undefined };
+  }, [colors, uniformColors]);
 
-      <Canvas style={{ width, height }}>
-        <Group clip={clipPath}>
-          {backgroundColor !== "transparent" && (
-            <Fill color={backgroundColor} />
-          )}
-          <Fill>
-            <SweepGradient c={center} colors={colors} matrix={gradientMatrix} />
-          </Fill>
-        </Group>
-      </Canvas>
-    
+  return (
+    <Canvas style={{ width, height }}>
+      <Group clip={clipPath}>
+        {backgroundColor !== "transparent" && (
+          <Fill color={backgroundColor} />
+        )}
+        <Fill>
+          <SweepGradient
+            c={center}
+            colors={gradientProps.colors}
+            positions={gradientProps.positions}
+            matrix={gradientMatrix}
+          />
+        </Fill>
+      </Group>
+    </Canvas>
   );
 };
 
