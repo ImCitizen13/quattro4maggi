@@ -1,19 +1,18 @@
 import MaterialIcons from "@expo/vector-icons/build/MaterialIcons";
 import { PressableScale } from "pressto";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
   FadeOut,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
-  withTiming,
+  withTiming
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
-import { SkiaColorWheel, SkiaColorWheelBlurred } from "./ColorWheels";
+import { SkiaColorWheelBlurred } from "./ColorWheels";
+import { AnimatedSkiaRingBorder } from "./SkiaRingBorder";
 
 const scaleFactor = 2;
 
@@ -58,23 +57,16 @@ export default function GlowingBorderCard({
     };
   });
 
-  useAnimatedReaction(
-    () => startAnimation.value,
-    (value) => {
-      if (value) {
-        // Continuous clockwise rotation
-        rotateX.value = withRepeat(
-          withTiming(360, { duration: duration, easing: Easing.linear }),
-          -1, // infinite repeats
-          false // no reverse - always clockwise
-        );
-        scheduleOnRN(setPlayIcon, "pause");
-      } else {
-        rotateX.value = withTiming(0, { duration: duration / 2 });
-        scheduleOnRN(setPlayIcon, "play-arrow");
-      }
-    }
-  );
+  // Animated rotation for SkiaRingBorder
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    rotation.value = withRepeat(
+      withTiming(360, { duration: 2500, easing: Easing.linear }),
+      -1, // infinite
+      false // no reverse
+    );
+  }, []);
 
   // Glow layer sizing - elliptical to match card proportions
   const glowWidth = width * scaleFactor * glowSpread;
@@ -115,24 +107,32 @@ export default function GlowingBorderCard({
           { width, height, borderRadius: outerBorderRadius },
         ]}
       >
-        <Animated.View
-          style={[
-            {
-              position: "absolute",
-              width: width * scaleFactor,
-              height: height * scaleFactor,
-              left: -width / scaleFactor,
-              top: -height / scaleFactor,
-            },
-            animatedStyle,
-          ]}
-        >
-          <SkiaColorWheel
-            width={width * scaleFactor}
-            height={height * scaleFactor}
-            colors={colors}
+        {/* SkiaRingBorder Demo - Animated Ring Border */}
+        <View style={{ position: "relative", width: width, height: height }}>
+          <AnimatedSkiaRingBorder
+            width={width}
+            height={height}
+            colors={[...colors, colors[0]]}
+            strokeWidth={12}
+            borderRadius={20}
+            rotation={rotation}
           />
-        </Animated.View>
+          {/* <View
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            right: 12,
+            bottom: 12,
+            backgroundColor: "#2a2a2a",
+            borderRadius: 8,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ color: "white", fontSize: 14 }}>Ring Border</Text>
+        </View> */}
+        </View>
         <PressableScale
           onPress={() => (startAnimation.value = !startAnimation.value)}
           style={[
