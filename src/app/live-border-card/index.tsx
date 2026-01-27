@@ -1,6 +1,5 @@
 import AdaptableSkiaLiveBorderCard from "@/components/live-border-card/AdaptableSkiaLiveBorderCard";
 import LiveBorderCard from "@/components/live-border-card/LiveBorderCard";
-import { AnimatedSkiaRingBorder } from "@/components/live-border-card/SkiaRingBorder";
 import { ThemeView } from "@/components/Theme";
 import { LinearGradient } from "expo-linear-gradient";
 import { PressableScale } from "pressto";
@@ -16,8 +15,13 @@ import {
 const size = 150;
 export default function Index() {
   const colors: string[][] = [
+    ["#1E3163", "#2D46B9", "#F037A5", "#F8F8F8"],
     ["#372516", "#fbd271", "#0f4e77", "#89a377", "#E7bd8b"],
     ["#4285F4", "#DB4437", "#F4B400", "#0F9D58"],
+    ["#0F2854", "#1C4D8D", "#4988C4", "#BDE8F5"],
+    ["#000000", "#9929EA", "#FF5FCF", "#FAEB92"],
+    ["#FF8F8F", "#FFF1CB", "#C2E2FA", "#B7A3E3"],
+    ["#5409DA", "#4E71FF", "#8DD8FF", "#BBFBFF"],
   ];
 
   const getColorsLocation = (numColors: number) => {
@@ -61,33 +65,6 @@ export default function Index() {
         gap: 20,
       }}
     >
-      {/* SkiaRingBorder Demo - Animated Ring Border */}
-      <View style={{ position: "relative", width: size * 1.5, height: size, }}>
-        <AnimatedSkiaRingBorder
-          width={size * 2}
-          height={size}
-          colors={[...colors[selectedColors], colors[selectedColors][0]]}
-          strokeWidth={12}
-          borderRadius={20}
-          rotation={rotation}
-        />
-        {/* <View
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            right: 12,
-            bottom: 12,
-            backgroundColor: "#2a2a2a",
-            borderRadius: 8,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "white", fontSize: 14 }}>Ring Border</Text>
-        </View> */}
-      </View>
-
       <LiveBorderCard
         width={size}
         height={size}
@@ -96,21 +73,30 @@ export default function Index() {
       />
 
       <AdaptableSkiaLiveBorderCard
-        width={size * 1.5}
-        height={size /2 }
+        width={size}
+        height={size}
         colors={colors[selectedColors]}
         duration={2500}
-        innerPaddingPercentage={0.1}
+        innerPaddingPercentage={0.05}
         showGlow={true}
-      />
+        glowIntensity={0.5}
+        glowSpread={.5}
+      >
+        <LinearGradient
+          style={{ width: "100%", height: "100%" }}
+          colors={["#000000", "#ffffff"]}
+          start={starts[0]}
+          end={ends[0]}
+        />
+      </AdaptableSkiaLiveBorderCard>
 
       <View style={{ height: size * 2 }}>
         <FlatList
-          style={{ padding: 16 }}
-          contentContainerStyle={{ gap: 20, height: "100%" }}
+          style={{ flex: 1, padding: 16 }}
+          contentContainerStyle={{ flex: 1, gap: 20 }}
           data={colors}
           columnWrapperStyle={{ gap: 20 }}
-          numColumns={2}
+          numColumns={3}
           keyExtractor={(item, index) => index.toString()}
           renderItem={({ item: colors, index }) => (
             <PressableScale onPress={() => setSelectedColors(index)}>

@@ -31,10 +31,10 @@ import {
   Skia,
   SweepGradient,
   vec,
-} from '@shopify/react-native-skia';
-import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
+} from "@shopify/react-native-skia";
+import React, { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 
 // ============================================================================
 // TYPES
@@ -70,11 +70,11 @@ type AnimatedSkiaRingBorderProps = SkiaRingBorderBaseProps & {
 // ============================================================================
 
 const DEFAULT_COLORS = [
-  '#4285F4', // Blue
-  '#EA4335', // Red
-  '#FBBC05', // Yellow
-  '#34A853', // Green
-  '#4285F4', // Blue (repeat for seamless loop)
+  "#4285F4", // Blue
+  "#EA4335", // Red
+  "#FBBC05", // Yellow
+  "#34A853", // Green
+  "#4285F4", // Blue (repeat for seamless loop)
 ];
 
 // ============================================================================
@@ -95,7 +95,7 @@ export const SkiaRingBorder = ({
   strokeWidth,
   borderRadius = 0,
   rotation = 0,
-  backgroundColor = 'transparent',
+  backgroundColor = "transparent",
 }: SkiaRingBorderProps) => {
   const center = vec(width / 2, height / 2);
 
@@ -146,16 +146,12 @@ export const SkiaRingBorder = ({
       <Canvas style={{ width, height }}>
         <Group clip={clipPath}>
           {/* Background fill inside the ring */}
-          {backgroundColor !== 'transparent' && (
+          {backgroundColor !== "transparent" && (
             <Fill color={backgroundColor} />
           )}
           {/* Ring with sweep gradient */}
           <Fill>
-            <SweepGradient
-              c={center}
-              colors={colors}
-              matrix={gradientMatrix}
-            />
+            <SweepGradient c={center} colors={colors} matrix={gradientMatrix} />
           </Fill>
         </Group>
       </Canvas>
@@ -180,7 +176,7 @@ export const AnimatedSkiaRingBorder = ({
   strokeWidth,
   borderRadius = 0,
   rotation,
-  backgroundColor = 'transparent',
+  backgroundColor = "transparent",
 }: AnimatedSkiaRingBorderProps) => {
   const centerX = width / 2;
   const centerY = height / 2;
@@ -226,22 +222,18 @@ export const AnimatedSkiaRingBorder = ({
   }, [rotation]);
 
   return (
-    <View style={styles.container}>
+
       <Canvas style={{ width, height }}>
         <Group clip={clipPath}>
-          {backgroundColor !== 'transparent' && (
+          {backgroundColor !== "transparent" && (
             <Fill color={backgroundColor} />
           )}
           <Fill>
-            <SweepGradient
-              c={center}
-              colors={colors}
-              matrix={gradientMatrix}
-            />
+            <SweepGradient c={center} colors={colors} matrix={gradientMatrix} />
           </Fill>
         </Group>
       </Canvas>
-    </View>
+    
   );
 };
 
@@ -251,7 +243,7 @@ export const AnimatedSkiaRingBorder = ({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
   },
