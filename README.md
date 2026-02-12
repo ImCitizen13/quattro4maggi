@@ -12,6 +12,7 @@ A collection of React Native animation experiments built with **Skia** and **Rea
 |------|---------|-------------|
 | [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Animated card with 3D flip and portal expansion |
 | [Text Flyin](/src/components/text-flyin/README.md) | ![text-flyin](./assets/demos/text-flyin.gif) | Kinetic text animation with staggered character fly-in |
+| [Text Vertical Move](/src/components/text-vertical-move/) | — | Text with vertical motion animation (experiment) |
 
 ---
 
@@ -51,7 +52,8 @@ src/
 │   ├── scale-flip-card/    # 3D flip card with portal
 │   ├── shader-wrapper/     # Reusable shader wrapper
 │   ├── shared-element/     # Shared element transitions
-│   └── text-flyin/         # Kinetic text animation
+│   ├── text-flyin/         # Kinetic text animation
+│   └── text-vertical-move/ # Text vertical move experiment
 ├── components/             # Demo-specific components
 │   └── [demo-name]/
 ├── hooks/

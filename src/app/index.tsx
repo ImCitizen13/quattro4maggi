@@ -11,7 +11,8 @@ const demos = [
   { name: 'Text Flyin', href: '/text-flyin' as const },
   { name: 'Bouncy Scale Ball', href: '/bouncy-scale-ball' as const },
   { name: 'Liquid Metal', href: '/liquid-metal' as const },
-  { name: 'Live Border Card', href: '/live-border-card' as const }
+  { name: 'Live Border Card', href: '/live-border-card' as const },
+  { name: 'Text Vertical Move', href: '/text-vertical-move' as const }
 ];
 
 export default function HomeScreen() {

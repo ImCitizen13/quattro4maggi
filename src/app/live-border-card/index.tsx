@@ -3,15 +3,17 @@ import { ThemeView } from "@/components/Theme";
 import { Host, Slider } from "@expo/ui/swift-ui";
 import { SimpleLineIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import { PressableScale } from "pressto";
 import React, { useState } from "react";
 import {
   ColorValue,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
 import { FlatList } from "react-native-gesture-handler";
 
@@ -54,8 +56,13 @@ export default function Index() {
         alignItems: "center",
       }}
     >
-      <View
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         style={{
+          width: "100%",
+          height: "100%",
+        }}
+        contentContainerStyle={{
           width: "100%",
           alignItems: "center",
           justifyContent: "center",
@@ -67,9 +74,9 @@ export default function Index() {
           height={cardHeight * 2}
           borderRadius={cardWidth}
           showGlow={showGlow}
-          duration={50000}
+          duration={2000}
           glowIntensity={glowIntensity * 2}
-          glowSpread={glowSpread * .9}
+          glowSpread={glowSpread * 0.9}
           glowBlurRadius={glowBlurRadius}
           colors={colors[selectedColors]}
           uniformColors={uniformColors}
@@ -94,7 +101,7 @@ export default function Index() {
               style={{
                 flex: 1,
                 color: "white",
-                
+
                 padding: 10,
                 fontSize: 16,
               }}
@@ -227,7 +234,35 @@ export default function Index() {
             />
           </View>
         </View>
-      </View>
+        <PressableScale
+          style={{
+            width: "80%",
+            height: BASE_SIZE / 2,
+            backgroundColor: colors[selectedColors][0],
+            borderRadius: BASE_SIZE * 0.1,
+            alignItems: "center",
+            justifyContent: "center",
+            borderWidth: 2,
+            borderColor: colors[selectedColors][3],
+          }}
+          onPress={() =>
+            router.push({
+              pathname: "/live-border-card/demo",
+              params: { jColors: JSON.stringify(colors[selectedColors]) },
+            })
+          }
+        >
+          <Text
+            style={{
+              color: colors[selectedColors][2],
+              fontSize: 16,
+              fontWeight: "bold",
+            }}
+          >
+            Demo
+          </Text>
+        </PressableScale>
+      </ScrollView>
     </ThemeView>
   );
 }
