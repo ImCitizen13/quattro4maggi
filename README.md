@@ -10,8 +10,9 @@ A collection of React Native animation experiments built with **Skia** and **Rea
 
 | Demo | Preview | Description |
 |------|---------|-------------|
-| [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Animated card with 3D flip and portal expansion |
-| [Text Flyin](/src/components/text-flyin/README.md) | ![text-flyin](./assets/demos/text-flyin.gif) | Kinetic text animation with staggered character fly-in |
+| [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card component that expands into a fullscreen portal with 3D flip animation |
+| [Text Flyin](/src/components/text-flyin/README.md) | ![text-flyin](./assets/demos/text-flyin.gif) | Kinetic text animation with staggered character fly-in effect |
+| [Liquid Metal](/src/components/liquid-metal/README.md) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader component with animated liquid metal effects and customizable colors |
 
 ---
 
