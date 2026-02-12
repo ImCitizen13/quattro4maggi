@@ -52,7 +52,8 @@ src/
 │   ├── scale-flip-card/    # 3D flip card with portal
 │   ├── shader-wrapper/     # Reusable shader wrapper
 │   ├── shared-element/     # Shared element transitions
-│   └── text-flyin/         # Kinetic text animation
+│   ├── text-flyin/         # Kinetic text animation
+│   └── text-vertical-move/ # Text vertical move experiment
 ├── components/             # Demo-specific components
 │   └── [demo-name]/
 ├── hooks/
