@@ -270,21 +270,23 @@ export const AnimatedSkiaRingBorder = ({
   }, [colors, uniformColors]);
 
   return (
-    <Canvas style={{ width, height }}>
-      <Group clip={clipPath}>
-        {backgroundColor !== "transparent" && (
-          <Fill color={backgroundColor} />
-        )}
-        <Fill>
-          <SweepGradient
-            c={center}
-            colors={gradientProps.colors}
-            positions={gradientProps.positions}
-            matrix={gradientMatrix}
-          />
-        </Fill>
-      </Group>
-    </Canvas>
+    <View style={styles.container}>
+      <Canvas style={{ width, height }}>
+        <Group clip={clipPath}>
+          {backgroundColor !== "transparent" && (
+            <Fill color={backgroundColor} />
+          )}
+          <Fill>
+            <SweepGradient
+              c={center}
+              colors={gradientProps.colors}
+              positions={gradientProps.positions}
+              matrix={gradientMatrix}
+            />
+          </Fill>
+        </Group>
+      </Canvas>
+    </View>
   );
 };
 

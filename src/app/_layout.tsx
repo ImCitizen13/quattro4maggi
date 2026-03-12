@@ -54,10 +54,10 @@ export default function RootLayout() {
               name="live-border-card"
               options={{ title: "Live Border Card" }}
             />
-            {/* <Stack.Screen
-              name="scale-flip-card"
-              options={{ title: "Scale Flip Card", headerShown: false }}
-            /> */}
+            <Stack.Screen
+              name="timer"
+              options={{ title: "Timer"}}
+            />
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>

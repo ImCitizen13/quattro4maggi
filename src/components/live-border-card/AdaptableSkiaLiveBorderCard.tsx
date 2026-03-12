@@ -14,6 +14,7 @@ type AdaptableSkiaLiveBorderCardProps = {
   height: number;
   colors: string[];
   duration?: number;
+  rotate?: boolean;
   /** Whether to show the glow effect */
   showGlow?: boolean;
   /** Intensity of the glow (0-1), controls opacity */
@@ -41,6 +42,7 @@ export default function AdaptableSkiaLiveBorderCard({
   height,
   colors,
   duration = 2000,
+  rotate = true,
   innerPaddingPercentage = 0.05,
   showGlow = true,
   glowIntensity = 1,
@@ -55,7 +57,9 @@ export default function AdaptableSkiaLiveBorderCard({
   children,
 }: PropsWithChildren<AdaptableSkiaLiveBorderCardProps>) {
   const innerBorderRadius = borderRadius;
-  const innerPadding = Math.min(width, height) * innerPaddingPercentage;
+  const innerPadding = Math.round(
+    Math.min(width, height) * innerPaddingPercentage
+  );
   const outerBorderRadius = innerBorderRadius + innerPadding;
 
   // Animated rotation for both glow and ring border
@@ -69,9 +73,21 @@ export default function AdaptableSkiaLiveBorderCard({
     );
   };
 
+  const stopRotation = () => {
+    console.log("stopRotation", rotation.value);
+    rotation.value = withTiming(0, {
+      duration: duration/2,
+      easing: Easing.linear,
+    });
+  };
+
   useEffect(() => {
-    startRotation();
-  }, []);
+    if (rotate) {
+      startRotation();
+    } else {
+      stopRotation();
+    }
+  }, [rotate]);
 
   // Glow layer sizing - scales with glowSpread
   const glowWidth = width * glowSpread;
@@ -134,7 +150,7 @@ export default function AdaptableSkiaLiveBorderCard({
             {
               borderRadius: innerBorderRadius,
               inset: innerPadding,
-              backgroundColor: "yellow",
+
               overflow: "hidden",
             },
           ]}
