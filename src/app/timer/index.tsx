@@ -1,22 +1,20 @@
-import LiveBorderTimer from "@/components/timer/LiveBorderTimer";
 import MorphingHourGlassTimer from "@/components/timer/MorphingHourGlassTimer";
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import PagerView from "react-native-pager-view";
 
 export default function Timer() {
 
   console.log("View Refreshed ♻️");
 
   return (
-    <PagerView style={styles.container} initialPage={0}>
-      <View style={styles.container} key={1}>
+    <View style={styles.container} >
+      {/* <View style={styles.container} key={1}>
         <LiveBorderTimer />
-      </View>
+      </View> */}
       <View style={styles.container} key={2}>
         <MorphingHourGlassTimer />
       </View>
-    </PagerView>
+    </View>
   );
 }
 
@@ -27,6 +25,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#1a1a1a",
     gap: 32,
+    width: "100%"
   },
   timerContent: {
     flex: 1,

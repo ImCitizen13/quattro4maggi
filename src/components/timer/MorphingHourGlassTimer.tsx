@@ -1,15 +1,86 @@
 import { AntDesign } from "@expo/vector-icons";
-import { Canvas } from "@shopify/react-native-skia";
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Canvas, Fill, Shader } from "@shopify/react-native-skia";
+import React, { useMemo } from "react";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import {
+    clamp,
+    interpolate,
+    ReduceMotion,
+    useDerivedValue,
+    useSharedValue,
+    withSpring,
+} from "react-native-reanimated";
+import { hexToRgb } from "../../../shaders/ShadersUtils";
+import { BShader } from "./BShader";
+
+const CANVAS_HEIGHT = 500;
+const BUBBLE_RADIUS = 200;
+const BOTTOM_Y = CANVAS_HEIGHT + BUBBLE_RADIUS / 1.15;
+const CENTER_Y = CANVAS_HEIGHT / 2;
+const CIRCLE_COLOR = hexToRgb("#254254"); // white
 
 export default function MorphingHourGlassTimer() {
+  const { width } = useWindowDimensions();
+
+  const bubbleYPos = useSharedValue(BOTTOM_Y);
+  const startY = useSharedValue(BOTTOM_Y);
+
+  // Scale radius from 1.0 (at bottom) to 0.75 (at center)
+  const bubbleRadius = useDerivedValue(() =>
+    interpolate(
+      bubbleYPos.value,
+      [CENTER_Y, BOTTOM_Y],
+      [BUBBLE_RADIUS * 0.75, BUBBLE_RADIUS]
+    )
+  );
+
+  // Shader uniforms — derived so they update on the UI thread
+  const shaderUniforms = useDerivedValue(() => ({
+    u_resolution: [width, CANVAS_HEIGHT],
+    u_center: [width / 2, bubbleYPos.value],
+    u_radius: bubbleRadius.value,
+    u_color: CIRCLE_COLOR,
+  }));
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .onBegin(() => {
+          "worklet";
+          startY.value = bubbleYPos.value;
+        })
+        .onUpdate((e) => {
+          "worklet";
+          bubbleYPos.value = clamp(
+            startY.value + e.translationY,
+            CENTER_Y,
+            BOTTOM_Y
+          );
+        })
+        .onEnd(() => {
+          "worklet";
+          const halfway = (CENTER_Y + BOTTOM_Y) / 2;
+          const snapTo = bubbleYPos.value < halfway ? CENTER_Y : BOTTOM_Y;
+          bubbleYPos.value = withSpring(snapTo, {
+            stiffness: 900,
+            damping: 120,
+            mass: 4,
+            overshootClamping: false,
+            energyThreshold: 6e-9,
+            velocity: 0,
+            reduceMotion: ReduceMotion.System,
+          });
+        }),
+    [bubbleYPos, startY]
+  );
+
   return (
     <View style={styles.container}>
       <View
         style={{ flexDirection: "column", justifyContent: "center", gap: 12 }}
       >
-        <Text style={styles.timeText}>Drag from the bottom to view timer</Text>
+        <Text style={styles.timeText}>Swipe up to check the timer</Text>
         <AntDesign
           style={{ textAlign: "center" }}
           name="hourglass"
@@ -17,9 +88,13 @@ export default function MorphingHourGlassTimer() {
           color="#ffffff"
         />
       </View>
-      <Canvas style={styles.skiaCanvas}>
-        {/* <Rect x={0} y={0} height={10} width={10}/> */}
-      </Canvas>
+      <GestureDetector gesture={panGesture}>
+        <Canvas style={styles.skiaCanvas}>
+          <Fill>
+            <Shader source={BShader} uniforms={shaderUniforms} />
+          </Fill>
+        </Canvas>
+      </GestureDetector>
     </View>
   );
 }
@@ -40,11 +115,9 @@ const styles = StyleSheet.create({
   skiaCanvas: {
     position: "absolute",
     width: "100%",
-    height: 300,
+    height: CANVAS_HEIGHT,
     bottom: 0,
     left: 0,
     backgroundColor: "rgba(0, 0, 255, 0.2)",
-    // borderTopRightRadius: 200,
-    // borderTopLeftRadius: 200,
   },
 });
