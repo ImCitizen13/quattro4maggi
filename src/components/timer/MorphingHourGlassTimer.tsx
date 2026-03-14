@@ -1,7 +1,12 @@
-import { AntDesign } from "@expo/vector-icons";
-import { Canvas, Fill, Shader } from "@shopify/react-native-skia";
+import {
+    Canvas,
+    Fill,
+    ImageShader,
+    Shader,
+    useImage,
+} from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
     clamp,
@@ -11,20 +16,22 @@ import {
     useSharedValue,
     withSpring,
 } from "react-native-reanimated";
-import { hexToRgb } from "../../../shaders/ShadersUtils";
+import { imageArray } from "../../../assets/SkiaImageShaders/images.generated";
 import { BShader } from "./BShader";
 
 const CANVAS_HEIGHT = 500;
 const BUBBLE_RADIUS = 200;
-const BOTTOM_Y = CANVAS_HEIGHT + BUBBLE_RADIUS / 1.15;
+const BOTTOM_Y = CANVAS_HEIGHT;
 const CENTER_Y = CANVAS_HEIGHT / 2;
-const CIRCLE_COLOR = hexToRgb("#254254"); // white
 
 export default function MorphingHourGlassTimer() {
   const { width } = useWindowDimensions();
 
   const bubbleYPos = useSharedValue(BOTTOM_Y);
   const startY = useSharedValue(BOTTOM_Y);
+
+  // Load a background image to show through the bubble
+  const image = useImage(imageArray[16]);
 
   // Scale radius from 1.0 (at bottom) to 0.75 (at center)
   const bubbleRadius = useDerivedValue(() =>
@@ -40,7 +47,9 @@ export default function MorphingHourGlassTimer() {
     u_resolution: [width, CANVAS_HEIGHT],
     u_center: [width / 2, bubbleYPos.value],
     u_radius: bubbleRadius.value,
-    u_color: CIRCLE_COLOR,
+    u_refraction: 0.50, // 0 -> 1 
+    u_edgeWidth: 0.15,
+    u_dispersion: 0.06,
   }));
 
   const panGesture = useMemo(
@@ -75,9 +84,11 @@ export default function MorphingHourGlassTimer() {
     [bubbleYPos, startY]
   );
 
+  if (!image) return null;
+
   return (
     <View style={styles.container}>
-      <View
+      {/* <View
         style={{ flexDirection: "column", justifyContent: "center", gap: 12 }}
       >
         <Text style={styles.timeText}>Swipe up to check the timer</Text>
@@ -87,11 +98,18 @@ export default function MorphingHourGlassTimer() {
           size={18}
           color="#ffffff"
         />
-      </View>
+      </View> */}
       <GestureDetector gesture={panGesture}>
         <Canvas style={styles.skiaCanvas}>
           <Fill>
-            <Shader source={BShader} uniforms={shaderUniforms} />
+            <Shader source={BShader} uniforms={shaderUniforms}>
+              <ImageShader
+                image={image}
+                fit="cover"
+                width={width}
+                height={CANVAS_HEIGHT}
+              />
+            </Shader>
           </Fill>
         </Canvas>
       </GestureDetector>
@@ -103,7 +121,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    justifyContent: "center",
+    // justifyContent: "center",
   },
   timeText: {
     fontSize: 18,
