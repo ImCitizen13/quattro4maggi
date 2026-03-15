@@ -1,35 +1,50 @@
+import { Host, Slider } from "@expo/ui/swift-ui";
+import { tint } from "@expo/ui/swift-ui/modifiers";
 import {
-    Canvas,
-    Fill,
-    ImageShader,
-    Shader,
-    useImage,
+  Canvas,
+  Fill,
+  Group,
+  Paint,
+  RuntimeShader,
+  Text as SKText,
+  useFont,
+  useImage
 } from "@shopify/react-native-skia";
-import React, { useMemo } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
-    clamp,
-    interpolate,
-    ReduceMotion,
-    useDerivedValue,
-    useSharedValue,
-    withSpring,
+  clamp,
+  interpolate,
+  ReduceMotion,
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
 } from "react-native-reanimated";
 import { imageArray } from "../../../assets/SkiaImageShaders/images.generated";
+import { hexToRgb } from "../../../shaders/ShadersUtils";
 import { BShader } from "./BShader";
 
-const CANVAS_HEIGHT = 500;
-const BUBBLE_RADIUS = 200;
-const BOTTOM_Y = CANVAS_HEIGHT;
-const CENTER_Y = CANVAS_HEIGHT / 2;
+
+const BG_COLOR = "#FFFFFF" 
+  // Background color (RGB 0-1) — change this to control the bubble/canvas bg
+  const SHADER_BG_COLOR = hexToRgb(BG_COLOR)//[0.1, 0.1, 0.1] as const; // dark gray (#1a1a1a)
 
 export default function MorphingHourGlassTimer() {
-  const { width } = useWindowDimensions();
-
+  const { width, height } = useWindowDimensions();
+  const CANVAS_HEIGHT = height;
+  const BUBBLE_RADIUS = 200;
+  const BOTTOM_Y = CANVAS_HEIGHT;
+  const CENTER_Y = CANVAS_HEIGHT / 2;
   const bubbleYPos = useSharedValue(BOTTOM_Y);
   const startY = useSharedValue(BOTTOM_Y);
-
+  // Font utils
+  const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), 48);
+  const fontWidth = useDerivedValue(() => {
+    return font?.measureText("Hello Skia").width ?? 0;
+  });
+  const [specularUI, setSpecularUI] = useState(0.5);
+  const specular = useSharedValue(0.5);
   // Load a background image to show through the bubble
   const image = useImage(imageArray[16]);
 
@@ -42,14 +57,21 @@ export default function MorphingHourGlassTimer() {
     )
   );
 
+  // Derived position to keep image centered
+  const imageX = useDerivedValue(() => width / 2 - 100 / 2);
+  const imageY = useDerivedValue(() => height / 2 - 100 / 2);
+  
+
   // Shader uniforms — derived so they update on the UI thread
   const shaderUniforms = useDerivedValue(() => ({
     u_resolution: [width, CANVAS_HEIGHT],
     u_center: [width / 2, bubbleYPos.value],
     u_radius: bubbleRadius.value,
-    u_refraction: 0.50, // 0 -> 1 
+    u_refraction: 0.5, // 0 -> 1
     u_edgeWidth: 0.15,
     u_dispersion: 0.06,
+    u_bgColor: SHADER_BG_COLOR,
+    u_specular: 1,
   }));
 
   const panGesture = useMemo(
@@ -99,18 +121,41 @@ export default function MorphingHourGlassTimer() {
           color="#ffffff"
         />
       </View> */}
+      <View style={styles.sliderRow}>
+        <Text style={styles.sliderLabel}>Specular</Text>
+        <Host style={{ flex: 1 }} matchContents>
+          <Slider
+            step={0.1}
+            min={0}
+            max={1}
+            value={specularUI}
+            onValueChange={(v: number) => {
+              console.log("Slider Value:", v)
+              setSpecularUI(v);
+              specular.value = v;
+            }}
+            modifiers={[tint("#ffffff")]}
+          />
+        </Host>
+      </View>
       <GestureDetector gesture={panGesture}>
         <Canvas style={styles.skiaCanvas}>
-          <Fill>
-            <Shader source={BShader} uniforms={shaderUniforms}>
-              <ImageShader
-                image={image}
-                fit="cover"
-                width={width}
-                height={CANVAS_HEIGHT}
-              />
-            </Shader>
-          </Fill>
+          <Group
+            layer={
+              <Paint >
+                <RuntimeShader source={BShader} uniforms={shaderUniforms} />
+              </Paint>
+            }
+          >
+            <Fill color={"rgb(198, 196, 196)"} />
+            <SKText
+              text="Hello Skia"
+              font={font}
+              color={"black"}
+              x={width / 2 - fontWidth.value / 2}
+              y={imageY.value + 100 / 2}
+            />
+          </Group>
         </Canvas>
       </GestureDetector>
     </View>
@@ -130,12 +175,26 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     textAlign: "center",
   },
+  sliderRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    zIndex: 10,
+  },
+  sliderLabel: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600" as const,
+  },
   skiaCanvas: {
     position: "absolute",
     width: "100%",
-    height: CANVAS_HEIGHT,
+    height: "100%",
+    // height: CANVAS_HEIGHT,
     bottom: 0,
     left: 0,
-    backgroundColor: "rgba(0, 0, 255, 0.2)",
+    backgroundColor: "#1a1a1a",
   },
 });

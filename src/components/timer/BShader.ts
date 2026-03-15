@@ -4,84 +4,83 @@ export const BShader = Skia.RuntimeEffect.Make(`
     // ============================================================
     // UNIFORMS — values passed in from React Native
     // ============================================================
-    uniform shader image;          // background content to sample through the bubble
+    uniform shader image;          // source content (used by RuntimeShader)
     uniform float2 u_resolution;   // canvas size in pixels (width, height)
     uniform float2 u_center;       // bubble center in pixels (x, y)
     uniform float u_radius;        // bubble radius in pixels
     uniform float u_refraction;    // lens distortion strength (e.g. 0.15)
     uniform float u_edgeWidth;     // prismatic edge band width as fraction of radius (e.g. 0.15)
     uniform float u_dispersion;    // chromatic aberration strength at edge (e.g. 0.03)
+    uniform half3 u_bgColor;       // background color (RGB 0-1)
+    uniform float u_specular;      // specular intensity (0-1)
+
+    // ============================================================
+    // HELPER — clamp coordinates to canvas bounds
+    // ============================================================
+    float2 clampCoord(float2 coord) {
+        return clamp(coord, float2(0.0), u_resolution);
+    }
 
     half4 main(float2 fragCoord) {
         // ============================================================
         // DISTANCE FROM BUBBLE CENTER
         // ============================================================
 
-        // Vector from bubble center to the current pixel
         float2 diff = fragCoord - u_center;
-
-        // Distance from center
         float dist = length(diff);
-
-        // Normalized distance: 0 at center, 1 at edge
         float normDist = dist / u_radius;
 
         // ============================================================
-        // OUTSIDE THE BUBBLE — passthrough
+        // OUTSIDE THE BUBBLE — pass through the source content unchanged
         // ============================================================
 
         // Anti-aliased edge: 1 inside, 0 outside, smooth over 1.5px
         float mask = smoothstep(u_radius + 1.5, u_radius - 1.5, dist);
 
+        half4 src = image.eval(fragCoord);
+
         if (mask <= 0.0) {
-            // Fully outside — return the background as-is
-            return image.eval(fragCoord);
+            return src;
         }
 
         // ============================================================
         // BARREL DISTORTION — magnify/refract inside the bubble
         // ============================================================
 
-        // Radial direction from center (unit vector)
         float2 dir = (dist > 0.001) ? diff / dist : float2(0.0);
 
-        // Barrel distortion: push UVs inward for a magnification/lens effect
-        // Stronger toward the edges (normDist^2 gives a natural lens curve)
-        float distortionAmount = u_refraction * normDist * normDist;
-        float2 distortedCoord = fragCoord - dir * distortionAmount * u_radius;
+        float t = normDist * normDist;
+        float distortionAmount = u_refraction * t;
+        float2 distortedCoord = clampCoord(fragCoord - dir * distortionAmount * u_radius);
+
+        half4 distortedSrc = image.eval(distortedCoord);
 
         // ============================================================
         // PRISMATIC EDGE — chromatic aberration at the rim
         // ============================================================
 
-        // Edge band: how close we are to the rim (0 = deep inside, 1 = at edge)
         float edgeStart = 1.0 - u_edgeWidth;
         float edgeFactor = smoothstep(edgeStart, 1.0, normDist);
 
-        // Chromatic offset: separate R/G/B channels along the radial direction
-        // Stronger at the edge, zero at center
         float chromaOffset = u_dispersion * edgeFactor * u_radius;
 
-        // Sample each channel at a slightly different position
-        float2 coordR = distortedCoord + dir * chromaOffset;
-        float2 coordG = distortedCoord;
-        float2 coordB = distortedCoord - dir * chromaOffset;
+        float2 coordR = clampCoord(distortedCoord + dir * chromaOffset);
+        float2 coordB = clampCoord(distortedCoord - dir * chromaOffset);
 
-        half3 refracted = half3(
+        half3 chromaSrc = half3(
             image.eval(coordR).r,
-            image.eval(coordG).g,
+            distortedSrc.g,
             image.eval(coordB).b
         );
 
+        half3 interior = mix(distortedSrc.rgb, chromaSrc, edgeFactor);
+
         // ============================================================
-        // PRISMATIC TINT — rainbow color at the edge
+        // PRISMATIC TINT — rainbow ring at the edge (additive, not blended)
         // ============================================================
 
-        // Create a subtle rainbow based on angle around the bubble
         float angle = atan(diff.y, diff.x);
-
-        // Map angle to hue (simplified HSV → RGB)
-        float hue = angle / 6.28318 + 0.5;  // normalize to [0..1]
+        float hue = angle / 6.28318 + 0.5;
         half3 rainbow = half3(
             abs(hue * 6.0 - 3.0) - 1.0,
             2.0 - abs(hue * 6.0 - 2.0),
@@ -89,28 +88,24 @@ export const BShader = Skia.RuntimeEffect.Make(`
         );
         rainbow = clamp(rainbow, half3(0.0), half3(1.0));
 
-        // Apply rainbow tint only at the edge, with low intensity
-        half3 prismTint = rainbow * edgeFactor * 0.3;
-
         // ============================================================
-        // SPECULAR HIGHLIGHT — subtle light reflection on the bubble
+        // SPECULAR HIGHLIGHT — white glint on the bubble
         // ============================================================
 
-        // Fresnel-like effect: brighter at edges (like a real glass sphere)
-        float fresnel = pow(normDist, 3.0) * 0.15;
-
-        // Small specular glint near the top-left (simulating a light source)
         float2 lightDir = float2(-0.4, -0.6);
         float specDot = max(dot(normalize(diff / u_radius), lightDir), 0.0);
-        float specular = pow(specDot, 16.0) * 0.3;
+        // Sharp bright glint + softer broad glow
+        float specular = (pow(specDot, 32.0) * 0.6 + pow(specDot, 8.0) * 0.15) * u_specular;
+
+        half3 color = interior + half3(specular);
 
         // ============================================================
-        // COMPOSITE — blend everything together
+        // COMPOSITE — blend source content with bubble effects
         // ============================================================
 
-        half3 color = refracted + prismTint + fresnel + specular;
+        half3 finalColor = mix(src.rgb, color, mask);
+        float finalAlpha = max(src.a, mask);
 
-        // Apply anti-aliased mask
-        return half4(color * mask, mask);
+        return half4(finalColor, finalAlpha);
     }
 `)!;
