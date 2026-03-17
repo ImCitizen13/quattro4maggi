@@ -1,6 +1,7 @@
 import { Skia } from "@shopify/react-native-skia";
 
-export const BShader = Skia.RuntimeEffect.Make(`
+// Inner bubble shader — identical to BShader, applied at 80% radius inside the outer bubble
+export const BInnerShader = Skia.RuntimeEffect.Make(`
     // ============================================================
     // UNIFORMS — values passed in from React Native
     // ============================================================
@@ -13,9 +14,9 @@ export const BShader = Skia.RuntimeEffect.Make(`
     uniform float u_dispersion;    // chromatic aberration strength at edge (e.g. 0.03)
     uniform half3 u_bgColor;       // background color (RGB 0-1)
     uniform float u_specular;      // specular intensity (0-1)
-    uniform half3 u_shadowColor;   // shadow color (dark on light bg, light on dark bg)
+    uniform half3 u_shadowColor;   // shadow color
     uniform float u_shadowOpacity; // shadow strength (0-1)
-    uniform float u_shadowSpread;  // shadow spread as fraction of radius (e.g. 0.3)
+    uniform float u_shadowSpread;  // shadow spread as fraction of radius
 
     // 6 rainbow color stops around the bubble edge (RGB 0-1)
     uniform half3 u_prismColor0;   // 0°   (right)
@@ -140,13 +141,3 @@ export const BShader = Skia.RuntimeEffect.Make(`
         return half4(finalColor, 1.0);
     }
 `)!;
-
-// Default rainbow colors (classic spectrum)
-export const DEFAULT_PRISM_COLORS = {
-  u_prismColor0: [1, 0, 0],       // Red      (0°)
-  u_prismColor1: [1, 1, 0],       // Yellow   (60°)
-  u_prismColor2: [0, 1, 0],       // Green    (120°)
-  u_prismColor3: [0, 1, 1],       // Cyan     (180°)
-  u_prismColor4: [0, 0, 1],       // Blue     (240°)
-  u_prismColor5: [1, 0, 1],       // Magenta  (300°)
-} as const;

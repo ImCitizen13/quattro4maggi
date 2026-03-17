@@ -1,18 +1,29 @@
-import { Host, Slider } from "@expo/ui/swift-ui";
-import { tint } from "@expo/ui/swift-ui/modifiers";
+import { AntDesign } from "@expo/vector-icons";
 import {
   Canvas,
   Fill,
   Group,
   Paint,
   RuntimeShader,
+  Shader,
+  Skia,
   Text as SKText,
   useFont,
-  useImage
 } from "@shopify/react-native-skia";
-import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { PressableScale } from "pressto";
+import React, { useMemo } from "react";
+import {
+  StyleSheet,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureUpdateEvent,
+  PanGestureHandlerEventPayload,
+} from "react-native-gesture-handler";
 import {
   clamp,
   interpolate,
@@ -21,140 +32,195 @@ import {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { imageArray } from "../../../assets/SkiaImageShaders/images.generated";
 import { hexToRgb } from "../../../shaders/ShadersUtils";
-import { BShader } from "./BShader";
+import { BGSHADER } from "./BGTailwindShader";
+import { BShader, DEFAULT_PRISM_COLORS } from "./BShader";
 
-
-const BG_COLOR = "#FFFFFF" 
-  // Background color (RGB 0-1) — change this to control the bubble/canvas bg
-  const SHADER_BG_COLOR = hexToRgb(BG_COLOR)//[0.1, 0.1, 0.1] as const; // dark gray (#1a1a1a)
-
+const BG_COLOR = "#FFFFFF";
+// Background color (RGB 0-1) — change this to control the bubble/canvas bg
+const SHADER_BG_COLOR = hexToRgb(BG_COLOR); //[0.1, 0.1, 0.1] as const; // dark gray (#1a1a1a)
+const TEXT = "Bubble";
 export default function MorphingHourGlassTimer() {
   const { width, height } = useWindowDimensions();
+  const isDark = useColorScheme() === "dark";
   const CANVAS_HEIGHT = height;
   const BUBBLE_RADIUS = 200;
   const BOTTOM_Y = CANVAS_HEIGHT;
-  const CENTER_Y = CANVAS_HEIGHT / 2;
+  const CENTER_Y = CANVAS_HEIGHT / 4;
+  const CENTER_TEXT_Y = CANVAS_HEIGHT * 0.5;
+  const BOTTOM_TEXT_Y = CANVAS_HEIGHT ;
   const bubbleYPos = useSharedValue(BOTTOM_Y);
+  const textMainYPos = useSharedValue(BOTTOM_Y);
   const startY = useSharedValue(BOTTOM_Y);
   // Font utils
-  const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), 48);
+  const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), 64);
+
   const fontWidth = useDerivedValue(() => {
-    return font?.measureText("Hello Skia").width ?? 0;
+    return font?.measureText(TEXT).width ?? 0;
   });
-  const [specularUI, setSpecularUI] = useState(0.5);
-  const specular = useSharedValue(0.5);
-  // Load a background image to show through the bubble
-  const image = useImage(imageArray[16]);
 
   // Scale radius from 1.0 (at bottom) to 0.75 (at center)
   const bubbleRadius = useDerivedValue(() =>
     interpolate(
       bubbleYPos.value,
       [CENTER_Y, BOTTOM_Y],
-      [BUBBLE_RADIUS * 0.75, BUBBLE_RADIUS]
+      [BUBBLE_RADIUS * 0.25, BUBBLE_RADIUS]
     )
   );
 
   // Derived position to keep image centered
   const imageX = useDerivedValue(() => width / 2 - 100 / 2);
   const imageY = useDerivedValue(() => height / 2 - 100 / 2);
-  
 
   // Shader uniforms — derived so they update on the UI thread
   const shaderUniforms = useDerivedValue(() => ({
     u_resolution: [width, CANVAS_HEIGHT],
     u_center: [width / 2, bubbleYPos.value],
     u_radius: bubbleRadius.value,
-    u_refraction: 0.5, // 0 -> 1
-    u_edgeWidth: 0.15,
-    u_dispersion: 0.06,
-    u_bgColor: SHADER_BG_COLOR,
+    u_refraction: 0.5,
+    u_edgeWidth: 0.1,
+    u_dispersion: 0.6,
+    u_bgColor: isDark ? [0, 0, 0] : [1, 1, 1],
     u_specular: 1,
+    u_shadowColor: isDark ? [1, 1, 1] : [0, 0, 0],
+    u_shadowOpacity: isDark ? 0.15 : 0.25,
+    u_shadowSpread: 0.2,
+    ...DEFAULT_PRISM_COLORS,
   }));
+
+  // Inner bubble uniforms — 80% radius, same center
+  const innerShaderUniforms = useDerivedValue(() => ({
+    u_resolution: [width, CANVAS_HEIGHT],
+    u_center: [width / 2, bubbleYPos.value],
+    u_radius: bubbleRadius.value * 0.8,
+    u_refraction: 0.5,
+    u_edgeWidth: 0.1,
+    u_dispersion: 0.6,
+    u_bgColor: isDark ? [0, 0, 0] : [1, 1, 1],
+    u_specular: 1,
+    u_shadowColor: isDark ? [1, 1, 1] : [1, 1, 1],
+    u_shadowOpacity: isDark ? 0.05 : 0.1,
+    u_shadowSpread: 1,
+    ...DEFAULT_PRISM_COLORS,
+  }));
+
+  // Dot grid uniforms
+  const dotUniforms = {
+    uResolution: [width, height],
+    uSpacing: 20,
+    uRadius: 1.0,
+    uColor: isDark ? [1, 1, 1, 0.5] : [0, 0, 0, 0.5],
+  };
+
+  const onBeginYPostions = () => {
+    "worklet";
+    startY.value = bubbleYPos.value;
+  };
+
+  const onUpdateYPostions = (
+    e: GestureUpdateEvent<PanGestureHandlerEventPayload>
+  ) => {
+    "worklet";
+    bubbleYPos.value = clamp(startY.value + e.translationY, CENTER_Y, BOTTOM_Y);
+    textMainYPos.value = clamp(
+      startY.value + e.translationY,
+      CENTER_TEXT_Y,
+      BOTTOM_TEXT_Y
+    );
+  };
+
+  const onEndYPostions = () => {
+    "worklet";
+    const halfway = (CENTER_Y + BOTTOM_Y) / 2;
+    const snapTo = bubbleYPos.value < halfway ? CENTER_Y : BOTTOM_Y;
+    const snapTextTo = textMainYPos.value < halfway ? CENTER_TEXT_Y : BOTTOM_TEXT_Y;
+    bubbleYPos.value = withSpring(snapTo, {
+      stiffness: 900,
+      damping: 120,
+      mass: 4,
+      overshootClamping: false,
+      energyThreshold: 6e-9,
+      velocity: 0,
+      reduceMotion: ReduceMotion.System,
+    });
+
+    textMainYPos.value = withSpring(snapTextTo , {
+      stiffness: 900,
+      damping: 120,
+      mass: 4,
+      overshootClamping: false,
+      energyThreshold: 6e-9,
+      velocity: 0,
+      reduceMotion: ReduceMotion.System,
+    });
+  };
 
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
         .onBegin(() => {
-          "worklet";
-          startY.value = bubbleYPos.value;
+          onBeginYPostions();
         })
         .onUpdate((e) => {
-          "worklet";
-          bubbleYPos.value = clamp(
-            startY.value + e.translationY,
-            CENTER_Y,
-            BOTTOM_Y
-          );
+          onUpdateYPostions(e);
         })
         .onEnd(() => {
-          "worklet";
-          const halfway = (CENTER_Y + BOTTOM_Y) / 2;
-          const snapTo = bubbleYPos.value < halfway ? CENTER_Y : BOTTOM_Y;
-          bubbleYPos.value = withSpring(snapTo, {
-            stiffness: 900,
-            damping: 120,
-            mass: 4,
-            overshootClamping: false,
-            energyThreshold: 6e-9,
-            velocity: 0,
-            reduceMotion: ReduceMotion.System,
-          });
+          onEndYPostions();
         }),
     [bubbleYPos, startY]
   );
 
-  if (!image) return null;
+  // ... inside your component
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
 
   return (
     <View style={styles.container}>
-      {/* <View
-        style={{ flexDirection: "column", justifyContent: "center", gap: 12 }}
-      >
-        <Text style={styles.timeText}>Swipe up to check the timer</Text>
-        <AntDesign
-          style={{ textAlign: "center" }}
-          name="hourglass"
-          size={18}
-          color="#ffffff"
-        />
-      </View> */}
-      <View style={styles.sliderRow}>
-        <Text style={styles.sliderLabel}>Specular</Text>
-        <Host style={{ flex: 1 }} matchContents>
-          <Slider
-            step={0.1}
-            min={0}
-            max={1}
-            value={specularUI}
-            onValueChange={(v: number) => {
-              console.log("Slider Value:", v)
-              setSpecularUI(v);
-              specular.value = v;
-            }}
-            modifiers={[tint("#ffffff")]}
+      <View style={{ zIndex: 10, paddingTop: 60, alignItems: "center" }}>
+        <PressableScale onPress={() => {}}>
+          <AntDesign
+            name={isDark ? "moon" : "sun"}
+            size={24}
+            color={isDark ? "white" : "black"}
           />
-        </Host>
+        </PressableScale>
       </View>
       <GestureDetector gesture={panGesture}>
         <Canvas style={styles.skiaCanvas}>
+          {/*Main Bubble group */}
           <Group
             layer={
-              <Paint >
+              // Outer Bubble
+              <Paint>
                 <RuntimeShader source={BShader} uniforms={shaderUniforms} />
               </Paint>
             }
           >
-            <Fill color={"rgb(198, 196, 196)"} />
-            <SKText
-              text="Hello Skia"
-              font={font}
-              color={"black"}
-              x={width / 2 - fontWidth.value / 2}
-              y={imageY.value + 100 / 2}
-            />
+            {/* Background fill INSIDE Group so the layer covers full canvas (needed for shadow) */}
+            <Fill color={isDark ? "#1a1a1a" : "#ffffff"} />
+            {/* Background dots */}
+            <Fill>
+              <Shader source={BGSHADER} uniforms={dotUniforms} />
+            </Fill>
+            <Group
+              // layer={
+              //   // Inner Bubble
+              //   <Paint>
+              //     <RuntimeShader
+              //       source={BInnerShader}
+              //       uniforms={innerShaderUniforms}
+              //     />
+              //   </Paint>
+              // }
+            >
+              <SKText
+                text={TEXT}
+                font={font}
+                color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                x={width / 2 - fontWidth.value / 2}
+                y={textMainYPos}
+              />
+            </Group>
           </Group>
         </Canvas>
       </GestureDetector>
@@ -166,12 +232,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    // justifyContent: "center",
   },
   timeText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "rgb(255, 255, 255)",
     fontVariant: ["tabular-nums"],
     textAlign: "center",
   },
@@ -184,7 +248,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   sliderLabel: {
-    color: "#fff",
     fontSize: 14,
     fontWeight: "600" as const,
   },
@@ -192,9 +255,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: "100%",
     height: "100%",
-    // height: CANVAS_HEIGHT,
     bottom: 0,
     left: 0,
-    backgroundColor: "#1a1a1a",
   },
 });
