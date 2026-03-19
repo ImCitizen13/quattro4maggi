@@ -1,17 +1,22 @@
 import { Group, Image, useImage } from "@shopify/react-native-skia";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet } from "react-native";
-import { useDerivedValue, useSharedValue, withSpring } from "react-native-reanimated";
+import {
+    SharedValue,
+    useAnimatedReaction,
+    useDerivedValue,
+    useSharedValue,
+    withDelay,
+    withSpring,
+} from "react-native-reanimated";
 import { imageArray } from "../../../assets/Bubbles/256/images.generated";
 
-const BOTTOM_BOUNDS = 160;
-const WIDTH = 100;
-const NUMBER_OF_CIRCLES = 17;
-const IMAGE_SIZE_MAX = 64;
 const IMAGE_SIZE_MIN = 80;
-const DURATIONS = [3000, 5000];
+const DURATIONS = [ 5000, 8000];
 const IMAGES = imageArray;
 const SPREAD_ANGLE = 60;
+const BUBBLES_GENERATION_DELAY = 700;
+const springConfig = { duration: DURATIONS[1], dampingRatio: 1 };
 const VICINITY = 0.15; // fraction of width around center where bubbles go straight up
 type Point = {
   x: number;
@@ -63,7 +68,8 @@ function randomPointInConeUniform(
   // getP2: y2 = p1.y - length * sin(angle), set y2=-IMAGE_SIZE_MIN
   // → length = (p1.y + IMAGE_SIZE_MIN) / sin(angle)
   const sinAngle = Math.sin(travelAngle * (Math.PI / 180));
-  const lineLength = sinAngle > 0 ? (y + IMAGE_SIZE_MIN + 10) / sinAngle : y + IMAGE_SIZE_MIN;
+  const lineLength =
+    sinAngle > 0 ? (y + IMAGE_SIZE_MIN + 10) / sinAngle : y + IMAGE_SIZE_MIN;
   const p2 = getP2(p1, travelAngle, lineLength);
 
   return { p1, p2 };
@@ -72,9 +78,11 @@ function randomPointInConeUniform(
 export default function BubbleGenerator({
   lowerBounds,
   width,
+  startAnimation,
 }: {
   lowerBounds: number;
   width: number;
+  startAnimation: SharedValue<boolean>;
 }) {
   const images = [
     useImage(IMAGES[0]),
@@ -93,7 +101,8 @@ export default function BubbleGenerator({
     useImage(IMAGES[13]),
     useImage(IMAGES[14]),
     useImage(IMAGES[15]),
-    useImage(IMAGES[16])];
+    useImage(IMAGES[16]),
+  ];
 
   // Precompute random p1 (start) and p2 (destination) for each bubble
   const targets = useMemo(
@@ -162,7 +171,6 @@ export default function BubbleGenerator({
     useSharedValue(0),
     useSharedValue(0),
     useSharedValue(0),
-
   ];
 
   const bubbleTransforms = [
@@ -186,33 +194,27 @@ export default function BubbleGenerator({
   ];
 
   // Animate bubble from p1 to p2
-  const startAnimation = (index: number) => {
+  const animate = (index: number) => {
+    "worklet";
     const { p2 } = targets[index];
-    const springConfig = { duration: DURATIONS[1], dampingRatio: 1 };
-    bubbleScales[index].value = withSpring(1, springConfig);
-    xs[index].value = withSpring(p2.x, springConfig);
-    ys[index].value = withSpring(p2.y, springConfig);
+    bubbleScales[index].value = withDelay(BUBBLES_GENERATION_DELAY, withSpring(1, springConfig));
+    xs[index].value = withDelay(BUBBLES_GENERATION_DELAY, withSpring(p2.x, springConfig));
+    ys[index].value = withDelay(BUBBLES_GENERATION_DELAY, withSpring(p2.y, springConfig));
   };
 
-  useEffect(() => {
-    startAnimation(0);
-    startAnimation(1);
-    startAnimation(2);
-    startAnimation(3);
-    startAnimation(4);
-    startAnimation(5);
-    startAnimation(6);
-    startAnimation(7);
-    startAnimation(8);
-    startAnimation(9);
-    startAnimation(10);
-    startAnimation(11);
-    startAnimation(12);
-    startAnimation(13);
-    startAnimation(14);
-    startAnimation(15);
-    startAnimation(16);
-  }, []);
+  const animateAll = () => {
+    "worklet";
+    images.map((_, idx) => animate(idx));
+  };
+
+  useAnimatedReaction(
+    () => startAnimation.value,
+    () => {
+      if (startAnimation.value) {
+        animateAll();
+      }
+    }
+  );
 
   return (
     <Group>
@@ -222,7 +224,10 @@ export default function BubbleGenerator({
           <Group
             key={idx}
             transform={bubbleTransforms[idx]}
-            origin={{ x: targets[idx].p1.x + IMAGE_SIZE_MIN / 2, y: targets[idx].p1.y + IMAGE_SIZE_MIN / 2 }}
+            origin={{
+              x: targets[idx].p1.x + IMAGE_SIZE_MIN / 2,
+              y: targets[idx].p1.y + IMAGE_SIZE_MIN / 2,
+            }}
           >
             <Image
               fit="contain"

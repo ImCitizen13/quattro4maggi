@@ -63,6 +63,11 @@ export default function MorphingHourGlassTimer() {
   const bubbleXPos = useSharedValue(CANVAS_WIDTH / 2);
   const textMainYPos = useSharedValue(BOTTOM_Y);
   const startY = useSharedValue(BOTTOM_Y);
+  // Bubble is in the center
+  // const bubbleAtCenter = useDerivedValue(() => {
+  //   return bubbleYPos.value === CENTER_Y;
+  // });
+  const bubbleAtCenter = useSharedValue(false)
   // Font utils
   const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), 64);
 
@@ -112,7 +117,7 @@ export default function MorphingHourGlassTimer() {
     e: GestureUpdateEvent<PanGestureHandlerEventPayload>
   ) => {
     "worklet";
-    const targetY = clamp(startY.value + e.translationY, CENTER_Y, BOTTOM_Y);
+    const targetY = clamp(startY.value + e.translationY, 0, BOTTOM_Y);
     const targetX = CANVAS_WIDTH / 2 + e.translationX;
     bubbleYPos.value = withSpring(targetY, SPRING_FOLLOW_PROPS);
     bubbleXPos.value = withSpring(targetX, SPRING_FOLLOW_PROPS);
@@ -131,7 +136,7 @@ export default function MorphingHourGlassTimer() {
       textMainYPos.value < halfway ? CENTER_TEXT_Y : BOTTOM_TEXT_Y;
     bubbleYPos.value = withSpring(snapTo, SPRING_SNAP_PROPS);
     bubbleXPos.value = withSpring(CANVAS_WIDTH / 2, SPRING_SNAP_PROPS);
-
+    bubbleAtCenter.value = snapTo === CENTER_Y
     textMainYPos.value = withSpring(snapTextTo, {
       stiffness: 900,
       damping: 120,
@@ -180,7 +185,11 @@ export default function MorphingHourGlassTimer() {
               </Paint>
             }
           >
-            <BubbleGenerator lowerBounds={CANVAS_HEIGHT * .35} width={CANVAS_WIDTH}  />
+            <BubbleGenerator
+              lowerBounds={CANVAS_HEIGHT * 0.35}
+              width={CANVAS_WIDTH}
+              startAnimation={bubbleAtCenter}
+            />
             {/* Background fill INSIDE Group so the layer covers full canvas (needed for shadow) */}
             {/* <Fill color={isDark ? "rgb(253, 6, 6)" : "#ffffff"} /> */}
             {/* Background dots */}
