@@ -5,19 +5,18 @@ import {
     SharedValue,
     useAnimatedReaction,
     useDerivedValue,
+    useFrameCallback,
     useSharedValue,
-    withDelay,
-    withSpring,
 } from "react-native-reanimated";
 import { imageArray } from "../../../assets/Bubbles/256/images.generated";
 
 const IMAGE_SIZE_MIN = 80;
-const DURATIONS = [ 5000, 8000];
 const IMAGES = imageArray;
 const SPREAD_ANGLE = 60;
-const BUBBLES_GENERATION_DELAY = 700;
-const springConfig = { duration: DURATIONS[1], dampingRatio: 1 };
+const BASE_SPEED = 0.00012; // progress per ms (~8.3s for full journey)
 const VICINITY = 0.15; // fraction of width around center where bubbles go straight up
+const BUBBLE_COUNT = 17;
+const ANIMATION_START_DELAY = 600;
 type Point = {
   x: number;
   y: number;
@@ -170,8 +169,34 @@ export default function BubbleGenerator({
     useSharedValue(0),
     useSharedValue(0),
     useSharedValue(0),
-    useSharedValue(0),
   ];
+
+  // Staggered progress: each bubble starts at a different phase
+  const progresses = [
+    useSharedValue(0 / BUBBLE_COUNT),
+    useSharedValue(1 / BUBBLE_COUNT),
+    useSharedValue(2 / BUBBLE_COUNT),
+    useSharedValue(3 / BUBBLE_COUNT),
+    useSharedValue(4 / BUBBLE_COUNT),
+    useSharedValue(5 / BUBBLE_COUNT),
+    useSharedValue(6 / BUBBLE_COUNT),
+    useSharedValue(7 / BUBBLE_COUNT),
+    useSharedValue(8 / BUBBLE_COUNT),
+    useSharedValue(9 / BUBBLE_COUNT),
+    useSharedValue(10 / BUBBLE_COUNT),
+    useSharedValue(11 / BUBBLE_COUNT),
+    useSharedValue(12 / BUBBLE_COUNT),
+    useSharedValue(13 / BUBBLE_COUNT),
+    useSharedValue(14 / BUBBLE_COUNT),
+    useSharedValue(15 / BUBBLE_COUNT),
+    useSharedValue(16 / BUBBLE_COUNT),
+  ];
+
+  // Varied speeds per bubble (±30% of BASE_SPEED)
+  const speeds = useMemo(
+    () => targets.map((_, i) => BASE_SPEED * (0.7 + 0.6 * (i / (BUBBLE_COUNT - 1)))),
+    []
+  );
 
   const bubbleTransforms = [
     useDerivedValue(() => [{ scale: bubbleScales[0].value }]),
@@ -193,28 +218,58 @@ export default function BubbleGenerator({
     useDerivedValue(() => [{ scale: bubbleScales[16].value }]),
   ];
 
-  // Animate bubble from p1 to p2
-  const animate = (index: number) => {
-    "worklet";
-    const { p2 } = targets[index];
-    bubbleScales[index].value = withDelay(BUBBLES_GENERATION_DELAY, withSpring(1, springConfig));
-    xs[index].value = withDelay(BUBBLES_GENERATION_DELAY, withSpring(p2.x, springConfig));
-    ys[index].value = withDelay(BUBBLES_GENERATION_DELAY, withSpring(p2.y, springConfig));
-  };
-
-  const animateAll = () => {
-    "worklet";
-    images.map((_, idx) => animate(idx));
-  };
+  const isActive = useSharedValue(false);
+  const elapsedSinceStart = useSharedValue(0);
 
   useAnimatedReaction(
     () => startAnimation.value,
-    () => {
-      if (startAnimation.value) {
-        animateAll();
+    (val) => {
+      isActive.value = val;
+      if (val) {
+        elapsedSinceStart.value = 0;
       }
     }
   );
+
+  useFrameCallback((frameInfo) => {
+    "worklet";
+    if (!isActive.value) return;
+    const dt = frameInfo.timeSincePreviousFrame ?? 16;
+
+    // Wait for ANIMATION_START_DELAY before starting bubbles
+    if (elapsedSinceStart.value < ANIMATION_START_DELAY) {
+      elapsedSinceStart.value += dt;
+      return;
+    }
+
+    for (let i = 0; i < BUBBLE_COUNT; i++) {
+      progresses[i].value += speeds[i] * dt;
+
+      if (progresses[i].value >= 1) {
+        // Reset: snap back to p1 instantly, hidden (scale 0)
+        progresses[i].value = 0;
+        const { p1 } = targets[i];
+        xs[i].value = p1.x;
+        ys[i].value = p1.y;
+        bubbleScales[i].value = 0;
+        continue;
+      }
+
+      const p = progresses[i].value;
+      const { p1, p2 } = targets[i];
+
+      // Lerp position from p1 to p2
+      xs[i].value = p1.x + (p2.x - p1.x) * p;
+      ys[i].value = p1.y + (p2.y - p1.y) * p;
+
+      // Scale: fade in (0→0.15), full (0.15→1.0)
+      if (p < 0.15) {
+        bubbleScales[i].value = p / 0.15;
+      } else {
+        bubbleScales[i].value = 1;
+      }
+    }
+  });
 
   return (
     <Group>
