@@ -10,71 +10,50 @@ import {
 } from "react-native-reanimated";
 import { imageArray } from "../../../assets/Bubbles/256/images.generated";
 
-const IMAGE_SIZE_MIN = 65;
+const IMAGE_SIZE_MIN = 70;
 const IMAGES = imageArray;
 const SPREAD_ANGLE = 70;
 const BASE_SPEED = 0.00028; // progress per ms (~3.6s for full journey)
 const VICINITY = 0.08; // fraction of width around center where bubbles go straight up
 const BUBBLE_COUNT = 33;
 const ANIMATION_START_DELAY = 600;
-type Point = {
-  x: number;
-  y: number;
-};
 
-// Calculate destination point from the origin and the angle, moving upward (negative y)
-function getP2(point: Point, angleDeg: number, length: number): Point {
-  const angleRad = angleDeg * (Math.PI / 180);
-  const x2 = point.x + length * Math.cos(angleRad);
-  const y2 = point.y - length * Math.sin(angleRad);
-  return { x: x2, y: y2 };
-}
-
-function randomPointInConeUniform(
+// Generate random cone point — works both on JS thread and as worklet
+function randomConePoint(
   maxWidth: number,
-  height: number, // e.g. 150 (the tip y position)
+  height: number,
   angleDeg = SPREAD_ANGLE
-): { p1: Point; p2: Point } {
-  // Step 1 — P1 inside cone
-  // y goes from height (tip) down to 0 (top)
-  // Using pow(random, 2) to bias toward tip (center) instead of sqrt for uniform
+): { p1x: number; p1y: number; p2x: number; p2y: number } {
+  "worklet";
   const t = Math.pow(Math.random(), 2);
-  const y = height * (1 - t); // y=height at tip (center), y=0 at top
+  const y = height * (1 - t);
 
   const angleRad = (angleDeg / 2) * (Math.PI / 180);
   const spread = height * t * Math.tan(angleRad);
   const x = maxWidth / 2 - IMAGE_SIZE_MIN / 2 + (Math.random() * 2 - 1) * spread;
 
-  const p1 = { x, y };
-
-  // Step 2 — choose travel angle based on distance from center
   const centerX = maxWidth / 2;
   const vicinityThreshold = maxWidth * VICINITY;
-  const dx = p1.x - centerX;
+  const dx = x - centerX;
 
-  // Add ±15° randomness to travel angle for organic spread
   const jitter = (Math.random() * 2 - 1) * 15;
   let travelAngle: number;
   if (Math.abs(dx) <= vicinityThreshold) {
-    // Near center: mostly up with some random lean
     travelAngle = 90 + jitter;
   } else if (dx > 0) {
-    // Right side: move up-right
     travelAngle = SPREAD_ANGLE + jitter * 0.5;
   } else {
-    // Left side: move up-left
     travelAngle = 180 - SPREAD_ANGLE + jitter * 0.5;
   }
 
-  // Compute line length so p2.y reaches -IMAGE_SIZE_MIN (fully off screen top)
-  // getP2: y2 = p1.y - length * sin(angle), set y2=-IMAGE_SIZE_MIN
-  // → length = (p1.y + IMAGE_SIZE_MIN) / sin(angle)
   const sinAngle = Math.sin(travelAngle * (Math.PI / 180));
   const lineLength =
     sinAngle > 0 ? (y + IMAGE_SIZE_MIN + 10) / sinAngle : y + IMAGE_SIZE_MIN;
-  const p2 = getP2(p1, travelAngle, lineLength);
+  const travelRad = travelAngle * (Math.PI / 180);
+  const p2x = x + lineLength * Math.cos(travelRad);
+  const p2y = y - lineLength * Math.sin(travelRad);
 
-  return { p1, p2 };
+  return { p1x: x, p1y: y, p2x, p2y };
 }
 
 export default function BubbleGenerator({
@@ -123,172 +102,116 @@ export default function BubbleGenerator({
     useImage(IMAGES[33]),
   ];
 
-  // Precompute random p1 (start) and p2 (destination) for each bubble
-  const targets = useMemo(
-    () => images.map(() => randomPointInConeUniform(width, lowerBounds)),
+  // Initial targets computed on JS thread
+  const init = useMemo(
+    () => Array.from({ length: 34 }, () => randomConePoint(width, lowerBounds)),
     []
   );
 
-  // Animated x positions (initialized to p1.x)
-  const xs = [
-    useSharedValue(targets[0].p1.x),
-    useSharedValue(targets[1].p1.x),
-    useSharedValue(targets[2].p1.x),
-    useSharedValue(targets[3].p1.x),
-    useSharedValue(targets[4].p1.x),
-    useSharedValue(targets[5].p1.x),
-    useSharedValue(targets[6].p1.x),
-    useSharedValue(targets[7].p1.x),
-    useSharedValue(targets[8].p1.x),
-    useSharedValue(targets[9].p1.x),
-    useSharedValue(targets[10].p1.x),
-    useSharedValue(targets[11].p1.x),
-    useSharedValue(targets[12].p1.x),
-    useSharedValue(targets[13].p1.x),
-    useSharedValue(targets[14].p1.x),
-    useSharedValue(targets[15].p1.x),
-    useSharedValue(targets[16].p1.x),
-    useSharedValue(targets[17].p1.x),
-    useSharedValue(targets[18].p1.x),
-    useSharedValue(targets[19].p1.x),
-    useSharedValue(targets[20].p1.x),
-    useSharedValue(targets[21].p1.x),
-    useSharedValue(targets[22].p1.x),
-    useSharedValue(targets[23].p1.x),
-    useSharedValue(targets[24].p1.x),
-    useSharedValue(targets[25].p1.x),
-    useSharedValue(targets[26].p1.x),
-    useSharedValue(targets[27].p1.x),
-    useSharedValue(targets[28].p1.x),
-    useSharedValue(targets[29].p1.x),
-    useSharedValue(targets[30].p1.x),
-    useSharedValue(targets[31].p1.x),
-    useSharedValue(targets[32].p1.x),
-    useSharedValue(targets[33].p1.x),
+  // Target endpoints as shared values (re-randomized on reset in worklet)
+  const p1xs = [
+    useSharedValue(init[0].p1x), useSharedValue(init[1].p1x), useSharedValue(init[2].p1x), useSharedValue(init[3].p1x),
+    useSharedValue(init[4].p1x), useSharedValue(init[5].p1x), useSharedValue(init[6].p1x), useSharedValue(init[7].p1x),
+    useSharedValue(init[8].p1x), useSharedValue(init[9].p1x), useSharedValue(init[10].p1x), useSharedValue(init[11].p1x),
+    useSharedValue(init[12].p1x), useSharedValue(init[13].p1x), useSharedValue(init[14].p1x), useSharedValue(init[15].p1x),
+    useSharedValue(init[16].p1x), useSharedValue(init[17].p1x), useSharedValue(init[18].p1x), useSharedValue(init[19].p1x),
+    useSharedValue(init[20].p1x), useSharedValue(init[21].p1x), useSharedValue(init[22].p1x), useSharedValue(init[23].p1x),
+    useSharedValue(init[24].p1x), useSharedValue(init[25].p1x), useSharedValue(init[26].p1x), useSharedValue(init[27].p1x),
+    useSharedValue(init[28].p1x), useSharedValue(init[29].p1x), useSharedValue(init[30].p1x), useSharedValue(init[31].p1x),
+    useSharedValue(init[32].p1x), useSharedValue(init[33].p1x),
+  ];
+  const p1ys = [
+    useSharedValue(init[0].p1y), useSharedValue(init[1].p1y), useSharedValue(init[2].p1y), useSharedValue(init[3].p1y),
+    useSharedValue(init[4].p1y), useSharedValue(init[5].p1y), useSharedValue(init[6].p1y), useSharedValue(init[7].p1y),
+    useSharedValue(init[8].p1y), useSharedValue(init[9].p1y), useSharedValue(init[10].p1y), useSharedValue(init[11].p1y),
+    useSharedValue(init[12].p1y), useSharedValue(init[13].p1y), useSharedValue(init[14].p1y), useSharedValue(init[15].p1y),
+    useSharedValue(init[16].p1y), useSharedValue(init[17].p1y), useSharedValue(init[18].p1y), useSharedValue(init[19].p1y),
+    useSharedValue(init[20].p1y), useSharedValue(init[21].p1y), useSharedValue(init[22].p1y), useSharedValue(init[23].p1y),
+    useSharedValue(init[24].p1y), useSharedValue(init[25].p1y), useSharedValue(init[26].p1y), useSharedValue(init[27].p1y),
+    useSharedValue(init[28].p1y), useSharedValue(init[29].p1y), useSharedValue(init[30].p1y), useSharedValue(init[31].p1y),
+    useSharedValue(init[32].p1y), useSharedValue(init[33].p1y),
+  ];
+  const p2xs = [
+    useSharedValue(init[0].p2x), useSharedValue(init[1].p2x), useSharedValue(init[2].p2x), useSharedValue(init[3].p2x),
+    useSharedValue(init[4].p2x), useSharedValue(init[5].p2x), useSharedValue(init[6].p2x), useSharedValue(init[7].p2x),
+    useSharedValue(init[8].p2x), useSharedValue(init[9].p2x), useSharedValue(init[10].p2x), useSharedValue(init[11].p2x),
+    useSharedValue(init[12].p2x), useSharedValue(init[13].p2x), useSharedValue(init[14].p2x), useSharedValue(init[15].p2x),
+    useSharedValue(init[16].p2x), useSharedValue(init[17].p2x), useSharedValue(init[18].p2x), useSharedValue(init[19].p2x),
+    useSharedValue(init[20].p2x), useSharedValue(init[21].p2x), useSharedValue(init[22].p2x), useSharedValue(init[23].p2x),
+    useSharedValue(init[24].p2x), useSharedValue(init[25].p2x), useSharedValue(init[26].p2x), useSharedValue(init[27].p2x),
+    useSharedValue(init[28].p2x), useSharedValue(init[29].p2x), useSharedValue(init[30].p2x), useSharedValue(init[31].p2x),
+    useSharedValue(init[32].p2x), useSharedValue(init[33].p2x),
+  ];
+  const p2ys = [
+    useSharedValue(init[0].p2y), useSharedValue(init[1].p2y), useSharedValue(init[2].p2y), useSharedValue(init[3].p2y),
+    useSharedValue(init[4].p2y), useSharedValue(init[5].p2y), useSharedValue(init[6].p2y), useSharedValue(init[7].p2y),
+    useSharedValue(init[8].p2y), useSharedValue(init[9].p2y), useSharedValue(init[10].p2y), useSharedValue(init[11].p2y),
+    useSharedValue(init[12].p2y), useSharedValue(init[13].p2y), useSharedValue(init[14].p2y), useSharedValue(init[15].p2y),
+    useSharedValue(init[16].p2y), useSharedValue(init[17].p2y), useSharedValue(init[18].p2y), useSharedValue(init[19].p2y),
+    useSharedValue(init[20].p2y), useSharedValue(init[21].p2y), useSharedValue(init[22].p2y), useSharedValue(init[23].p2y),
+    useSharedValue(init[24].p2y), useSharedValue(init[25].p2y), useSharedValue(init[26].p2y), useSharedValue(init[27].p2y),
+    useSharedValue(init[28].p2y), useSharedValue(init[29].p2y), useSharedValue(init[30].p2y), useSharedValue(init[31].p2y),
+    useSharedValue(init[32].p2y), useSharedValue(init[33].p2y),
   ];
 
-  // Animated y positions (initialized to p1.y)
+  // Animated x/y positions (initialized to p1)
+  const xs = [
+    useSharedValue(init[0].p1x), useSharedValue(init[1].p1x), useSharedValue(init[2].p1x), useSharedValue(init[3].p1x),
+    useSharedValue(init[4].p1x), useSharedValue(init[5].p1x), useSharedValue(init[6].p1x), useSharedValue(init[7].p1x),
+    useSharedValue(init[8].p1x), useSharedValue(init[9].p1x), useSharedValue(init[10].p1x), useSharedValue(init[11].p1x),
+    useSharedValue(init[12].p1x), useSharedValue(init[13].p1x), useSharedValue(init[14].p1x), useSharedValue(init[15].p1x),
+    useSharedValue(init[16].p1x), useSharedValue(init[17].p1x), useSharedValue(init[18].p1x), useSharedValue(init[19].p1x),
+    useSharedValue(init[20].p1x), useSharedValue(init[21].p1x), useSharedValue(init[22].p1x), useSharedValue(init[23].p1x),
+    useSharedValue(init[24].p1x), useSharedValue(init[25].p1x), useSharedValue(init[26].p1x), useSharedValue(init[27].p1x),
+    useSharedValue(init[28].p1x), useSharedValue(init[29].p1x), useSharedValue(init[30].p1x), useSharedValue(init[31].p1x),
+    useSharedValue(init[32].p1x), useSharedValue(init[33].p1x),
+  ];
   const ys = [
-    useSharedValue(targets[0].p1.y),
-    useSharedValue(targets[1].p1.y),
-    useSharedValue(targets[2].p1.y),
-    useSharedValue(targets[3].p1.y),
-    useSharedValue(targets[4].p1.y),
-    useSharedValue(targets[5].p1.y),
-    useSharedValue(targets[6].p1.y),
-    useSharedValue(targets[7].p1.y),
-    useSharedValue(targets[8].p1.y),
-    useSharedValue(targets[9].p1.y),
-    useSharedValue(targets[10].p1.y),
-    useSharedValue(targets[11].p1.y),
-    useSharedValue(targets[12].p1.y),
-    useSharedValue(targets[13].p1.y),
-    useSharedValue(targets[14].p1.y),
-    useSharedValue(targets[15].p1.y),
-    useSharedValue(targets[16].p1.y),
-    useSharedValue(targets[17].p1.y),
-    useSharedValue(targets[18].p1.y),
-    useSharedValue(targets[19].p1.y),
-    useSharedValue(targets[20].p1.y),
-    useSharedValue(targets[21].p1.y),
-    useSharedValue(targets[22].p1.y),
-    useSharedValue(targets[23].p1.y),
-    useSharedValue(targets[24].p1.y),
-    useSharedValue(targets[25].p1.y),
-    useSharedValue(targets[26].p1.y),
-    useSharedValue(targets[27].p1.y),
-    useSharedValue(targets[28].p1.y),
-    useSharedValue(targets[29].p1.y),
-    useSharedValue(targets[30].p1.y),
-    useSharedValue(targets[31].p1.y),
-    useSharedValue(targets[32].p1.y),
-    useSharedValue(targets[33].p1.y),
+    useSharedValue(init[0].p1y), useSharedValue(init[1].p1y), useSharedValue(init[2].p1y), useSharedValue(init[3].p1y),
+    useSharedValue(init[4].p1y), useSharedValue(init[5].p1y), useSharedValue(init[6].p1y), useSharedValue(init[7].p1y),
+    useSharedValue(init[8].p1y), useSharedValue(init[9].p1y), useSharedValue(init[10].p1y), useSharedValue(init[11].p1y),
+    useSharedValue(init[12].p1y), useSharedValue(init[13].p1y), useSharedValue(init[14].p1y), useSharedValue(init[15].p1y),
+    useSharedValue(init[16].p1y), useSharedValue(init[17].p1y), useSharedValue(init[18].p1y), useSharedValue(init[19].p1y),
+    useSharedValue(init[20].p1y), useSharedValue(init[21].p1y), useSharedValue(init[22].p1y), useSharedValue(init[23].p1y),
+    useSharedValue(init[24].p1y), useSharedValue(init[25].p1y), useSharedValue(init[26].p1y), useSharedValue(init[27].p1y),
+    useSharedValue(init[28].p1y), useSharedValue(init[29].p1y), useSharedValue(init[30].p1y), useSharedValue(init[31].p1y),
+    useSharedValue(init[32].p1y), useSharedValue(init[33].p1y),
   ];
 
   const bubbleScales = [
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
-    useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0),
   ];
 
   // Staggered progress: each bubble starts at a different phase
   const progresses = [
-    useSharedValue(0 / BUBBLE_COUNT),
-    useSharedValue(1 / BUBBLE_COUNT),
-    useSharedValue(2 / BUBBLE_COUNT),
-    useSharedValue(3 / BUBBLE_COUNT),
-    useSharedValue(4 / BUBBLE_COUNT),
-    useSharedValue(5 / BUBBLE_COUNT),
-    useSharedValue(6 / BUBBLE_COUNT),
-    useSharedValue(7 / BUBBLE_COUNT),
-    useSharedValue(8 / BUBBLE_COUNT),
-    useSharedValue(9 / BUBBLE_COUNT),
-    useSharedValue(10 / BUBBLE_COUNT),
-    useSharedValue(11 / BUBBLE_COUNT),
-    useSharedValue(12 / BUBBLE_COUNT),
-    useSharedValue(13 / BUBBLE_COUNT),
-    useSharedValue(14 / BUBBLE_COUNT),
-    useSharedValue(15 / BUBBLE_COUNT),
-    useSharedValue(16 / BUBBLE_COUNT),
-    useSharedValue(17 / BUBBLE_COUNT),
-    useSharedValue(18 / BUBBLE_COUNT),
-    useSharedValue(19 / BUBBLE_COUNT),
-    useSharedValue(20 / BUBBLE_COUNT),
-    useSharedValue(21 / BUBBLE_COUNT),
-    useSharedValue(22 / BUBBLE_COUNT),
-    useSharedValue(23 / BUBBLE_COUNT),
-    useSharedValue(24 / BUBBLE_COUNT),
-    useSharedValue(25 / BUBBLE_COUNT),
-    useSharedValue(26 / BUBBLE_COUNT),
-    useSharedValue(27 / BUBBLE_COUNT),
-    useSharedValue(28 / BUBBLE_COUNT),
-    useSharedValue(29 / BUBBLE_COUNT),
-    useSharedValue(30 / BUBBLE_COUNT),
-    useSharedValue(31 / BUBBLE_COUNT),
-    useSharedValue(32 / BUBBLE_COUNT),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0), useSharedValue(0), useSharedValue(0), useSharedValue(0),
+    useSharedValue(0),
   ];
 
   // Varied speeds per bubble (0.5x to 1.8x of BASE_SPEED, randomly assigned)
   const speeds = useMemo(
-    () => targets.map(() => BASE_SPEED * (0.5 + Math.random() * 1.3)),
+    () => Array.from({ length: BUBBLE_COUNT }, () => BASE_SPEED * (0.5 + Math.random() * 1.3)),
     []
   );
 
   // Staggered start delays per bubble (ms) so they don't all appear at once
   const staggerDelays = useMemo(
-    () => targets.map((_, i) => i * 200),
+    () => Array.from({ length: BUBBLE_COUNT }, (_, i) => i * 200),
     []
   );
 
@@ -328,6 +251,78 @@ export default function BubbleGenerator({
     useDerivedValue(() => [{ scale: bubbleScales[32].value }]),
   ];
 
+  // Scale transform origins — use shared values so they update on re-randomize
+  const originXs = [
+    useDerivedValue(() => p1xs[0].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[1].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[2].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[3].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[4].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[5].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[6].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[7].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[8].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[9].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[10].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[11].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[12].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[13].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[14].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[15].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[16].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[17].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[18].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[19].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[20].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[21].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[22].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[23].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[24].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[25].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[26].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[27].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[28].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[29].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[30].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[31].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1xs[32].value + IMAGE_SIZE_MIN / 2),
+  ];
+  const originYs = [
+    useDerivedValue(() => p1ys[0].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[1].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[2].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[3].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[4].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[5].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[6].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[7].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[8].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[9].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[10].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[11].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[12].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[13].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[14].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[15].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[16].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[17].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[18].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[19].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[20].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[21].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[22].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[23].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[24].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[25].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[26].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[27].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[28].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[29].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[30].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[31].value + IMAGE_SIZE_MIN / 2),
+    useDerivedValue(() => p1ys[32].value + IMAGE_SIZE_MIN / 2),
+  ];
+
   const isActive = useSharedValue(false);
   const elapsedSinceStart = useSharedValue(0);
 
@@ -337,12 +332,12 @@ export default function BubbleGenerator({
       isActive.value = val;
       if (val) {
         elapsedSinceStart.value = 0;
-        // Reset all bubbles to scale 0 with staggered progress
+        // Reset all bubbles to scale 0
         for (let i = 0; i < BUBBLE_COUNT; i++) {
           progresses[i].value = 0;
           bubbleScales[i].value = 0;
-          xs[i].value = targets[i].p1.x;
-          ys[i].value = targets[i].p1.y;
+          xs[i].value = p1xs[i].value;
+          ys[i].value = p1ys[i].value;
         }
       }
     }
@@ -350,9 +345,11 @@ export default function BubbleGenerator({
 
   useFrameCallback((frameInfo) => {
     "worklet";
-    if (!isActive.value) return;
     const dt = frameInfo.timeSincePreviousFrame ?? 16;
-    elapsedSinceStart.value += dt;
+
+    if (isActive.value) {
+      elapsedSinceStart.value += dt;
+    }
 
     // Wait for ANIMATION_START_DELAY before starting bubbles
     if (elapsedSinceStart.value < ANIMATION_START_DELAY) {
@@ -360,6 +357,11 @@ export default function BubbleGenerator({
     }
 
     for (let i = 0; i < BUBBLE_COUNT; i++) {
+      // Skip bubbles that already finished and won't respawn
+      if (progresses[i].value >= 1) continue;
+      // Skip bubbles not yet started (stagger)
+      if (progresses[i].value === 0 && !isActive.value) continue;
+
       // Wait for this bubble's stagger delay before it starts moving
       const bubbleElapsed = elapsedSinceStart.value - ANIMATION_START_DELAY - staggerDelays[i];
       if (bubbleElapsed < 0) continue;
@@ -367,21 +369,31 @@ export default function BubbleGenerator({
       progresses[i].value += speeds[i] * dt;
 
       if (progresses[i].value >= 1) {
-        // Reset: snap back to p1 instantly, hidden (scale 0)
-        progresses[i].value = 0;
-        const { p1 } = targets[i];
-        xs[i].value = p1.x;
-        ys[i].value = p1.y;
-        bubbleScales[i].value = 0;
+        if (isActive.value) {
+          // Re-randomize target position for next cycle
+          const newTarget = randomConePoint(width, lowerBounds);
+          p1xs[i].value = newTarget.p1x;
+          p1ys[i].value = newTarget.p1y;
+          p2xs[i].value = newTarget.p2x;
+          p2ys[i].value = newTarget.p2y;
+          // Reset to new start position
+          progresses[i].value = 0;
+          xs[i].value = newTarget.p1x;
+          ys[i].value = newTarget.p1y;
+          bubbleScales[i].value = 0;
+        } else {
+          // Not active — just hide and stop, don't respawn
+          progresses[i].value = 1;
+          bubbleScales[i].value = 0;
+        }
         continue;
       }
 
       const p = progresses[i].value;
-      const { p1, p2 } = targets[i];
 
       // Lerp position from p1 to p2
-      xs[i].value = p1.x + (p2.x - p1.x) * p;
-      ys[i].value = p1.y + (p2.y - p1.y) * p;
+      xs[i].value = p1xs[i].value + (p2xs[i].value - p1xs[i].value) * p;
+      ys[i].value = p1ys[i].value + (p2ys[i].value - p1ys[i].value) * p;
 
       // Scale: fade in (0→0.15), full (0.15→1.0)
       if (p < 0.15) {
@@ -394,16 +406,15 @@ export default function BubbleGenerator({
 
   return (
     <Group>
-      {/* <Rect width={width} height={lowerBounds} color="white" /> */}
       {images.slice(0, BUBBLE_COUNT).map((img, idx) => {
         return (
           <Group
             key={idx}
             transform={bubbleTransforms[idx]}
-            origin={{
-              x: targets[idx].p1.x + IMAGE_SIZE_MIN / 2,
-              y: targets[idx].p1.y + IMAGE_SIZE_MIN / 2,
-            }}
+            origin={useDerivedValue(() => ({
+              x: originXs[idx].value,
+              y: originYs[idx].value,
+            }))}
           >
             <Image
               fit="contain"

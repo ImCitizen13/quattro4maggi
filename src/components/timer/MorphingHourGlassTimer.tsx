@@ -58,7 +58,7 @@ export default function MorphingHourGlassTimer() {
 
   const BOTTOM_Y = CANVAS_HEIGHT;
   const CENTER_Y = CANVAS_HEIGHT * .40;
-  const CENTER_TEXT_Y = CANVAS_HEIGHT * 0.5;
+  const CENTER_TEXT_Y = CANVAS_HEIGHT * 0.55;
   const BOTTOM_TEXT_Y = CANVAS_HEIGHT;
   const bubbleYPos = useSharedValue(BOTTOM_Y);
   const bubbleXPos = useSharedValue(CANVAS_WIDTH / 2);
@@ -72,8 +72,20 @@ export default function MorphingHourGlassTimer() {
   // Font utils
   const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), FONT_SIZE);
 
-  const fontWidth = useDerivedValue(() => {
-    return font?.measureText(TEXT).width ?? 0;
+  const textX = useDerivedValue(() => {
+    const w = font?.measureText(TEXT).width ?? 0;
+    return CANVAS_WIDTH / 2 - w / 2;
+  });
+
+  // Text opacity: 0 at bottom, fully visible at 30% of bubble travel
+  const textOpacity = useDerivedValue(() => {
+    const thirtyPercent = BOTTOM_Y - 0.3 * (BOTTOM_Y - CENTER_Y);
+    return interpolate(
+      bubbleYPos.value,
+      [BOTTOM_Y, thirtyPercent],
+      [0, 1],
+      "clamp"
+    );
   });
 
   // Scale radius from 1.0 (at bottom) to 0.75 (at center)
@@ -92,7 +104,7 @@ export default function MorphingHourGlassTimer() {
     u_radius: bubbleRadius.value,
     u_refraction: 0.5,
     u_edgeWidth: 0.1,
-    u_dispersion: 0.6,
+    u_dispersion: 0.9,
     u_bgColor: isDark ? [0, 0, 0] : [1, 1, 1],
     u_specular: 1,
     u_shadowColor: isDark ? [1, 1, 1] : [0, 0, 0],
@@ -198,14 +210,16 @@ export default function MorphingHourGlassTimer() {
             {/* <Fill>
               <Shader source={BGSHADER} uniforms={dotUniforms} />
             </Fill> */}
-            <SKText
-              antiAlias={true}
-              text={TEXT}
-              font={font}
-              color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
-              x={CANVAS_WIDTH / 2 - fontWidth.value / 2}
-              y={textMainYPos}
-            />
+            <Group opacity={textOpacity}>
+              <SKText
+                antiAlias={true}
+                text={TEXT}
+                font={font}
+                color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                x={textX}
+                y={textMainYPos}
+              />
+            </Group>
           </Group>
         </Canvas>
       </GestureDetector>
