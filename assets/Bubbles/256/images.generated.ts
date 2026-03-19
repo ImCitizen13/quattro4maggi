@@ -41,7 +41,8 @@ export const imageArray = [
     images.comedy_man,
     images.man_reading_window,
     images.optical,
-    images.islamic
+    images.islamic,
+    images.rainbow_black
     
 ] as const;
 
