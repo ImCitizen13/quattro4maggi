@@ -2,20 +2,20 @@ import { Group, Image, useImage } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
 import { StyleSheet } from "react-native";
 import {
-    SharedValue,
-    useAnimatedReaction,
-    useDerivedValue,
-    useFrameCallback,
-    useSharedValue,
+  SharedValue,
+  useAnimatedReaction,
+  useDerivedValue,
+  useFrameCallback,
+  useSharedValue,
 } from "react-native-reanimated";
 import { imageArray } from "../../../assets/Bubbles/256/images.generated";
 
-const IMAGE_SIZE_MIN = 80;
+const IMAGE_SIZE_MIN = 65;
 const IMAGES = imageArray;
-const SPREAD_ANGLE = 60;
-const BASE_SPEED = 0.00012; // progress per ms (~8.3s for full journey)
-const VICINITY = 0.15; // fraction of width around center where bubbles go straight up
-const BUBBLE_COUNT = 17;
+const SPREAD_ANGLE = 70;
+const BASE_SPEED = 0.00028; // progress per ms (~3.6s for full journey)
+const VICINITY = 0.08; // fraction of width around center where bubbles go straight up
+const BUBBLE_COUNT = 33;
 const ANIMATION_START_DELAY = 600;
 type Point = {
   x: number;
@@ -37,12 +37,13 @@ function randomPointInConeUniform(
 ): { p1: Point; p2: Point } {
   // Step 1 — P1 inside cone
   // y goes from height (tip) down to 0 (top)
-  const t = Math.sqrt(Math.random());
-  const y = height * (1 - t); // y=150 at tip, y=0 at top
+  // Using pow(random, 2) to bias toward tip (center) instead of sqrt for uniform
+  const t = Math.pow(Math.random(), 2);
+  const y = height * (1 - t); // y=height at tip (center), y=0 at top
 
   const angleRad = (angleDeg / 2) * (Math.PI / 180);
   const spread = height * t * Math.tan(angleRad);
-  const x = maxWidth / 2 + (Math.random() * 2 - 1) * spread;
+  const x = maxWidth / 2 - IMAGE_SIZE_MIN / 2 + (Math.random() * 2 - 1) * spread;
 
   const p1 = { x, y };
 
@@ -51,16 +52,18 @@ function randomPointInConeUniform(
   const vicinityThreshold = maxWidth * VICINITY;
   const dx = p1.x - centerX;
 
+  // Add ±15° randomness to travel angle for organic spread
+  const jitter = (Math.random() * 2 - 1) * 15;
   let travelAngle: number;
   if (Math.abs(dx) <= vicinityThreshold) {
-    // Near center: move straight up
-    travelAngle = 90;
+    // Near center: mostly up with some random lean
+    travelAngle = 90 + jitter;
   } else if (dx > 0) {
     // Right side: move up-right
-    travelAngle = SPREAD_ANGLE;
+    travelAngle = SPREAD_ANGLE + jitter * 0.5;
   } else {
     // Left side: move up-left
-    travelAngle = 180 - SPREAD_ANGLE;
+    travelAngle = 180 - SPREAD_ANGLE + jitter * 0.5;
   }
 
   // Compute line length so p2.y reaches -IMAGE_SIZE_MIN (fully off screen top)
@@ -101,6 +104,23 @@ export default function BubbleGenerator({
     useImage(IMAGES[14]),
     useImage(IMAGES[15]),
     useImage(IMAGES[16]),
+    useImage(IMAGES[17]),
+    useImage(IMAGES[18]),
+    useImage(IMAGES[19]),
+    useImage(IMAGES[20]),
+    useImage(IMAGES[21]),
+    useImage(IMAGES[22]),
+    useImage(IMAGES[23]),
+    useImage(IMAGES[24]),
+    useImage(IMAGES[25]),
+    useImage(IMAGES[26]),
+    useImage(IMAGES[27]),
+    useImage(IMAGES[28]),
+    useImage(IMAGES[29]),
+    useImage(IMAGES[30]),
+    useImage(IMAGES[31]),
+    useImage(IMAGES[32]),
+    useImage(IMAGES[33]),
   ];
 
   // Precompute random p1 (start) and p2 (destination) for each bubble
@@ -128,6 +148,23 @@ export default function BubbleGenerator({
     useSharedValue(targets[14].p1.x),
     useSharedValue(targets[15].p1.x),
     useSharedValue(targets[16].p1.x),
+    useSharedValue(targets[17].p1.x),
+    useSharedValue(targets[18].p1.x),
+    useSharedValue(targets[19].p1.x),
+    useSharedValue(targets[20].p1.x),
+    useSharedValue(targets[21].p1.x),
+    useSharedValue(targets[22].p1.x),
+    useSharedValue(targets[23].p1.x),
+    useSharedValue(targets[24].p1.x),
+    useSharedValue(targets[25].p1.x),
+    useSharedValue(targets[26].p1.x),
+    useSharedValue(targets[27].p1.x),
+    useSharedValue(targets[28].p1.x),
+    useSharedValue(targets[29].p1.x),
+    useSharedValue(targets[30].p1.x),
+    useSharedValue(targets[31].p1.x),
+    useSharedValue(targets[32].p1.x),
+    useSharedValue(targets[33].p1.x),
   ];
 
   // Animated y positions (initialized to p1.y)
@@ -149,9 +186,44 @@ export default function BubbleGenerator({
     useSharedValue(targets[14].p1.y),
     useSharedValue(targets[15].p1.y),
     useSharedValue(targets[16].p1.y),
+    useSharedValue(targets[17].p1.y),
+    useSharedValue(targets[18].p1.y),
+    useSharedValue(targets[19].p1.y),
+    useSharedValue(targets[20].p1.y),
+    useSharedValue(targets[21].p1.y),
+    useSharedValue(targets[22].p1.y),
+    useSharedValue(targets[23].p1.y),
+    useSharedValue(targets[24].p1.y),
+    useSharedValue(targets[25].p1.y),
+    useSharedValue(targets[26].p1.y),
+    useSharedValue(targets[27].p1.y),
+    useSharedValue(targets[28].p1.y),
+    useSharedValue(targets[29].p1.y),
+    useSharedValue(targets[30].p1.y),
+    useSharedValue(targets[31].p1.y),
+    useSharedValue(targets[32].p1.y),
+    useSharedValue(targets[33].p1.y),
   ];
 
   const bubbleScales = [
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
     useSharedValue(0),
     useSharedValue(0),
     useSharedValue(0),
@@ -190,11 +262,33 @@ export default function BubbleGenerator({
     useSharedValue(14 / BUBBLE_COUNT),
     useSharedValue(15 / BUBBLE_COUNT),
     useSharedValue(16 / BUBBLE_COUNT),
+    useSharedValue(17 / BUBBLE_COUNT),
+    useSharedValue(18 / BUBBLE_COUNT),
+    useSharedValue(19 / BUBBLE_COUNT),
+    useSharedValue(20 / BUBBLE_COUNT),
+    useSharedValue(21 / BUBBLE_COUNT),
+    useSharedValue(22 / BUBBLE_COUNT),
+    useSharedValue(23 / BUBBLE_COUNT),
+    useSharedValue(24 / BUBBLE_COUNT),
+    useSharedValue(25 / BUBBLE_COUNT),
+    useSharedValue(26 / BUBBLE_COUNT),
+    useSharedValue(27 / BUBBLE_COUNT),
+    useSharedValue(28 / BUBBLE_COUNT),
+    useSharedValue(29 / BUBBLE_COUNT),
+    useSharedValue(30 / BUBBLE_COUNT),
+    useSharedValue(31 / BUBBLE_COUNT),
+    useSharedValue(32 / BUBBLE_COUNT),
   ];
 
-  // Varied speeds per bubble (±30% of BASE_SPEED)
+  // Varied speeds per bubble (0.5x to 1.8x of BASE_SPEED, randomly assigned)
   const speeds = useMemo(
-    () => targets.map((_, i) => BASE_SPEED * (0.7 + 0.6 * (i / (BUBBLE_COUNT - 1)))),
+    () => targets.map(() => BASE_SPEED * (0.5 + Math.random() * 1.3)),
+    []
+  );
+
+  // Staggered start delays per bubble (ms) so they don't all appear at once
+  const staggerDelays = useMemo(
+    () => targets.map((_, i) => i * 200),
     []
   );
 
@@ -216,6 +310,22 @@ export default function BubbleGenerator({
     useDerivedValue(() => [{ scale: bubbleScales[14].value }]),
     useDerivedValue(() => [{ scale: bubbleScales[15].value }]),
     useDerivedValue(() => [{ scale: bubbleScales[16].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[17].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[18].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[19].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[20].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[21].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[22].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[23].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[24].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[25].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[26].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[27].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[28].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[29].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[30].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[31].value }]),
+    useDerivedValue(() => [{ scale: bubbleScales[32].value }]),
   ];
 
   const isActive = useSharedValue(false);
@@ -227,6 +337,13 @@ export default function BubbleGenerator({
       isActive.value = val;
       if (val) {
         elapsedSinceStart.value = 0;
+        // Reset all bubbles to scale 0 with staggered progress
+        for (let i = 0; i < BUBBLE_COUNT; i++) {
+          progresses[i].value = 0;
+          bubbleScales[i].value = 0;
+          xs[i].value = targets[i].p1.x;
+          ys[i].value = targets[i].p1.y;
+        }
       }
     }
   );
@@ -235,14 +352,18 @@ export default function BubbleGenerator({
     "worklet";
     if (!isActive.value) return;
     const dt = frameInfo.timeSincePreviousFrame ?? 16;
+    elapsedSinceStart.value += dt;
 
     // Wait for ANIMATION_START_DELAY before starting bubbles
     if (elapsedSinceStart.value < ANIMATION_START_DELAY) {
-      elapsedSinceStart.value += dt;
       return;
     }
 
     for (let i = 0; i < BUBBLE_COUNT; i++) {
+      // Wait for this bubble's stagger delay before it starts moving
+      const bubbleElapsed = elapsedSinceStart.value - ANIMATION_START_DELAY - staggerDelays[i];
+      if (bubbleElapsed < 0) continue;
+
       progresses[i].value += speeds[i] * dt;
 
       if (progresses[i].value >= 1) {
@@ -274,7 +395,7 @@ export default function BubbleGenerator({
   return (
     <Group>
       {/* <Rect width={width} height={lowerBounds} color="white" /> */}
-      {images.map((img, idx) => {
+      {images.slice(0, BUBBLE_COUNT).map((img, idx) => {
         return (
           <Group
             key={idx}

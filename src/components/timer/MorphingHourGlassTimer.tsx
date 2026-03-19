@@ -1,4 +1,3 @@
-import { AntDesign } from "@expo/vector-icons";
 import {
   Canvas,
   Group,
@@ -7,6 +6,7 @@ import {
   Text as SKText,
   useFont,
 } from "@shopify/react-native-skia";
+import { Stack } from "expo-router";
 import React, { useMemo } from "react";
 import {
   StyleSheet,
@@ -32,6 +32,7 @@ import { BShader, DEFAULT_PRISM_COLORS } from "./BShader";
 import BubbleGenerator from "./BubbleGenerator";
 
 const BUBBLE_RADIUS = 200;
+const FONT_SIZE = 40;
 const SPRING_SNAP_PROPS = {
   stiffness: 550,
   damping: 140,
@@ -50,13 +51,13 @@ const SPRING_FOLLOW_PROPS = {
   reduceMotion: ReduceMotion.System,
 };
 // Background color (RGB 0-1) — change this to control the bubble/canvas bg
-const TEXT = "Bubble";
+const TEXT = "Meet Tohamy";
 export default function MorphingHourGlassTimer() {
   const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = useWindowDimensions();
   const isDark = useColorScheme() === "dark";
 
   const BOTTOM_Y = CANVAS_HEIGHT;
-  const CENTER_Y = CANVAS_HEIGHT / 4;
+  const CENTER_Y = CANVAS_HEIGHT * .40;
   const CENTER_TEXT_Y = CANVAS_HEIGHT * 0.5;
   const BOTTOM_TEXT_Y = CANVAS_HEIGHT;
   const bubbleYPos = useSharedValue(BOTTOM_Y);
@@ -67,9 +68,9 @@ export default function MorphingHourGlassTimer() {
   // const bubbleAtCenter = useDerivedValue(() => {
   //   return bubbleYPos.value === CENTER_Y;
   // });
-  const bubbleAtCenter = useSharedValue(false)
+  const bubbleAtCenter = useSharedValue(false);
   // Font utils
-  const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), 64);
+  const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), FONT_SIZE);
 
   const fontWidth = useDerivedValue(() => {
     return font?.measureText(TEXT).width ?? 0;
@@ -136,7 +137,7 @@ export default function MorphingHourGlassTimer() {
       textMainYPos.value < halfway ? CENTER_TEXT_Y : BOTTOM_TEXT_Y;
     bubbleYPos.value = withSpring(snapTo, SPRING_SNAP_PROPS);
     bubbleXPos.value = withSpring(CANVAS_WIDTH / 2, SPRING_SNAP_PROPS);
-    bubbleAtCenter.value = snapTo === CENTER_Y
+    bubbleAtCenter.value = snapTo === CENTER_Y;
     textMainYPos.value = withSpring(snapTextTo, {
       stiffness: 900,
       damping: 120,
@@ -165,14 +166,15 @@ export default function MorphingHourGlassTimer() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false}} />
       {/* Theme indicator Icon */}
-      <View style={{ zIndex: 10, paddingTop: 60, alignItems: "center" }}>
+      {/* <View style={{ zIndex: 10, paddingTop: 60, alignItems: "center" }}>
         <AntDesign
           name={isDark ? "moon" : "sun"}
           size={24}
           color={isDark ? "white" : "black"}
         />
-      </View>
+      </View> */}
       {/* //////////////////////////////////////////////////////////////// */}
       <GestureDetector gesture={panGesture}>
         <Canvas style={styles.skiaCanvas}>
@@ -186,7 +188,7 @@ export default function MorphingHourGlassTimer() {
             }
           >
             <BubbleGenerator
-              lowerBounds={CANVAS_HEIGHT * 0.35}
+              lowerBounds={CENTER_Y + 10}
               width={CANVAS_WIDTH}
               startAnimation={bubbleAtCenter}
             />
