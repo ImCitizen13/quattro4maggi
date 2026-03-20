@@ -12,7 +12,7 @@ export const images = {
   homeless: require("./homeless.png"),
   long_neck_duck_yellow: require("./long_neck_duck_yellow.png"),
   man: require("./man.png"),
-  orange_blue_hat: require("./orange_blue_hat.png"),
+  orange_blue_hat: require("./orange_blue_hat "),
   rainbow_black: require("./rainbow_black.png"),
   retro_fire_dark: require("./retro_fire_dark.png"),
   spidy: require("./spidy.png"),

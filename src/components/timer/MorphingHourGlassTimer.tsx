@@ -9,6 +9,7 @@ import {
 import { Stack } from "expo-router";
 import React, { useMemo } from "react";
 import {
+  PixelRatio,
   StyleSheet,
   useColorScheme,
   useWindowDimensions,
@@ -24,6 +25,7 @@ import {
   clamp,
   interpolate,
   ReduceMotion,
+  useAnimatedReaction,
   useDerivedValue,
   useSharedValue,
   withSpring,
@@ -51,13 +53,19 @@ const SPRING_FOLLOW_PROPS = {
   reduceMotion: ReduceMotion.System,
 };
 // Background color (RGB 0-1) — change this to control the bubble/canvas bg
-const TEXT = "Meet Tohamy";
+// const TEXT = "It's Me"; //Who likes to \n build UI";
+// const TEXT_2 = "MEltohamy";
+// const TEXT_3 = "I like to build UI";
+const TEXT = "Hey There.";
+const TEXT_2 = "I'm MelTohamy, I";
+const TEXT_3 = "like to build stuff.";
+const TEXT_GAP = 15; // vertical spacing between text lines
 export default function MorphingHourGlassTimer() {
   const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = useWindowDimensions();
   const isDark = useColorScheme() === "dark";
-
+  const pd = PixelRatio.get();
   const BOTTOM_Y = CANVAS_HEIGHT;
-  const CENTER_Y = CANVAS_HEIGHT * .40;
+  const CENTER_Y = CANVAS_HEIGHT * 0.4;
   const CENTER_TEXT_Y = CANVAS_HEIGHT * 0.55;
   const BOTTOM_TEXT_Y = CANVAS_HEIGHT;
   const bubbleYPos = useSharedValue(BOTTOM_Y);
@@ -70,7 +78,10 @@ export default function MorphingHourGlassTimer() {
   // });
   const bubbleAtCenter = useSharedValue(false);
   // Font utils
-  const font = useFont(require("../../assets/fonts/BebasNeue-Regular.ttf"), FONT_SIZE);
+  const font = useFont(
+    require("../../assets/fonts/BebasNeue-Regular.ttf"),
+    FONT_SIZE
+  );
 
   const textX = useDerivedValue(() => {
     const w = font?.measureText(TEXT).width ?? 0;
@@ -88,6 +99,38 @@ export default function MorphingHourGlassTimer() {
     );
   });
 
+  // Secondary text: centered X for TEXT_2 and TEXT_3
+  const text2X = useDerivedValue(() => {
+    const w = font?.measureText(TEXT_2).width ?? 0;
+    return CANVAS_WIDTH / 2 - w / 2;
+  });
+  const text3X = useDerivedValue(() => {
+    const w = font?.measureText(TEXT_3).width ?? 0;
+    return CANVAS_WIDTH / 2 - w / 2;
+  });
+
+  // Secondary text Y positions: offset below main text with gap
+  const text2YPos = useDerivedValue(
+    () => textMainYPos.value + FONT_SIZE + TEXT_GAP
+  );
+  const text3YPos = useDerivedValue(
+    () => textMainYPos.value + (FONT_SIZE + TEXT_GAP) * 2
+  );
+
+  // Secondary text opacity: fades in when bubble is at center, out when it leaves
+  const secondaryTextOpacity = useSharedValue(0);
+  useAnimatedReaction(
+    () => bubbleAtCenter.value,
+    (atCenter) => {
+      secondaryTextOpacity.value = withSpring(atCenter ? 1 : 0, {
+        stiffness: 300,
+        damping: 30,
+        mass: 1,
+        reduceMotion: ReduceMotion.System,
+      });
+    }
+  );
+
   // Scale radius from 1.0 (at bottom) to 0.75 (at center)
   const bubbleRadius = useDerivedValue(() =>
     interpolate(
@@ -98,10 +141,12 @@ export default function MorphingHourGlassTimer() {
   );
 
   // Shader uniforms — derived so they update on the UI thread
+  // Scaled by pd because the shader Group has transform={[{scale: pd}]}
+  // which makes the saveLayer buffer DPR-sized for sharp rendering.
   const shaderUniforms = useDerivedValue(() => ({
-    u_resolution: [CANVAS_WIDTH, CANVAS_HEIGHT],
-    u_center: [bubbleXPos.value, bubbleYPos.value],
-    u_radius: bubbleRadius.value,
+    u_resolution: [CANVAS_WIDTH * pd, CANVAS_HEIGHT * pd],
+    u_center: [bubbleXPos.value * pd, bubbleYPos.value * pd],
+    u_radius: bubbleRadius.value * pd,
     u_refraction: 0.5,
     u_edgeWidth: 0.1,
     u_dispersion: 0.9,
@@ -178,51 +223,83 @@ export default function MorphingHourGlassTimer() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false}} />
-      {/* Theme indicator Icon */}
-      {/* <View style={{ zIndex: 10, paddingTop: 60, alignItems: "center" }}>
-        <AntDesign
-          name={isDark ? "moon" : "sun"}
-          size={24}
-          color={isDark ? "white" : "black"}
-        />
-      </View> */}
+      <Stack.Screen options={{ headerShown: false }} />
       {/* //////////////////////////////////////////////////////////////// */}
       <GestureDetector gesture={panGesture}>
         <Canvas style={styles.skiaCanvas}>
           {/*Main Bubble group */}
-          <Group
-            layer={
-              // Outer Bubble
-              <Paint>
-                <RuntimeShader source={BShader} uniforms={shaderUniforms} />
-              </Paint>
-            }
-          >
-            <BubbleGenerator
-              lowerBounds={CENTER_Y + 10}
-              width={CANVAS_WIDTH}
-              startAnimation={bubbleAtCenter}
-            />
-            {/* Background fill INSIDE Group so the layer covers full canvas (needed for shadow) */}
-            {/* <Fill color={isDark ? "rgb(253, 6, 6)" : "#ffffff"} /> */}
-            {/* Background dots */}
-            {/* <Fill>
-              <Shader source={BGSHADER} uniforms={dotUniforms} />
-            </Fill> */}
-            <Group opacity={textOpacity}>
-              <SKText
-                antiAlias={true}
-                text={TEXT}
-                font={font}
-                color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
-                x={textX}
-                y={textMainYPos}
+          {/* Outer 1/pd scale counteracts the DPR² magnification */}
+          <Group transform={[{ scale: 1 / pd }]}>
+            {/* Inner pd scale forces saveLayer to allocate a device-resolution buffer */}
+            <Group
+              transform={[{ scale: pd }]}
+              layer={
+                // Outer Bubble
+                <Paint>
+                  <RuntimeShader source={BShader} uniforms={shaderUniforms} />
+                </Paint>
+              }
+            >
+              <BubbleGenerator
+                lowerBounds={CENTER_Y + 10}
+                width={CANVAS_WIDTH}
+                startAnimation={bubbleAtCenter}
               />
+              {/* Main Text Group */}
+              <Group opacity={textOpacity}>
+                <SKText
+                  antiAlias={true}
+                  text={TEXT}
+                  font={font}
+                  color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                  x={textX}
+                  y={textMainYPos}
+                />
+              </Group>
+              {/* Secondary Text Group — fades in when bubble reaches center */}
+              <Group opacity={secondaryTextOpacity}>
+                <SKText
+                  antiAlias={true}
+                  text={TEXT_2}
+                  font={font}
+                  color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                  x={text2X}
+                  y={text2YPos}
+                />
+                <SKText
+                  antiAlias={true}
+                  text={TEXT_3}
+                  font={font}
+                  color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                  x={text3X}
+                  y={text3YPos}
+                />
+              </Group>
             </Group>
           </Group>
         </Canvas>
       </GestureDetector>
+      {/* <View style={styles.socialButtonsContainer}>
+        <PressableScale
+          style={[styles.socialButtons, { backgroundColor: "black" }]}
+        >
+          <Image
+            source={require("../../../assets/icons/x_icon.png")}
+            style={{ width: 16, height: 16 }}
+            contentFit="cover"
+          />
+          <Text style={{ color: "white", textAlign: "center" }}>
+            Me on X @m090009
+          </Text>
+        </PressableScale>
+
+        <PressableScale style={styles.socialButtons}>
+          <Image source={require("../../../assets/icons/x_icon.png")} />
+          <Text style={{ color: isDark ? "white" : "black" }}>
+            Me on X @m090009
+          </Text>
+        </PressableScale>
+      </View> */}
     </View>
   );
 }
@@ -256,5 +333,24 @@ const styles = StyleSheet.create({
     height: "100%",
     bottom: 0,
     left: 0,
+  },
+  socialButtonsContainer: {
+    gap: 10,
+    flexDirection: "column",
+    width: "100%",
+    position: "absolute",
+    bottom: "1%",
+    height: 150,
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  socialButtons: {
+    height: 55,
+    flexDirection: "row",
+    width: "90%",
+    borderRadius: 50,
+    justifyContent: "flex-start",
+    alignItems: "center",
+    paddingHorizontal: "7%",
   },
 });

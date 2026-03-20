@@ -36,6 +36,18 @@ export const images = {
   ellipse15: require("./Ellipse_55.png"),
   ellipse16: require("./Ellipse_56.png"),
   ellipse17: require("./Ellipse_57.png"),
+  ellipse18: require("./Ellipse_58.png"),
+  ellipse19: require("./Ellipse_59.png"),
+  ellipse20: require("./Ellipse_60.png"),
+  ellipse21: require("./Ellipse_61.png"),
+  ellipse22: require("./Ellipse_62.png"),
+  ellipse23: require("./Ellipse_63.png"),
+  ellipse24: require("./Ellipse_64.png"),
+  ellipse25: require("./Ellipse_65.png"),
+  ellipse26: require("./Ellipse_66.png"),
+  ellipse27: require("./Ellipse_67.png"),
+  ellipse28: require("./Ellipse_68.png"),
+  ellipse29: require("./Ellipse_69.png"),
 } as const;
 
 export const imageArray = [
@@ -73,6 +85,19 @@ export const imageArray = [
   images.ellipse15,
   images.ellipse16,
   images.ellipse17,
+  images.ellipse18,
+  images.ellipse19,
+  images.ellipse20,
+  images.ellipse21,
+  images.ellipse22,
+  images.ellipse23,
+  images.ellipse24,
+  images.ellipse25,
+  images.ellipse26,
+  images.ellipse27,
+  images.ellipse28,
+  images.ellipse29,
+  
 ] as const;
 
 export type ImageKey = keyof typeof images;

@@ -32,6 +32,24 @@ export const BShader = Skia.RuntimeEffect.Make(`
         return clamp(coord, float2(0.0), u_resolution);
     }
 
+    // ============================================================
+    // HELPER — bilinear sampling (image.eval uses nearest-neighbor)
+    // ============================================================
+    half4 sampleSmooth(float2 coord) {
+        float2 adj = coord - 0.5;
+        float2 fl  = floor(adj) + 0.5;
+        float2 f   = adj - floor(adj);
+
+        half4 tl = image.eval(clampCoord(fl));
+        half4 tr = image.eval(clampCoord(fl + float2(1.0, 0.0)));
+        half4 bl = image.eval(clampCoord(fl + float2(0.0, 1.0)));
+        half4 br = image.eval(clampCoord(fl + float2(1.0, 1.0)));
+
+        half4 top = mix(tl, tr, half(f.x));
+        half4 bot = mix(bl, br, half(f.x));
+        return mix(top, bot, half(f.y));
+    }
+
     half4 main(float2 fragCoord) {
         // ============================================================
         // DISTANCE FROM BUBBLE CENTER
@@ -48,7 +66,7 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // Anti-aliased edge: 1 inside, 0 outside, smooth over 1.5px
         float mask = smoothstep(u_radius + 1.5, u_radius - 1.5, dist);
 
-        half4 src = image.eval(fragCoord);
+        half4 src = sampleSmooth(fragCoord);
         // Use u_bgColor as base background, blend with any source content on top
         half3 bg = mix(half3(u_bgColor), src.rgb, src.a);
 
@@ -73,7 +91,7 @@ export const BShader = Skia.RuntimeEffect.Make(`
         float distortionAmount = u_refraction * t;
         float2 distortedCoord = clampCoord(fragCoord - dir * distortionAmount * u_radius);
 
-        half4 distortedSrc = image.eval(distortedCoord);
+        half4 distortedSrc = sampleSmooth(distortedCoord);
 
         // ============================================================
         // PRISMATIC EDGE — chromatic aberration at the rim
@@ -88,9 +106,9 @@ export const BShader = Skia.RuntimeEffect.Make(`
         float2 coordB = clampCoord(distortedCoord - dir * chromaOffset);
 
         half3 chromaSrc = half3(
-            image.eval(coordR).r,
+            sampleSmooth(coordR).r,
             distortedSrc.g,
-            image.eval(coordB).b
+            sampleSmooth(coordB).b
         );
 
         // Composite distorted content over bgColor (source may be transparent)
