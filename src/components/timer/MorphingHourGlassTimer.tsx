@@ -61,8 +61,9 @@ const SPRING_FOLLOW_PROPS = {
 // const TEXT_2 = "MEltohamy";
 // const TEXT_3 = "I like to build UI";
 const TEXT = "Hey There.";
-const TEXT_2 = "I'm MelTohamy, I";
-const TEXT_3 = "like to build stuff.";
+const TEXT_2 = "I'm MelTohamy,";
+const TEXT_3 = "I like to build stuff.";
+const ARABIC_TEXT = "أنا م.التهامي";
 const TEXT_GAP = 15; // vertical spacing between text lines
 export default function MorphingHourGlassTimer() {
   const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = useWindowDimensions();
@@ -84,6 +85,11 @@ export default function MorphingHourGlassTimer() {
   // Font utils
   const font = useFont(
     require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf"),
+    FONT_SIZE
+  );
+
+  const arabicFont = useFont(
+    require("../../assets/fonts/ArefRuqaa-Regular.ttf"),
     FONT_SIZE
   );
 
@@ -113,6 +119,11 @@ export default function MorphingHourGlassTimer() {
     return CANVAS_WIDTH / 2 - w / 2;
   });
 
+  const textArabic2X = useDerivedValue(() => {
+    const w = font?.measureText(ARABIC_TEXT).width ?? 0;
+    return CANVAS_WIDTH / 2 - w / 2;
+  });
+
   // Secondary text Y positions: offset below main text with gap
   const text2YPos = useDerivedValue(
     () => textMainYPos.value + FONT_SIZE + TEXT_GAP
@@ -121,12 +132,27 @@ export default function MorphingHourGlassTimer() {
     () => textMainYPos.value + (FONT_SIZE + TEXT_GAP) * 2
   );
 
+  const textArabicYPos = useDerivedValue(
+    () => textMainYPos.value + FONT_SIZE + TEXT_GAP
+  );
   // Secondary text opacity: fades in when bubble is at center, out when it leaves
   const secondaryTextOpacity = useSharedValue(0);
   useAnimatedReaction(
     () => bubbleAtCenter.value,
     (atCenter) => {
-      secondaryTextOpacity.value = withTiming(atCenter ? 1 : 0, {duration: 700});
+      secondaryTextOpacity.value = withTiming(atCenter ? 1 : 0, {
+        duration: 700,
+      });
+    }
+  );
+
+  const arabicTextOpacity = useSharedValue(0);
+  useAnimatedReaction(
+    () => bubbleAtCenter.value,
+    (atCenter) => {
+      arabicTextOpacity.value = withTiming(atCenter ? 1 : 0, {
+        duration: 700,
+      });
     }
   );
 
@@ -246,6 +272,7 @@ export default function MorphingHourGlassTimer() {
               />
               {/* Main Text Group */}
               <Group opacity={textOpacity}>
+                {/* First line */}
                 <SKText
                   antiAlias={true}
                   text={TEXT}
@@ -257,6 +284,7 @@ export default function MorphingHourGlassTimer() {
               </Group>
               {/* Secondary Text Group — fades in when bubble reaches center */}
               <Group opacity={secondaryTextOpacity}>
+                {/* Second line(name) */}
                 <SKText
                   antiAlias={true}
                   text={TEXT_2}
@@ -265,6 +293,17 @@ export default function MorphingHourGlassTimer() {
                   x={text2X}
                   y={text2YPos}
                 />
+
+                {/* Arabic (name) */}
+                <SKText
+                  antiAlias={true}
+                  text={ARABIC_TEXT}
+                  font={arabicFont}
+                  color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                  x={textArabic2X}
+                  y={textArabicYPos}
+                />
+                {/* Third Line */}
                 <SKText
                   antiAlias={true}
                   text={TEXT_3}
