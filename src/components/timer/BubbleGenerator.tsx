@@ -30,12 +30,13 @@ function randomConePoint(
 
   const angleRad = (angleDeg / 2) * (Math.PI / 180);
   const spread = height * t * Math.tan(angleRad);
-  const x =
-    maxWidth / 2 - IMAGE_SIZE_MIN / 2 + (Math.random() * 2 - 1) * spread;
-
+  // Center the image on the screen midpoint, then apply symmetric spread
   const centerX = maxWidth / 2;
+  const x = centerX - IMAGE_SIZE_MIN / 2 + (Math.random() * 2 - 1) * spread;
+
   const vicinityThreshold = maxWidth * VICINITY;
-  const dx = x - centerX;
+  // dx measures from image center (not top-left) to screen center
+  const dx = (x + IMAGE_SIZE_MIN / 2) - centerX;
 
   const jitter = (Math.random() * 2 - 1) * 15;
   let travelAngle: number;
@@ -680,7 +681,9 @@ export default function BubbleGenerator({
 
   useAnimatedReaction(
     () => startAnimation.value,
-    (val) => {
+    (val, prev) => {
+      // Only react to actual changes, not re-mount triggers
+      if (val === prev) return;
       isActive.value = val;
       if (val) {
         elapsedSinceStart.value = 0;
@@ -695,9 +698,16 @@ export default function BubbleGenerator({
     }
   );
 
+  const frameCount = useSharedValue(0);
+
   useFrameCallback((frameInfo) => {
     "worklet";
-    const dt = frameInfo.timeSincePreviousFrame ?? 16;
+    frameCount.value += 1;
+    // Skip the first frames where shader compilation/layout causes large dt spikes
+    if (frameCount.value < 15) return;
+
+    // Clamp dt to avoid jumps from frame spikes
+    const dt = Math.min(frameInfo.timeSincePreviousFrame ?? 16, 32);
 
     if (isActive.value) {
       elapsedSinceStart.value += dt;

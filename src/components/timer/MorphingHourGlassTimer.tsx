@@ -1,8 +1,10 @@
 import {
   Canvas,
+  Fill,
   Group,
   Paint,
   RuntimeShader,
+  Shader,
   Text as SKText,
   useFont,
 } from "@shopify/react-native-skia";
@@ -29,12 +31,14 @@ import {
   useDerivedValue,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
+import { BGSHADER } from "./BGTailwindShader";
 import { BShader, DEFAULT_PRISM_COLORS } from "./BShader";
 import BubbleGenerator from "./BubbleGenerator";
 
 const BUBBLE_RADIUS = 200;
-const FONT_SIZE = 40;
+const FONT_SIZE = 32;
 const SPRING_SNAP_PROPS = {
   stiffness: 550,
   damping: 140,
@@ -79,7 +83,7 @@ export default function MorphingHourGlassTimer() {
   const bubbleAtCenter = useSharedValue(false);
   // Font utils
   const font = useFont(
-    require("../../assets/fonts/BebasNeue-Regular.ttf"),
+    require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf"),
     FONT_SIZE
   );
 
@@ -122,12 +126,7 @@ export default function MorphingHourGlassTimer() {
   useAnimatedReaction(
     () => bubbleAtCenter.value,
     (atCenter) => {
-      secondaryTextOpacity.value = withSpring(atCenter ? 1 : 0, {
-        stiffness: 300,
-        damping: 30,
-        mass: 1,
-        reduceMotion: ReduceMotion.System,
-      });
+      secondaryTextOpacity.value = withTiming(atCenter ? 1 : 0, {duration: 700});
     }
   );
 
@@ -161,8 +160,8 @@ export default function MorphingHourGlassTimer() {
   // Dot grid uniforms
   const dotUniforms = {
     uResolution: [CANVAS_WIDTH, CANVAS_HEIGHT],
-    uSpacing: 5,
-    uRadius: 0.1,
+    uSpacing: 3,
+    uRadius: 0.05,
     uColor: isDark ? [1, 1, 1, 0.5] : [0, 0, 0, 0.5],
   };
 
@@ -277,6 +276,10 @@ export default function MorphingHourGlassTimer() {
               </Group>
             </Group>
           </Group>
+          {/* Background dots — on top of the magnifier shader */}
+          <Fill>
+            <Shader source={BGSHADER} uniforms={dotUniforms} />
+          </Fill>
         </Canvas>
       </GestureDetector>
       {/* <View style={styles.socialButtonsContainer}>

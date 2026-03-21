@@ -9,9 +9,16 @@ export const BGSHADER = Skia.RuntimeEffect.Make(`
     uniform float4 uColor;     // dot color + alpha
 
     half4 main(float2 pos) {
-      // Snap to nearest grid point
-      float2 cell = pos / uSpacing;
+      // Determine which row we're in
+      float row = floor(pos.y / uSpacing);
+      // Odd rows get shifted by half the spacing (staggered / brick pattern)
+      float xOffset = mod(row, 2.0) * uSpacing * 0.5;
+
+      // Snap to nearest grid point with row offset applied
+      float2 adjusted = float2(pos.x - xOffset, pos.y);
+      float2 cell = adjusted / uSpacing;
       float2 nearest = (floor(cell) + 0.5) * uSpacing;
+      nearest.x += xOffset;
 
       // Distance from pixel to nearest dot center
       float dist = length(pos - nearest);
