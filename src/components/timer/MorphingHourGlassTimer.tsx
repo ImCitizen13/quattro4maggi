@@ -1,4 +1,5 @@
 import {
+  BackdropBlur,
   Canvas,
   Fill,
   Group,
@@ -12,11 +13,13 @@ import {
   useFont,
   useTypeface,
 } from "@shopify/react-native-skia";
+import { Image } from "expo-image";
 import { Stack } from "expo-router";
 import React, { useMemo } from "react";
 import {
   PixelRatio,
   StyleSheet,
+  Text,
   useColorScheme,
   useWindowDimensions,
   View,
@@ -27,11 +30,12 @@ import {
   GestureUpdateEvent,
   PanGestureHandlerEventPayload,
 } from "react-native-gesture-handler";
-import {
+import Animated, {
   clamp,
   interpolate,
   ReduceMotion,
   useAnimatedReaction,
+  useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
   withSpring,
@@ -43,7 +47,7 @@ import BubbleGenerator from "./BubbleGenerator";
 import NameCrossfade from "./NameCrossfade";
 
 const BUBBLE_RADIUS = 200;
-const FONT_SIZE = 32;
+const FONT_SIZE = 28;
 const SPRING_SNAP_PROPS = {
   stiffness: 550,
   damping: 140,
@@ -67,10 +71,10 @@ const SPRING_FOLLOW_PROPS = {
 // const TEXT_3 = "I like to build UI";
 const TEXT = "Hi There.";
 const TEXT_2 = "I'm MelTohamy,";
+const INITIAL_TEXT = "Move The Bubble";
 const ARABIC_TEXT = "أنا م.التهامي";
 const TEXT_3 = "I like to build stuff.";
 const TEXT_GAP = 15; // vertical spacing between text lines
-
 
 export default function MorphingHourGlassTimer() {
   const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = useWindowDimensions();
@@ -92,6 +96,11 @@ export default function MorphingHourGlassTimer() {
   const bubbleAtCenter = useSharedValue(false);
   // Font utils
   const font = useFont(
+    require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf"),
+    FONT_SIZE
+  );
+
+  const initialFont = useFont(
     require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf"),
     FONT_SIZE
   );
@@ -176,6 +185,11 @@ export default function MorphingHourGlassTimer() {
     );
   });
 
+  const initailTextX = useDerivedValue(() => {
+    const w = initialFont?.measureText(INITIAL_TEXT).width ?? 0;
+    return CANVAS_WIDTH / 2 - w / 2;
+  });
+
   // Secondary text: centered X for TEXT_3
   const text3X = useDerivedValue(() => {
     const w = font?.measureText(TEXT_3).width ?? 0;
@@ -195,6 +209,7 @@ export default function MorphingHourGlassTimer() {
   const text3YPos = useDerivedValue(
     () => textMainYPos.value + (FONT_SIZE + TEXT_GAP) * 2
   );
+
   // Secondary text opacity: fades in when bubble is at center, out when it leaves
   const secondaryTextOpacity = useSharedValue(0);
   useAnimatedReaction(
@@ -206,13 +221,13 @@ export default function MorphingHourGlassTimer() {
     }
   );
 
-
-  // Scale radius from 1.0 (at bottom) to 0.75 (at center)
+  // Scale radius from 1.0 (at bottom) to 0.25 (at center), clamped so it won't shrink further
   const bubbleRadius = useDerivedValue(() =>
     interpolate(
       bubbleYPos.value,
       [CENTER_Y, BOTTOM_Y],
-      [BUBBLE_RADIUS * 0.25, BUBBLE_RADIUS]
+      [BUBBLE_RADIUS * 0.25, BUBBLE_RADIUS],
+      "clamp"
     )
   );
 
@@ -296,6 +311,27 @@ export default function MorphingHourGlassTimer() {
         }),
     [bubbleYPos, startY]
   );
+  // Social button: bottom 10% of screen
+  const SOCIAL_Y = CANVAS_HEIGHT * 0.9;
+  // Fade out starts when bubble is 15% of screen height above the button
+  const SOCIAL_FADE_START = SOCIAL_Y - CANVAS_HEIGHT * 0.15;
+
+  const xAnimatedStyle = useAnimatedStyle(() => {
+    // Fade in: driven by secondaryTextOpacity (when bubble reaches center)
+    const fadeIn = secondaryTextOpacity.value;
+    // Fade out: only when bubble is heading downward past the fade zone
+    // Above SOCIAL_FADE_START = fully visible, at SOCIAL_Y = fully hidden
+    const fadeOut =
+      bubbleYPos.value < SOCIAL_FADE_START
+        ? 1
+        : interpolate(
+            bubbleYPos.value,
+            [SOCIAL_FADE_START, SOCIAL_Y],
+            [1, 0],
+            "clamp"
+          );
+    return { opacity: fadeIn * fadeOut };
+  });
 
   return (
     <View style={styles.container}>
@@ -321,6 +357,26 @@ export default function MorphingHourGlassTimer() {
                 width={CANVAS_WIDTH}
                 startAnimation={bubbleAtCenter}
               />
+              <SKText
+                text={INITIAL_TEXT}
+                font={initialFont}
+                x={initailTextX}
+                y={CANVAS_HEIGHT / 2}
+                color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+              />
+              <BackdropBlur
+                blur={4}
+                clip={{
+                  x: initailTextX.value - 16,
+                  y: CANVAS_HEIGHT / 2 - FONT_SIZE - 8,
+                  width:
+                    (initialFont?.measureText(INITIAL_TEXT).width ?? 0) + 32,
+                  height: FONT_SIZE + 24,
+                }}
+              >
+                <Fill color="rgba(0, 0, 0, 0.2)" />
+              </BackdropBlur>
+
               {/* Main Text Group */}
               <Group opacity={textOpacity}>
                 {/* First line */}
@@ -362,27 +418,34 @@ export default function MorphingHourGlassTimer() {
           </Fill>
         </Canvas>
       </GestureDetector>
-      {/* <View style={styles.socialButtonsContainer}>
-        <PressableScale
-          style={[styles.socialButtons, { backgroundColor: "black" }]}
-        >
-          <Image
-            source={require("../../../assets/icons/x_icon.png")}
-            style={{ width: 16, height: 16 }}
-            contentFit="cover"
-          />
-          <Text style={{ color: "white", textAlign: "center" }}>
-            Me on X @m090009
-          </Text>
-        </PressableScale>
 
-        <PressableScale style={styles.socialButtons}>
-          <Image source={require("../../../assets/icons/x_icon.png")} />
-          <Text style={{ color: isDark ? "white" : "black" }}>
-            Me on X @m090009
-          </Text>
-        </PressableScale>
-      </View> */}
+      <Animated.View style={[styles.socialButtonsContainer, xAnimatedStyle]}>
+        <Text
+          style={{
+            color: "white",
+            textAlign: "center",
+            fontFamily: "LexendDeca",
+            fontSize: 16,
+          }}
+        >
+          Follow on
+        </Text>
+        <Image
+          source={require("../../../assets/icons/x_icon.png")}
+          style={{ width: 24, height: 24 }}
+          contentFit="cover"
+        />
+        <Text
+          style={{
+            color: "white",
+            textAlign: "center",
+            fontFamily: "LexendDeca",
+            fontSize: 16,
+          }}
+        >
+          @m090009
+        </Text>
+      </Animated.View>
     </View>
   );
 }
@@ -391,6 +454,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
+    alignItems: "center",
   },
   timeText: {
     fontSize: 18,
@@ -417,19 +481,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
   },
-  socialButtonsContainer: {
+  initialText: {
     gap: 10,
     flexDirection: "column",
-    width: "100%",
     position: "absolute",
-    bottom: "1%",
-    height: 150,
+    bottom: "50%",
+    height: "10%",
+    width: "85%",
+    borderRadius: 75,
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
+  },
+
+  socialButtonsContainer: {
+    gap: 10,
+    backgroundColor: "black",
+    flexDirection: "row",
+    position: "absolute",
+    bottom: "10%",
+    height: "10%",
+    width: "85%",
+    borderRadius: 75,
+    alignItems: "center",
+    justifyContent: "center",
   },
   socialButtons: {
     height: 55,
-    flexDirection: "row",
+    flexDirection: "column",
     width: "90%",
     borderRadius: 50,
     justifyContent: "flex-start",
