@@ -3,7 +3,6 @@ import {
   Fill,
   Group,
   Paint,
-  Paragraph,
   RuntimeShader,
   Shader,
   Skia,
@@ -29,20 +28,19 @@ import {
   PanGestureHandlerEventPayload,
 } from "react-native-gesture-handler";
 import {
-  cancelAnimation,
   clamp,
   interpolate,
   ReduceMotion,
   useAnimatedReaction,
   useDerivedValue,
   useSharedValue,
-  withDelay,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { BGSHADER } from "./BGTailwindShader";
 import { BShader, DEFAULT_PRISM_COLORS } from "./BShader";
 import BubbleGenerator from "./BubbleGenerator";
+import NameCrossfade from "./NameCrossfade";
 
 const BUBBLE_RADIUS = 200;
 const FONT_SIZE = 32;
@@ -72,8 +70,7 @@ const TEXT_2 = "I'm MelTohamy,";
 const ARABIC_TEXT = "أنا م.التهامي";
 const TEXT_3 = "I like to build stuff.";
 const TEXT_GAP = 15; // vertical spacing between text lines
-const MORPH_DELAY_MS = 3000; // pause before morphing to next text
-const MORPH_DURATION_MS = 1500; // morph animation duration
+
 
 export default function MorphingHourGlassTimer() {
   const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = useWindowDimensions();
@@ -209,52 +206,6 @@ export default function MorphingHourGlassTimer() {
     }
   );
 
-  // Crossfade: 0 = English visible, 1 = Arabic visible
-  const morphProgress = useSharedValue(0);
-
-  // Opacity for each name text
-  const englishNameOpacity = useDerivedValue(() => 1 - morphProgress.value);
-  const arabicNameOpacity = useDerivedValue(() => morphProgress.value);
-
-  // Cycling counter — incremented to trigger next morph cycle
-  const morphCycleCounter = useSharedValue(0);
-
-  useAnimatedReaction(
-    () => morphCycleCounter.value,
-    (count, prev) => {
-      if (count === prev || count === 0) return;
-      // Wait, then morph to Arabic
-      morphProgress.value = withDelay(
-        MORPH_DELAY_MS,
-        withTiming(1, { duration: MORPH_DURATION_MS }, (finished) => {
-          if (!finished) return;
-          // Wait, then morph back to English
-          morphProgress.value = withDelay(
-            MORPH_DELAY_MS,
-            withTiming(0, { duration: MORPH_DURATION_MS }, (finished2) => {
-              if (finished2) morphCycleCounter.value += 1;
-            })
-          );
-        })
-      );
-    }
-  );
-
-  // Start/stop morph cycling based on bubble position
-  useAnimatedReaction(
-    () => bubbleAtCenter.value,
-    (atCenter, prev) => {
-      if (atCenter === prev) return;
-      if (atCenter) {
-        morphProgress.value = 0;
-        morphCycleCounter.value = 1;
-      } else {
-        cancelAnimation(morphProgress);
-        morphProgress.value = 0;
-        morphCycleCounter.value = 0;
-      }
-    }
-  );
 
   // Scale radius from 1.0 (at bottom) to 0.75 (at center)
   const bubbleRadius = useDerivedValue(() =>
@@ -383,35 +334,15 @@ export default function MorphingHourGlassTimer() {
                 />
               </Group>
               {/* Secondary Text Group — fades in when bubble reaches center */}
-              <Group opacity={secondaryTextOpacity}>
-                {/* Name crossfade: English ↔ Arabic */}
-               
-                <Group
-                  layer={
-                    <Paint opacity={englishNameOpacity} />
-                  }
-                >
-                  <Paragraph
-                    paragraph={nameParagraphs.english}
-                    x={0}
-                    y={nameYPos}
-                    width={CANVAS_WIDTH}
-                  />
-                </Group>
-
-                <Group
-                  layer={
-                    <Paint opacity={arabicNameOpacity} />
-                  }
-                >
-                  <Paragraph
-                    paragraph={nameParagraphs.arabic}
-                    x={0.5}
-                    y={arabicNameYPos}
-                    width={CANVAS_WIDTH}
-                  />
-                </Group>
-                
+              <Group layer={<Paint opacity={secondaryTextOpacity} />}>
+                <NameCrossfade
+                  englishParagraph={nameParagraphs.english}
+                  arabicParagraph={nameParagraphs.arabic}
+                  englishY={nameYPos}
+                  arabicY={arabicNameYPos}
+                  width={CANVAS_WIDTH}
+                  bubbleAtCenter={bubbleAtCenter}
+                />
 
                 {/* Third Line */}
                 <SKText
