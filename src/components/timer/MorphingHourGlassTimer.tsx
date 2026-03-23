@@ -4,6 +4,7 @@ import {
   Canvas,
   Fill,
   Group,
+  ImageSVG,
   Paint,
   RuntimeShader,
   Shader,
@@ -12,7 +13,8 @@ import {
   TextAlign,
   TextDirection,
   useFont,
-  useTypeface,
+  useSVG,
+  useTypeface
 } from "@shopify/react-native-skia";
 import { Image } from "expo-image";
 import { Stack } from "expo-router";
@@ -72,7 +74,7 @@ const SPRING_FOLLOW_PROPS = {
 // const TEXT_3 = "I like to build UI";
 const TEXT = "Hi There.";
 const TEXT_2 = "I'm MelTohamy,";
-const INITIAL_TEXT = "Move The Bubble";
+const INITIAL_TEXT = "Swipe Up To Start";
 const ARABIC_TEXT = "أنا م.التهامي";
 const TEXT_3 = "I like to build stuff.";
 const TEXT_GAP = 15; // vertical spacing between text lines
@@ -186,6 +188,9 @@ export default function MorphingHourGlassTimer() {
     );
   });
 
+  // SVG + arc indicator Y position (top of the indicator zone)
+  const INDICATOR_Y = BOTTOM_Y - (BUBBLE_RADIUS / 2.75);
+
   // Initial text: fully visible at bottom, fades out + blurs as bubble moves up
   const initialTextOpacity = useDerivedValue(() => 1 - textOpacity.value);
   const initialTextBlur = useDerivedValue(() =>
@@ -237,6 +242,17 @@ export default function MorphingHourGlassTimer() {
       "clamp"
     )
   );
+
+  // Fade out when the bubble's bottom edge passes the indicator
+  const indicatorOpacity = useDerivedValue(() => {
+    const bubbleBottom = bubbleYPos.value + bubbleRadius.value;
+    return interpolate(
+      bubbleBottom,
+      [INDICATOR_Y - 30, INDICATOR_Y],
+      [0, 1],
+      "clamp"
+    );
+  });
 
   // Shader uniforms — derived so they update on the UI thread
   // Scaled by pd because the shader Group has transform={[{scale: pd}]}
@@ -340,6 +356,9 @@ export default function MorphingHourGlassTimer() {
     return { opacity: fadeIn * fadeOut };
   });
 
+  const svgImage = useSVG(require("../../../assets/icons/drag-04-stroke-rounded.svg"));
+
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -365,6 +384,23 @@ export default function MorphingHourGlassTimer() {
                 startAnimation={bubbleAtCenter}
                 bubbleRadius={bubbleRadius}
               />
+
+              {/* Arc + SVG indicator — fades when bubble passes */}
+              <Group layer={<Paint opacity={indicatorOpacity} />}>
+                {svgImage && (
+                  <ImageSVG
+                    svg={svgImage}
+                    x={CANVAS_WIDTH / 2 - 16}
+                    y={INDICATOR_Y }
+                    width={32}
+                    height={32} 
+                    color={"rgb(143, 139, 139)"}
+              
+                    
+                  />
+                )}
+              </Group>
+
               <Group opacity={initialTextOpacity}>
                 <BackdropBlur
                   blur={4}
@@ -377,6 +413,7 @@ export default function MorphingHourGlassTimer() {
                   }}
                 >
                   {/* <Fill color="rgba(0, 0, 0, 0.2)" /> */}
+                </BackdropBlur>
                 <SKText
                   text={INITIAL_TEXT}
                   font={initialFont}
@@ -386,7 +423,6 @@ export default function MorphingHourGlassTimer() {
                 >
                   <BlurMask blur={initialTextBlur} style="normal" />
                 </SKText>
-                </BackdropBlur>
               </Group>
 
               {/* Main Text Group */}

@@ -1,4 +1,4 @@
-import { Circle, Group, Image, useImage } from "@shopify/react-native-skia";
+import { Group, Image, useImage } from "@shopify/react-native-skia";
 import { Accelerometer } from "expo-sensors";
 import React, { useEffect, useMemo } from "react";
 import { StyleSheet } from "react-native";
@@ -841,7 +841,7 @@ export default function BubbleGenerator({
         );
       })}
       {/* Debug: red dot at cone origin */}
-      <Circle cx={coneOriginX} cy={coneOriginY} r={6} color="red" />
+      {/* <Circle cx={coneOriginX} cy={coneOriginY} r={6} color="red" /> */}
     </Group>
   );
 }
