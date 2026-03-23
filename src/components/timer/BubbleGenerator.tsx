@@ -1,5 +1,6 @@
-import { Group, Image, useImage } from "@shopify/react-native-skia";
-import React, { useMemo } from "react";
+import { Circle, Group, Image, useImage } from "@shopify/react-native-skia";
+import { Accelerometer } from "expo-sensors";
+import React, { useEffect, useMemo } from "react";
 import { StyleSheet } from "react-native";
 import {
   SharedValue,
@@ -12,7 +13,7 @@ import { imageArray } from "../../../assets/Bubbles/256/images.generated";
 
 const IMAGE_SIZE_MIN = 70;
 const IMAGES = imageArray;
-const SPREAD_ANGLE = 70;
+const SPREAD_ANGLE = 45;
 const BASE_SPEED = 0.00028; // progress per ms (~3.6s for full journey)
 const VICINITY = 0.08; // fraction of width around center where bubbles go straight up
 const BUBBLE_COUNT = 46;
@@ -22,16 +23,18 @@ const ANIMATION_START_DELAY = 600;
 function randomConePoint(
   maxWidth: number,
   height: number,
-  angleDeg = SPREAD_ANGLE
+  angleDeg = SPREAD_ANGLE,
+  offsetX = 0,
+  offsetY = 0,
 ): { p1x: number; p1y: number; p2x: number; p2y: number } {
   "worklet";
   const t = Math.pow(Math.random(), 2);
-  const y = height * (1 - t);
+  const y = height * (1 - t) + offsetY;
 
   const angleRad = (angleDeg / 2) * (Math.PI / 180);
   const spread = height * t * Math.tan(angleRad);
-  // Center the image on the screen midpoint, then apply symmetric spread
-  const centerX = maxWidth / 2;
+  // Center the image on the screen midpoint + offset, then apply symmetric spread
+  const centerX = maxWidth / 2 + offsetX;
   const x = centerX - IMAGE_SIZE_MIN / 2 + (Math.random() * 2 - 1) * spread;
 
   const vicinityThreshold = maxWidth * VICINITY;
@@ -62,10 +65,12 @@ export default function BubbleGenerator({
   lowerBounds,
   width,
   startAnimation,
+  bubbleRadius,
 }: {
   lowerBounds: number;
   width: number;
   startAnimation: SharedValue<boolean>;
+  bubbleRadius: SharedValue<number>;
 }) {
   const images = [
     useImage(IMAGES[0]),
@@ -115,6 +120,37 @@ export default function BubbleGenerator({
     useImage(IMAGES[44]),
     useImage(IMAGES[45]),
   ];
+
+  // Accelerometer-driven cone offset
+  const accelX = useSharedValue(0);
+  const accelY = useSharedValue(0);
+  const smoothAccelX = useSharedValue(0);
+  const smoothAccelY = useSharedValue(0);
+
+  useEffect(() => {
+    let subscription: ReturnType<typeof Accelerometer.addListener> | null = null;
+
+    Accelerometer.isAvailableAsync().then((available) => {
+      if (!available) return;
+      Accelerometer.setUpdateInterval(16);
+      subscription = Accelerometer.addListener(({ x, y }) => {
+        accelX.value = x;
+        accelY.value = -y;
+      });
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
+  // Debug: cone origin position for red dot
+  const coneOriginX = useDerivedValue(() =>
+    width / 2 + smoothAccelX.value * bubbleRadius.value
+  );
+  const coneOriginY = useDerivedValue(() =>
+    lowerBounds + Math.min(-smoothAccelY.value * bubbleRadius.value, 0)
+  );
 
   // Initial targets computed on JS thread
   const init = useMemo(
@@ -709,6 +745,16 @@ export default function BubbleGenerator({
     // Clamp dt to avoid jumps from frame spikes
     const dt = Math.min(frameInfo.timeSincePreviousFrame ?? 16, 32);
 
+    // Smooth accelerometer readings (low-pass filter)
+    const SMOOTHING = 0.08;
+    smoothAccelX.value += (accelX.value - smoothAccelX.value) * SMOOTHING;
+    smoothAccelY.value += (accelY.value - smoothAccelY.value) * SMOOTHING;
+
+    // Compute clamped cone offset from smoothed values
+    const r = bubbleRadius.value;
+    const offX = Math.max(-r, Math.min(smoothAccelX.value * r, r));
+    const offY = Math.max(-r, Math.min(-smoothAccelY.value * r, 0));
+
     if (isActive.value) {
       elapsedSinceStart.value += dt;
     }
@@ -733,8 +779,8 @@ export default function BubbleGenerator({
 
       if (progresses[i].value >= 1) {
         if (isActive.value) {
-          // Re-randomize target position for next cycle
-          const newTarget = randomConePoint(width, lowerBounds);
+          // Re-randomize target position from shifted cone origin
+          const newTarget = randomConePoint(width, lowerBounds, SPREAD_ANGLE, offX, offY);
           p1xs[i].value = newTarget.p1x;
           p1ys[i].value = newTarget.p1y;
           p2xs[i].value = newTarget.p2x;
@@ -754,9 +800,9 @@ export default function BubbleGenerator({
 
       const p = progresses[i].value;
 
-      // Lerp position from p1 to p2
-      xs[i].value = p1xs[i].value + (p2xs[i].value - p1xs[i].value) * p;
-      ys[i].value = p1ys[i].value + (p2ys[i].value - p1ys[i].value) * p;
+      // Lerp position from p1 to p2, offset by smoothed accelerometer
+      xs[i].value = p1xs[i].value + (p2xs[i].value - p1xs[i].value) * p + offX;
+      ys[i].value = p1ys[i].value + (p2ys[i].value - p1ys[i].value) * p + offY;
 
       // Scale: fade in (0→0.15), full (0.15→1.0)
       if (p < 0.15) {
@@ -794,6 +840,8 @@ export default function BubbleGenerator({
           </Group>
         );
       })}
+      {/* Debug: red dot at cone origin */}
+      <Circle cx={coneOriginX} cy={coneOriginY} r={6} color="red" />
     </Group>
   );
 }

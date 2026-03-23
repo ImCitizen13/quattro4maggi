@@ -363,6 +363,7 @@ export default function MorphingHourGlassTimer() {
                 lowerBounds={CENTER_Y + 10}
                 width={CANVAS_WIDTH}
                 startAnimation={bubbleAtCenter}
+                bubbleRadius={bubbleRadius}
               />
               <Group opacity={initialTextOpacity}>
                 <BackdropBlur
