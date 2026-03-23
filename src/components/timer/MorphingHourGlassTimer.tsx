@@ -14,7 +14,7 @@ import {
   TextDirection,
   useFont,
   useSVG,
-  useTypeface
+  useTypeface,
 } from "@shopify/react-native-skia";
 import { Image } from "expo-image";
 import { Stack } from "expo-router";
@@ -48,6 +48,8 @@ import { BGSHADER } from "./BGTailwindShader";
 import { BShader, DEFAULT_PRISM_COLORS } from "./BShader";
 import BubbleGenerator from "./BubbleGenerator";
 import NameCrossfade from "./NameCrossfade";
+import SplitFlapWord from "./SplitFlapWord";
+import StarsShader from "./StarsShader";
 
 const BUBBLE_RADIUS = 200;
 const FONT_SIZE = 28;
@@ -76,7 +78,7 @@ const TEXT = "Hi There.";
 const TEXT_2 = "I'm MelTohamy,";
 const INITIAL_TEXT = "Swipe Up To Start";
 const ARABIC_TEXT = "أنا م.التهامي";
-const TEXT_3 = "I like to build stuff.";
+const FLIP_WORDS = ["Learn", "Build", "Share"];
 const TEXT_GAP = 15; // vertical spacing between text lines
 
 export default function MorphingHourGlassTimer() {
@@ -189,7 +191,7 @@ export default function MorphingHourGlassTimer() {
   });
 
   // SVG + arc indicator Y position (top of the indicator zone)
-  const INDICATOR_Y = BOTTOM_Y - (BUBBLE_RADIUS / 2.75);
+  const INDICATOR_Y = BOTTOM_Y - BUBBLE_RADIUS / 2.75;
 
   // Initial text: fully visible at bottom, fades out + blurs as bubble moves up
   const initialTextOpacity = useDerivedValue(() => 1 - textOpacity.value);
@@ -202,11 +204,6 @@ export default function MorphingHourGlassTimer() {
     return CANVAS_WIDTH / 2 - w / 2;
   });
 
-  // Secondary text: centered X for TEXT_3
-  const text3X = useDerivedValue(() => {
-    const w = font?.measureText(TEXT_3).width ?? 0;
-    return CANVAS_WIDTH / 2 - w / 2;
-  });
 
   // Line 2 Y position (top-left for Paragraph — subtract baseline offset)
   const nameYPos = useDerivedValue(
@@ -356,8 +353,9 @@ export default function MorphingHourGlassTimer() {
     return { opacity: fadeIn * fadeOut };
   });
 
-  const svgImage = useSVG(require("../../../assets/icons/drag-04-stroke-rounded.svg"));
-
+  const svgImage = useSVG(
+    require("../../../assets/icons/drag-04-stroke-rounded.svg")
+  );
 
   return (
     <View style={styles.container}>
@@ -378,6 +376,12 @@ export default function MorphingHourGlassTimer() {
                 </Paint>
               }
             >
+              {/* Stars background — must be inside BShader group so it becomes
+                  the source content the shader samples, otherwise BShader's
+                  opaque u_bgColor fill covers it completely */}
+              {isDark && (
+                <StarsShader width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
+              )}
               <BubbleGenerator
                 lowerBounds={CENTER_Y + 10}
                 width={CANVAS_WIDTH}
@@ -391,12 +395,10 @@ export default function MorphingHourGlassTimer() {
                   <ImageSVG
                     svg={svgImage}
                     x={CANVAS_WIDTH / 2 - 16}
-                    y={INDICATOR_Y }
+                    y={INDICATOR_Y}
                     width={32}
-                    height={32} 
-                    color={"rgb(143, 139, 139)"}
-              
-                    
+                    height={32}
+                    color={isDark ? "rgb(113, 113, 113)" : "rgb(143, 139, 139)"}
                   />
                 )}
               </Group>
@@ -411,8 +413,8 @@ export default function MorphingHourGlassTimer() {
                       (initialFont?.measureText(INITIAL_TEXT).width ?? 0) + 32,
                     height: FONT_SIZE + 24,
                   }}
+                  opacity={initialTextOpacity}
                 >
-                  {/* <Fill color="rgba(0, 0, 0, 0.2)" /> */}
                 </BackdropBlur>
                 <SKText
                   text={INITIAL_TEXT}
@@ -448,22 +450,29 @@ export default function MorphingHourGlassTimer() {
                   bubbleAtCenter={bubbleAtCenter}
                 />
 
-                {/* Third Line */}
-                <SKText
-                  antiAlias={true}
-                  text={TEXT_3}
-                  font={font}
-                  color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
-                  x={text3X}
-                  y={text3YPos}
-                />
+                {/* Third Line — split-flap cycling word */}
+                {font && (
+                  <SplitFlapWord
+                    words={FLIP_WORDS}
+                    prefix="I like to "
+                    suffix=" stuff."
+                    font={font}
+                    fontSize={FONT_SIZE}
+                    baselineY={text3YPos}
+                    canvasWidth={CANVAS_WIDTH}
+                    color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                    run={bubbleAtCenter}
+                  />
+                )}
               </Group>
             </Group>
           </Group>
           {/* Background dots — on top of the magnifier shader */}
-          <Fill>
-            <Shader source={BGSHADER} uniforms={dotUniforms} />
-          </Fill>
+          {!isDark && (
+            <Fill>
+              <Shader source={BGSHADER} uniforms={dotUniforms} />
+            </Fill>
+          )}
         </Canvas>
       </GestureDetector>
 
