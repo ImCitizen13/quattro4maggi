@@ -1,5 +1,6 @@
 import {
   BackdropBlur,
+  BlurMask,
   Canvas,
   Fill,
   Group,
@@ -185,6 +186,12 @@ export default function MorphingHourGlassTimer() {
     );
   });
 
+  // Initial text: fully visible at bottom, fades out + blurs as bubble moves up
+  const initialTextOpacity = useDerivedValue(() => 1 - textOpacity.value);
+  const initialTextBlur = useDerivedValue(() =>
+    interpolate(textOpacity.value, [0, 1], [0, 10], "clamp")
+  );
+
   const initailTextX = useDerivedValue(() => {
     const w = initialFont?.measureText(INITIAL_TEXT).width ?? 0;
     return CANVAS_WIDTH / 2 - w / 2;
@@ -357,25 +364,29 @@ export default function MorphingHourGlassTimer() {
                 width={CANVAS_WIDTH}
                 startAnimation={bubbleAtCenter}
               />
-              <SKText
-                text={INITIAL_TEXT}
-                font={initialFont}
-                x={initailTextX}
-                y={CANVAS_HEIGHT / 2}
-                color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
-              />
-              <BackdropBlur
-                blur={4}
-                clip={{
-                  x: initailTextX.value - 16,
-                  y: CANVAS_HEIGHT / 2 - FONT_SIZE - 8,
-                  width:
-                    (initialFont?.measureText(INITIAL_TEXT).width ?? 0) + 32,
-                  height: FONT_SIZE + 24,
-                }}
-              >
-                <Fill color="rgba(0, 0, 0, 0.2)" />
-              </BackdropBlur>
+              <Group opacity={initialTextOpacity}>
+                <BackdropBlur
+                  blur={4}
+                  clip={{
+                    x: initailTextX.value - 16,
+                    y: CANVAS_HEIGHT / 2 - FONT_SIZE - 8,
+                    width:
+                      (initialFont?.measureText(INITIAL_TEXT).width ?? 0) + 32,
+                    height: FONT_SIZE + 24,
+                  }}
+                >
+                  {/* <Fill color="rgba(0, 0, 0, 0.2)" /> */}
+                <SKText
+                  text={INITIAL_TEXT}
+                  font={initialFont}
+                  x={initailTextX}
+                  y={CANVAS_HEIGHT / 2}
+                  color={isDark ? "rgba(255,255,255,1)" : "rgb(0, 0, 0)"}
+                >
+                  <BlurMask blur={initialTextBlur} style="normal" />
+                </SKText>
+                </BackdropBlur>
+              </Group>
 
               {/* Main Text Group */}
               <Group opacity={textOpacity}>
