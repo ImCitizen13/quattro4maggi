@@ -198,6 +198,9 @@ export default function MorphingHourGlassTimer() {
   const initialTextBlur = useDerivedValue(() =>
     interpolate(textOpacity.value, [0, 1], [0, 10], "clamp")
   );
+  const initialBackdropBlur = useDerivedValue(() =>
+    initialTextOpacity.value * 4
+  );
 
   const initailTextX = useDerivedValue(() => {
     const w = initialFont?.measureText(INITIAL_TEXT).width ?? 0;
@@ -405,7 +408,7 @@ export default function MorphingHourGlassTimer() {
 
               <Group opacity={initialTextOpacity}>
                 <BackdropBlur
-                  blur={4}
+                  blur={initialBackdropBlur}
                   clip={{
                     x: initailTextX.value - 16,
                     y: CANVAS_HEIGHT / 2 - FONT_SIZE - 8,
@@ -454,8 +457,8 @@ export default function MorphingHourGlassTimer() {
                 {font && (
                   <SplitFlapWord
                     words={FLIP_WORDS}
-                    prefix="I like to "
-                    suffix=" stuff."
+                    prefix="I like to  "
+                    suffix="stuff."
                     font={font}
                     fontSize={FONT_SIZE}
                     baselineY={text3YPos}

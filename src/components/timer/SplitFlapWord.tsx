@@ -1,5 +1,5 @@
-import { Group, Text } from "@shopify/react-native-skia";
 import type { SkFont } from "@shopify/react-native-skia";
+import { Group, Skia, Text } from "@shopify/react-native-skia";
 import { useMemo } from "react";
 import type { SharedValue } from "react-native-reanimated";
 import {
@@ -14,8 +14,26 @@ import {
 
 import FlipChar from "./FlipChar";
 
-const DISPLAY_DURATION_MS = 2000;
-const FLIP_DURATION_MS = 500;
+// Horizontal edge-fade shader: keeps center crisp, fades alpha at left/right edges
+const EdgeFadeShader = Skia.RuntimeEffect.Make(`
+  uniform shader image;
+  uniform float uLeft;      // slot left edge x
+  uniform float uRight;     // slot right edge x
+  uniform float uFadeWidth; // fade zone width in px
+
+  half4 main(float2 pos) {
+    half4 color = image.eval(pos);
+    float leftFade  = smoothstep(uLeft, uLeft + uFadeWidth, pos.x);
+    float rightFade = smoothstep(uRight, uRight - uFadeWidth, pos.x);
+    float alpha = leftFade * rightFade;
+    return color * half(alpha);
+  }
+`)!;
+
+const DISPLAY_DURATION_MS = 2200;
+const FLIP_DURATION_MS = 800;
+const SLOT_PADDING = 6; // horizontal padding inside the word box
+const FADE_WIDTH = 8; // edge fade zone width in px
 
 type SplitFlapWordProps = {
   words: string[];
@@ -40,29 +58,31 @@ export default function SplitFlapWord({
   color,
   run,
 }: SplitFlapWordProps) {
-  // ── Static layout measurements ──────────────────────────────────────
+  // ── Static layout ──────────────────────────────────────────────────
   const layout = useMemo(() => {
     const prefixWidth = font.measureText(prefix).width;
     const suffixWidth = font.measureText(suffix).width;
 
-    // Measure each word, take max width so prefix/suffix never shift
+    // Fixed slot = widest word + padding on each side
     const wordWidths = words.map((w) => font.measureText(w).width);
     const maxWordWidth = Math.max(...wordWidths);
+    const slotWidth = maxWordWidth + SLOT_PADDING * 2;
 
-    const totalWidth = prefixWidth + maxWordWidth + suffixWidth;
+    // Center the full line: prefix + slot + suffix
+    const totalWidth = prefixWidth + slotWidth + suffixWidth;
     const startX = canvasWidth / 2 - totalWidth / 2;
     const prefixX = startX;
-    const wordSlotX = startX + prefixWidth;
-    const suffixX = wordSlotX + maxWordWidth;
+    const slotX = startX + prefixWidth;
+    const suffixX = slotX + slotWidth;
 
-    // Use getGlyphWidths for proper advance widths (respects kerning/spacing)
+    // Per-word: center each word's glyphs within the slot
     const charPositions = words.map((word) => {
       const glyphIds = font.getGlyphIDs(word);
       const advances = font.getGlyphWidths(glyphIds);
       const wWidth = advances.reduce((sum, w) => sum + w, 0);
-      const wordOffsetX = wordSlotX + (maxWordWidth - wWidth) / 2;
+      const wordStartX = slotX + (slotWidth - wWidth) / 2;
       const positions: number[] = [];
-      let cumX = wordOffsetX;
+      let cumX = wordStartX;
       for (let i = 0; i < advances.length; i++) {
         positions.push(cumX);
         cumX += advances[i];
@@ -70,32 +90,35 @@ export default function SplitFlapWord({
       return positions;
     });
 
-    // Character advance widths per word (for origin pivots)
     const charWidths = words.map((word) => {
       const glyphIds = font.getGlyphIDs(word);
       return font.getGlyphWidths(glyphIds);
     });
 
-    return { prefixX, suffixX, charPositions, charWidths, maxWordWidth };
+    return {
+      prefixX,
+      suffixX,
+      slotX,
+      slotWidth,
+      charPositions,
+      charWidths,
+    };
   }, [font, words, prefix, suffix, canvasWidth]);
 
-  // ── Animation state ─────────────────────────────────────────────────
+  // ── Animation state ────────────────────────────────────────────────
   const wordIndex = useSharedValue(0);
   const flipProgress = useSharedValue(0);
   const cycleCounter = useSharedValue(0);
 
-  // Per-character derived values for current & next word
   const wordCount = words.length;
   const charCount = words[0].length;
 
-  const currentWord = useDerivedValue(
-    () => words[wordIndex.value % wordCount]
-  );
+  const currentWord = useDerivedValue(() => words[wordIndex.value % wordCount]);
   const nextWord = useDerivedValue(
     () => words[(wordIndex.value + 1) % wordCount]
   );
 
-  // Individual character shared values (max 5 chars)
+  // Per-character text values
   const currentChar0 = useDerivedValue(() => currentWord.value[0] ?? "");
   const currentChar1 = useDerivedValue(() => currentWord.value[1] ?? "");
   const currentChar2 = useDerivedValue(() => currentWord.value[2] ?? "");
@@ -117,31 +140,60 @@ export default function SplitFlapWord({
   ];
   const nextChars = [nextChar0, nextChar1, nextChar2, nextChar3, nextChar4];
 
-  // Per-character X positions and widths as individual derived values
-  // (Skia props need individual shared values, not array lookups)
-  const curX0 = useDerivedValue(() => layout.charPositions[wordIndex.value % wordCount][0]);
-  const curX1 = useDerivedValue(() => layout.charPositions[wordIndex.value % wordCount][1]);
-  const curX2 = useDerivedValue(() => layout.charPositions[wordIndex.value % wordCount][2]);
-  const curX3 = useDerivedValue(() => layout.charPositions[wordIndex.value % wordCount][3]);
-  const curX4 = useDerivedValue(() => layout.charPositions[wordIndex.value % wordCount][4]);
+  // Per-character X positions and widths
+  const curX0 = useDerivedValue(
+    () => layout.charPositions[wordIndex.value % wordCount][0]
+  );
+  const curX1 = useDerivedValue(
+    () => layout.charPositions[wordIndex.value % wordCount][1]
+  );
+  const curX2 = useDerivedValue(
+    () => layout.charPositions[wordIndex.value % wordCount][2]
+  );
+  const curX3 = useDerivedValue(
+    () => layout.charPositions[wordIndex.value % wordCount][3]
+  );
+  const curX4 = useDerivedValue(
+    () => layout.charPositions[wordIndex.value % wordCount][4]
+  );
 
-  const nxtX0 = useDerivedValue(() => layout.charPositions[(wordIndex.value + 1) % wordCount][0]);
-  const nxtX1 = useDerivedValue(() => layout.charPositions[(wordIndex.value + 1) % wordCount][1]);
-  const nxtX2 = useDerivedValue(() => layout.charPositions[(wordIndex.value + 1) % wordCount][2]);
-  const nxtX3 = useDerivedValue(() => layout.charPositions[(wordIndex.value + 1) % wordCount][3]);
-  const nxtX4 = useDerivedValue(() => layout.charPositions[(wordIndex.value + 1) % wordCount][4]);
+  const nxtX0 = useDerivedValue(
+    () => layout.charPositions[(wordIndex.value + 1) % wordCount][0]
+  );
+  const nxtX1 = useDerivedValue(
+    () => layout.charPositions[(wordIndex.value + 1) % wordCount][1]
+  );
+  const nxtX2 = useDerivedValue(
+    () => layout.charPositions[(wordIndex.value + 1) % wordCount][2]
+  );
+  const nxtX3 = useDerivedValue(
+    () => layout.charPositions[(wordIndex.value + 1) % wordCount][3]
+  );
+  const nxtX4 = useDerivedValue(
+    () => layout.charPositions[(wordIndex.value + 1) % wordCount][4]
+  );
 
-  const curW0 = useDerivedValue(() => layout.charWidths[wordIndex.value % wordCount][0]);
-  const curW1 = useDerivedValue(() => layout.charWidths[wordIndex.value % wordCount][1]);
-  const curW2 = useDerivedValue(() => layout.charWidths[wordIndex.value % wordCount][2]);
-  const curW3 = useDerivedValue(() => layout.charWidths[wordIndex.value % wordCount][3]);
-  const curW4 = useDerivedValue(() => layout.charWidths[wordIndex.value % wordCount][4]);
+  const curW0 = useDerivedValue(
+    () => layout.charWidths[wordIndex.value % wordCount][0]
+  );
+  const curW1 = useDerivedValue(
+    () => layout.charWidths[wordIndex.value % wordCount][1]
+  );
+  const curW2 = useDerivedValue(
+    () => layout.charWidths[wordIndex.value % wordCount][2]
+  );
+  const curW3 = useDerivedValue(
+    () => layout.charWidths[wordIndex.value % wordCount][3]
+  );
+  const curW4 = useDerivedValue(
+    () => layout.charWidths[wordIndex.value % wordCount][4]
+  );
 
   const currentXs = [curX0, curX1, curX2, curX3, curX4];
   const nextXs = [nxtX0, nxtX1, nxtX2, nxtX3, nxtX4];
   const currentWidths = [curW0, curW1, curW2, curW3, curW4];
 
-  // ── Cycle loop (NameCrossfade pattern) ──────────────────────────────
+  // ── Cycle loop ─────────────────────────────────────────────────────
   useAnimatedReaction(
     () => cycleCounter.value,
     (count, prev) => {
@@ -154,7 +206,6 @@ export default function SplitFlapWord({
           { duration: FLIP_DURATION_MS, easing: Easing.inOut(Easing.cubic) },
           (finished) => {
             if (!finished) return;
-            // Advance to next word and reset
             wordIndex.value = (wordIndex.value + 1) % wordCount;
             flipProgress.value = 0;
             cycleCounter.value += 1;
@@ -194,23 +245,26 @@ export default function SplitFlapWord({
         color={color}
       />
 
-      {/* Dynamic flipping characters */}
-      {Array.from({ length: charCount }, (_, i) => (
-        <FlipChar
-          key={i}
-          charIndex={i}
-          currentChar={currentChars[i]}
-          nextChar={nextChars[i]}
-          flipProgress={flipProgress}
-          currentX={currentXs[i]}
-          nextX={nextXs[i]}
-          currentCharWidth={currentWidths[i]}
-          y={baselineY}
-          fontSize={fontSize}
-          font={font}
-          color={color}
-        />
-      ))}
+      {/* Word slot — edge-fade shader keeps text crisp, fades left/right borders */}
+      <Group>
+        
+        {Array.from({ length: charCount }, (_, i) => (
+          <FlipChar
+            key={i}
+            charIndex={i}
+            currentChar={currentChars[i]}
+            nextChar={nextChars[i]}
+            flipProgress={flipProgress}
+            currentX={currentXs[i]}
+            nextX={nextXs[i]}
+            currentCharWidth={currentWidths[i]}
+            y={baselineY}
+            fontSize={fontSize}
+            font={font}
+            color={color}
+          />
+        ))}
+      </Group>
 
       {/* Static suffix */}
       <Text
