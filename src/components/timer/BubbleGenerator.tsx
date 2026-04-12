@@ -2,6 +2,7 @@ import { Group, Image, useImage } from "@shopify/react-native-skia";
 import { Accelerometer } from "expo-sensors";
 import React, { useEffect, useMemo } from "react";
 import { StyleSheet } from "react-native";
+import { Settings } from 'react-native-pulsar';
 import {
   SharedValue,
   useAnimatedReaction,
@@ -18,6 +19,7 @@ const BASE_SPEED = 0.00028; // progress per ms (~3.6s for full journey)
 const VICINITY = 0.08; // fraction of width around center where bubbles go straight up
 const BUBBLE_COUNT = 46;
 const ANIMATION_START_DELAY = 600;
+Settings.enableSound(false);
 
 // Generate random cone point — works both on JS thread and as worklet
 function randomConePoint(
@@ -712,6 +714,56 @@ export default function BubbleGenerator({
     useDerivedValue(() => p1ys[45].value + IMAGE_SIZE_MIN / 2),
   ];
 
+  // Pre-create origin objects to avoid calling useDerivedValue inside map
+  const bubbleOrigins = [
+    useDerivedValue(() => ({ x: originXs[0].value, y: originYs[0].value })),
+    useDerivedValue(() => ({ x: originXs[1].value, y: originYs[1].value })),
+    useDerivedValue(() => ({ x: originXs[2].value, y: originYs[2].value })),
+    useDerivedValue(() => ({ x: originXs[3].value, y: originYs[3].value })),
+    useDerivedValue(() => ({ x: originXs[4].value, y: originYs[4].value })),
+    useDerivedValue(() => ({ x: originXs[5].value, y: originYs[5].value })),
+    useDerivedValue(() => ({ x: originXs[6].value, y: originYs[6].value })),
+    useDerivedValue(() => ({ x: originXs[7].value, y: originYs[7].value })),
+    useDerivedValue(() => ({ x: originXs[8].value, y: originYs[8].value })),
+    useDerivedValue(() => ({ x: originXs[9].value, y: originYs[9].value })),
+    useDerivedValue(() => ({ x: originXs[10].value, y: originYs[10].value })),
+    useDerivedValue(() => ({ x: originXs[11].value, y: originYs[11].value })),
+    useDerivedValue(() => ({ x: originXs[12].value, y: originYs[12].value })),
+    useDerivedValue(() => ({ x: originXs[13].value, y: originYs[13].value })),
+    useDerivedValue(() => ({ x: originXs[14].value, y: originYs[14].value })),
+    useDerivedValue(() => ({ x: originXs[15].value, y: originYs[15].value })),
+    useDerivedValue(() => ({ x: originXs[16].value, y: originYs[16].value })),
+    useDerivedValue(() => ({ x: originXs[17].value, y: originYs[17].value })),
+    useDerivedValue(() => ({ x: originXs[18].value, y: originYs[18].value })),
+    useDerivedValue(() => ({ x: originXs[19].value, y: originYs[19].value })),
+    useDerivedValue(() => ({ x: originXs[20].value, y: originYs[20].value })),
+    useDerivedValue(() => ({ x: originXs[21].value, y: originYs[21].value })),
+    useDerivedValue(() => ({ x: originXs[22].value, y: originYs[22].value })),
+    useDerivedValue(() => ({ x: originXs[23].value, y: originYs[23].value })),
+    useDerivedValue(() => ({ x: originXs[24].value, y: originYs[24].value })),
+    useDerivedValue(() => ({ x: originXs[25].value, y: originYs[25].value })),
+    useDerivedValue(() => ({ x: originXs[26].value, y: originYs[26].value })),
+    useDerivedValue(() => ({ x: originXs[27].value, y: originYs[27].value })),
+    useDerivedValue(() => ({ x: originXs[28].value, y: originYs[28].value })),
+    useDerivedValue(() => ({ x: originXs[29].value, y: originYs[29].value })),
+    useDerivedValue(() => ({ x: originXs[30].value, y: originYs[30].value })),
+    useDerivedValue(() => ({ x: originXs[31].value, y: originYs[31].value })),
+    useDerivedValue(() => ({ x: originXs[32].value, y: originYs[32].value })),
+    useDerivedValue(() => ({ x: originXs[33].value, y: originYs[33].value })),
+    useDerivedValue(() => ({ x: originXs[34].value, y: originYs[34].value })),
+    useDerivedValue(() => ({ x: originXs[35].value, y: originYs[35].value })),
+    useDerivedValue(() => ({ x: originXs[36].value, y: originYs[36].value })),
+    useDerivedValue(() => ({ x: originXs[37].value, y: originYs[37].value })),
+    useDerivedValue(() => ({ x: originXs[38].value, y: originYs[38].value })),
+    useDerivedValue(() => ({ x: originXs[39].value, y: originYs[39].value })),
+    useDerivedValue(() => ({ x: originXs[40].value, y: originYs[40].value })),
+    useDerivedValue(() => ({ x: originXs[41].value, y: originYs[41].value })),
+    useDerivedValue(() => ({ x: originXs[42].value, y: originYs[42].value })),
+    useDerivedValue(() => ({ x: originXs[43].value, y: originYs[43].value })),
+    useDerivedValue(() => ({ x: originXs[44].value, y: originYs[44].value })),
+    useDerivedValue(() => ({ x: originXs[45].value, y: originYs[45].value })),
+  ];
+
   const isActive = useSharedValue(false);
   const elapsedSinceStart = useSharedValue(0);
 
@@ -778,6 +830,8 @@ export default function BubbleGenerator({
       progresses[i].value += speeds[i] * dt;
 
       if (progresses[i].value >= 1) {
+        // Haptic 
+        
         if (isActive.value) {
           // Re-randomize target position from shifted cone origin
           const newTarget = randomConePoint(width, lowerBounds, SPREAD_ANGLE, offX, offY);
@@ -820,10 +874,7 @@ export default function BubbleGenerator({
           <Group
             key={idx}
             transform={bubbleTransforms[idx]}
-            origin={useDerivedValue(() => ({
-              x: originXs[idx].value,
-              y: originYs[idx].value,
-            }))}
+            origin={bubbleOrigins[idx]}
           >
             <Image
               fit="fill"
@@ -832,10 +883,6 @@ export default function BubbleGenerator({
               image={img}
               width={IMAGE_SIZE_MIN}
               height={IMAGE_SIZE_MIN}
-              // sampling={{
-              //   filter: FilterMode.Linear,
-              //   mipmap: MipmapMode.Linear,
-              // }}
             />
           </Group>
         );

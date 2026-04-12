@@ -33,6 +33,8 @@ import {
   GestureUpdateEvent,
   PanGestureHandlerEventPayload,
 } from "react-native-gesture-handler";
+// import { Presets, Settings } from 'react-native-pulsar';
+import { Presets } from "react-native-pulsar";
 import Animated, {
   clamp,
   interpolate,
@@ -67,7 +69,7 @@ const SPRING_SNAP_PROPS = {
 const SPRING_FOLLOW_PROPS = {
   stiffness: 300,
   damping: 30,
-  mass: 1,
+  mass: 3,
   reduceMotion: ReduceMotion.System,
 };
 // Background color (RGB 0-1) — change this to control the bubble/canvas bg
@@ -80,6 +82,7 @@ const INITIAL_TEXT = "Swipe Up To Start";
 const ARABIC_TEXT = "أنا م.التهامي";
 const FLIP_WORDS = ["Learn", "Build", "Share"];
 const TEXT_GAP = 15; // vertical spacing between text lines
+// Settings.enableSound(false)
 
 export default function MorphingHourGlassTimer() {
   const { width: CANVAS_WIDTH, height: CANVAS_HEIGHT } = useWindowDimensions();
@@ -93,7 +96,6 @@ export default function MorphingHourGlassTimer() {
   const bubbleXPos = useSharedValue(CANVAS_WIDTH / 2);
   const textMainYPos = useSharedValue(BOTTOM_Y);
   const startY = useSharedValue(BOTTOM_Y);
-
   // Bubble is in the center
   // const bubbleAtCenter = useDerivedValue(() => {
   //   return bubbleYPos.value === CENTER_Y;
@@ -282,6 +284,7 @@ export default function MorphingHourGlassTimer() {
 
   const onBeginYPostions = () => {
     "worklet";
+    Presets.keyboardMembrane();
     startY.value = bubbleYPos.value;
   };
 
@@ -289,6 +292,7 @@ export default function MorphingHourGlassTimer() {
     e: GestureUpdateEvent<PanGestureHandlerEventPayload>
   ) => {
     "worklet";
+    
     const targetY = clamp(startY.value + e.translationY, 0, BOTTOM_Y);
     const targetX = CANVAS_WIDTH / 2 + e.translationX;
     bubbleYPos.value = withSpring(targetY, SPRING_FOLLOW_PROPS);
@@ -302,6 +306,7 @@ export default function MorphingHourGlassTimer() {
 
   const onEndYPostions = () => {
     "worklet";
+    Presets.keyboardMembrane();
     const halfway = (CENTER_Y + BOTTOM_Y) / 2;
     const snapTo = bubbleYPos.value < halfway ? CENTER_Y : BOTTOM_Y;
     const snapTextTo =
@@ -324,12 +329,16 @@ export default function MorphingHourGlassTimer() {
     () =>
       Gesture.Pan()
         .onBegin(() => {
+          // Start Haptic
+          
           onBeginYPostions();
         })
         .onUpdate((e) => {
           onUpdateYPostions(e);
         })
         .onEnd(() => {
+          // End Haptic
+          
           onEndYPostions();
         }),
     [bubbleYPos, startY]

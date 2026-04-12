@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Rect, Shader, Skia, vec } from "@shopify/react-native-skia";
+import { Rect, Shader, Skia, useClock, vec } from "@shopify/react-native-skia";
+import { useDerivedValue } from "react-native-reanimated";
 
 const source = Skia.RuntimeEffect.Make(`
   uniform float2 resolution;
@@ -40,34 +40,18 @@ export default function StarsShader({
   width: number;
   height: number;
 }) {
-  const [time, setTime] = useState(0);
+  // useClock returns a shared value that updates on UI thread - no JS re-renders
+  const clock = useClock();
 
-  useEffect(() => {
-    let startTime = Date.now();
-    let animationFrameId: number;
-
-    const animate = () => {
-      const currentTime = (Date.now() - startTime) / 1000;
-      setTime(currentTime);
-      animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animationFrameId = requestAnimationFrame(animate);
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
+  // Convert clock (ms) to seconds and wrap in derived value for Skia
+  const uniforms = useDerivedValue(() => ({
+    resolution: vec(width, height),
+    time: clock.value / 1000,
+  }));
 
   return (
     <Rect x={0} y={0} width={width} height={height}>
-      <Shader
-        source={source}
-        uniforms={{
-          resolution: vec(width, height),
-          time: time,
-        }}
-      />
+      <Shader source={source} uniforms={uniforms} />
     </Rect>
   );
 }
