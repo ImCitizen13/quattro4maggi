@@ -2,6 +2,8 @@
 
 A React Native Skia shader component that renders animated liquid metal effects with customizable shapes, colors, and chromatic aberration.
 
+<img src="../../assets/demos/liquid-metal.gif" alt="liquid-metal" width="300" />
+
 ---
 
 ## Required Libraries
@@ -187,21 +189,21 @@ const blendedColors = interpolateMetalColors('silver', 'gold', 0.5);
 ### LiquidMetalShader Props
 
 
-| Prop         | Type                               | Default     | Description                  |
-| ------------ | ---------------------------------- | ----------- | ---------------------------- |
-| `width`      | `number`                           | `300`       | Canvas width in pixels       |
-| `height`     | `number`                           | `300`       | Canvas height in pixels      |
-| `shape`      | `0 | 1 | 2 | 3 | 4`                | `1`         | Shape mode (see Shape Modes) |
-| `colorBack`  | `[number, number, number, number]` | `[0,0,0,0]` | Background RGBA (0-1)        |
-| `colorTint`  | `[number, number, number, number]` | `[1,1,1,0]` | Tint color for color burn    |
-| `softness`   | `number`                           | `0`         | Blur/softness (0-1)          |
-| `repetition` | `number`                           | `3`         | Stripe count (1-20)          |
-| `shiftRed`   | `number`                           | `0.3`       | Red chromatic shift (0-1)    |
-| `shiftBlue`  | `number`                           | `0.3`       | Blue chromatic shift (0-1)   |
-| `distortion` | `number`                           | `0.07`      | Noise distortion (0-1)       |
-| `contour`    | `number`                           | `0.3`       | Edge sharpness (0-1)         |
-| `angle`      | `number`                           | `30`        | Pattern rotation (degrees)   |
-| `speed`      | `number`                           | `1`         | Animation speed multiplier   |
+| Prop         | Type                               | Default     | Description                |
+| ------------ | ---------------------------------- | ----------- | -------------------------- |
+| `width`      | `number`                           | `300`       | Canvas width in pixels     |
+| `height`     | `number`                           | `300`       | Canvas height in pixels    |
+| `shape`      | `0                                 | 1           | 2                          |
+| `colorBack`  | `[number, number, number, number]` | `[0,0,0,0]` | Background RGBA (0-1)      |
+| `colorTint`  | `[number, number, number, number]` | `[1,1,1,0]` | Tint color for color burn  |
+| `softness`   | `number`                           | `0`         | Blur/softness (0-1)        |
+| `repetition` | `number`                           | `3`         | Stripe count (1-20)        |
+| `shiftRed`   | `number`                           | `0.3`       | Red chromatic shift (0-1)  |
+| `shiftBlue`  | `number`                           | `0.3`       | Blue chromatic shift (0-1) |
+| `distortion` | `number`                           | `0.07`      | Noise distortion (0-1)     |
+| `contour`    | `number`                           | `0.3`       | Edge sharpness (0-1)       |
+| `angle`      | `number`                           | `30`        | Pattern rotation (degrees) |
+| `speed`      | `number`                           | `1`         | Animation speed multiplier |
 
 
 ### PerlinLiquidMetalShader Props
@@ -358,4 +360,3 @@ The `PerlinLiquidMetalShader` variant differentiates from the original by:
 - **Touch interaction**: Ripples emanating from tap points
 - **Gyroscope response**: Metal reflects based on device tilt (`SensorLiquidMetalShader`)
 - **Additional shapes**: Heart, star, rounded rectangle
-

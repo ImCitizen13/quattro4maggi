@@ -2,6 +2,8 @@
 
 A touch-reactive water ripple shader using Skia RuntimeShader. Tap anywhere to create bouncy ripples that expand outward and reflect from edges.
 
+<img src="../../assets/demos/ripple-effect.gif" alt="ripple-effect" width="300" />
+
 ---
 
 ## Required Libraries

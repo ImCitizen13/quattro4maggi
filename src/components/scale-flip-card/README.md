@@ -2,6 +2,8 @@
 
 A React Native card component that expands into a fullscreen portal with a 3D flip animation.
 
+<img src="../../assets/demos/scale-flip-card.gif" alt="scale-flip-card" width="300" />
+
 ---
 
 ## Required Libraries

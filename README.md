@@ -12,10 +12,10 @@ Clone them. Learn from them. Ship them.
 
 | Demo | Preview | Description |
 |------|---------|-------------|
-| [Ripple Effect](./src/components/ripple-effect/) | ![ripple-effect](./assets/demos/ripple-effect.gif) | Touch-reactive ripple shader with customizable colors |
-| [Scale Flip Card](./src/components/scale-flip-card/) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card that expands into fullscreen with 3D flip animation |
-| [Live Border Card](./src/components/live-border-card/) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating gradients |
-| [Liquid Metal](./src/components/liquid-metal/) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader with animated liquid metal effects |
+| [Ripple Effect](./src/components/ripple-effect/) | ![ripple-effect](./src/assets/demos/ripple-effect.gif) | Touch-reactive ripple shader with customizable colors |
+| [Scale Flip Card](./src/components/scale-flip-card/) | ![scale-flip-card](./src/assets/demos/scale-flip-card.gif) | Card that expands into fullscreen with 3D flip animation |
+| [Live Border Card](./src/components/live-border-card/) | ![live-border-card](./src/assets/demos/live-border-card.gif) | Animated glowing borders with rotating gradients |
+| [Liquid Metal](./src/components/liquid-metal/) | ![liquid-metal](./src/assets/demos/liquid-metal.gif) | Skia shader with animated liquid metal effects |
 
 ---
 
@@ -70,6 +70,8 @@ The code here is free.
 But understanding how to adapt it to your app is where most people get stuck.
 
 **Get early access (free during beta):** [tally.so/r/xXNJLr](https://tally.so/r/xXNJLr)
+
+![wabi-demo](./src/assets/demos/wabi-demo.gif)
 
 > Full **Wabi Timer replica** (gestures + interactions + bubble particles) is available for early access members — free during beta.
 

@@ -2,6 +2,8 @@
 
 A collection of React Native components that render animated glowing borders around cards using Skia and Reanimated. Features rotating color gradients, customizable glow effects, and pulsating animations.
 
+<img src="../../assets/demos/live-border-card.gif" alt="live-border-card" width="300" />
+
 ---
 
 ## Required Libraries
