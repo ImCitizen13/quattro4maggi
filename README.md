@@ -1,8 +1,10 @@
 # quattro4maggi
 
-A collection of React Native animation experiments built with **Skia** and **Reanimated**.
+A collection of **production-quality** React Native animation experiments built with Skia and Reanimated.
 
-🌐 [quattro4maggi.com](https://quattro4maggi.com) · 𝕏 [@m090009](https://x.com/m090009)
+Clone them. Learn from them. Ship them.
+
+[quattro4maggi.com](https://quattro4maggi.com) · [@m090009](https://x.com/m090009)
 
 ---
 
@@ -10,24 +12,19 @@ A collection of React Native animation experiments built with **Skia** and **Rea
 
 | Demo | Preview | Description |
 |------|---------|-------------|
-| [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card component that expands into a fullscreen portal with 3D flip animation |
-| [Text Flyin](/src/components/text-flyin/README.md) | ![text-flyin](./assets/demos/text-flyin.gif) | Kinetic text animation with staggered character fly-in effect |
-| [Liquid Metal](/src/components/liquid-metal/README.md) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader component with animated liquid metal effects and customizable colors |
-| [Live Border Card](/src/components/live-border-card/README.md) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating color gradients and customizable glow effects |
+| [Scale Flip Card](./src/components/scale-flip-card/) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card that expands into fullscreen with 3D flip animation |
+| [Text Flyin](./src/components/text-flyin/) | ![text-flyin](./assets/demos/text-flyin.gif) | Staggered character fly-in with spring physics |
+| [Liquid Metal](./src/components/liquid-metal/) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader with animated liquid metal effects |
+| [Live Border Card](./src/components/live-border-card/) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating gradients |
 
 ---
 
 ## Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/m090009/quattro4maggi.git
 cd quattro4maggi
-
-# Install
 bun install
-
-# Run
 bun run start
 ```
 
@@ -37,7 +34,7 @@ bun run start
 
 - [Expo](https://expo.dev) + [Expo Router](https://expo.github.io/router)
 - [React Native Skia](https://shopify.github.io/react-native-skia/)
-- [Reanimated](https://docs.swmansion.com/react-native-reanimated/)
+- [Reanimated 4](https://docs.swmansion.com/react-native-reanimated/)
 
 ---
 
@@ -47,14 +44,7 @@ bun run start
 src/
 ├── app/                    # Expo Router routes
 │   ├── index.tsx           # Home gallery
-│   ├── bouncy-scale-ball/  # Bouncy ball with scale animation
-│   ├── final-ripple/       # Polished ripple effect
-│   ├── ripple-shader/      # Custom Skia ripple shader
-│   ├── scale-flip-card/    # 3D flip card with portal
-│   ├── shader-wrapper/     # Reusable shader wrapper
-│   ├── shared-element/     # Shared element transitions
-│   ├── text-flyin/         # Kinetic text animation
-│   └── text-vertical-move/ # Text vertical move experiment
+│   └── [demo-name]/        # Individual demo routes
 ├── components/             # Demo-specific components
 │   └── [demo-name]/
 ├── hooks/
@@ -65,6 +55,16 @@ src/
 
 ---
 
+## Want More?
+
+I'm building **quattro4maggi membership** — deep-dive tutorials with video walkthroughs, step-by-step breakdowns, and 4 new explorations every month.
+
+The code here is free. The membership saves you hours of reverse-engineering.
+
+[**Get early access**](https://quattro4maggi.com) — Free for early subscribers
+
+---
+
 ## License
 
-MIT – feel free to use in your projects. A ⭐ or mention is appreciated!
+MIT — use freely in your projects. A star or mention is appreciated!
