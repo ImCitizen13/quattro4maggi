@@ -55,13 +55,23 @@ src/
 
 ---
 
-## Want More?
+## Want to Actually Master This?
 
-I'm building **quattro4maggi membership** — deep-dive tutorials with video walkthroughs, step-by-step breakdowns, and 4 new explorations every month.
+Most React Native animations look good in isolation but fall apart in real apps.
 
-The code here is free. The membership saves you hours of reverse-engineering.
+In the membership, I break these down step-by-step:
+- How the animation actually works
+- How to make it production-ready
+- How to reuse the patterns in your own apps
 
-[**Get early access**](https://quattro4maggi.com) — Free for early subscribers
+\+ 4 new deep dives every month
+
+The code here is free.  
+But understanding how to adapt it to your app is where most people get stuck.
+
+**Get early access (free during beta):** [tally.so/r/xXNJLr](https://tally.so/r/xXNJLr)
+
+> Full **Wabi Timer replica** (gestures + interactions + bubble particles) is available for early access members — free during beta.
 
 ---
 
