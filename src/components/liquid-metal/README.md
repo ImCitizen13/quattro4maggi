@@ -35,23 +35,27 @@ module.exports = {
 
 ### Key Concepts
 
-| Concept | Description |
-|---------|-------------|
-| `iTime` | Animation time in seconds (drives all movement) |
-| `iShape` | Shape mode: 0=full, 1=circle, 2=daisy, 3=diamond, 4=metaballs |
-| `iRepetition` | Number of metallic stripes (1-20) |
-| `iColorHighlight` | Bright reflection color (RGB 0-1) |
-| `iColorShadow` | Dark shadow color (RGB 0-1) |
-| Chromatic aberration | RGB channels offset to create color fringing effect |
-| Simplex/Perlin noise | Procedural noise for organic distortion |
+
+| Concept              | Description                                                   |
+| -------------------- | ------------------------------------------------------------- |
+| `iTime`              | Animation time in seconds (drives all movement)               |
+| `iShape`             | Shape mode: 0=full, 1=circle, 2=daisy, 3=diamond, 4=metaballs |
+| `iRepetition`        | Number of metallic stripes (1-20)                             |
+| `iColorHighlight`    | Bright reflection color (RGB 0-1)                             |
+| `iColorShadow`       | Dark shadow color (RGB 0-1)                                   |
+| Chromatic aberration | RGB channels offset to create color fringing effect           |
+| Simplex/Perlin noise | Procedural noise for organic distortion                       |
+
 
 ### Shader Variants
 
-| Shader | Noise Type | Custom Colors | Interaction | Use Case |
-|--------|------------|---------------|-------------|----------|
-| `LiquidMetalShader` | Simplex | No (silver only) | None | Original paper-design port |
-| `PerlinLiquidMetalShader` | Perlin | Yes (9 presets + custom) | None | Differentiated version |
-| `SensorLiquidMetalShader` | Perlin | Yes (9 presets + custom) | Device tilt | Mobile-optimized with gyroscope |
+
+| Shader                    | Noise Type | Custom Colors            | Interaction | Use Case                        |
+| ------------------------- | ---------- | ------------------------ | ----------- | ------------------------------- |
+| `LiquidMetalShader`       | Simplex    | No (silver only)         | None        | Original paper-design port      |
+| `PerlinLiquidMetalShader` | Perlin     | Yes (9 presets + custom) | None        | Differentiated version          |
+| `SensorLiquidMetalShader` | Perlin     | Yes (9 presets + custom) | Device tilt | Mobile-optimized with gyroscope |
+
 
 ---
 
@@ -182,69 +186,80 @@ const blendedColors = interpolateMetalColors('silver', 'gold', 0.5);
 
 ### LiquidMetalShader Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `width` | `number` | `300` | Canvas width in pixels |
-| `height` | `number` | `300` | Canvas height in pixels |
-| `shape` | `0 \| 1 \| 2 \| 3 \| 4` | `1` | Shape mode (see Shape Modes) |
-| `colorBack` | `[number, number, number, number]` | `[0,0,0,0]` | Background RGBA (0-1) |
-| `colorTint` | `[number, number, number, number]` | `[1,1,1,0]` | Tint color for color burn |
-| `softness` | `number` | `0` | Blur/softness (0-1) |
-| `repetition` | `number` | `3` | Stripe count (1-20) |
-| `shiftRed` | `number` | `0.3` | Red chromatic shift (0-1) |
-| `shiftBlue` | `number` | `0.3` | Blue chromatic shift (0-1) |
-| `distortion` | `number` | `0.07` | Noise distortion (0-1) |
-| `contour` | `number` | `0.3` | Edge sharpness (0-1) |
-| `angle` | `number` | `30` | Pattern rotation (degrees) |
-| `speed` | `number` | `1` | Animation speed multiplier |
+
+| Prop         | Type                               | Default     | Description                  |
+| ------------ | ---------------------------------- | ----------- | ---------------------------- |
+| `width`      | `number`                           | `300`       | Canvas width in pixels       |
+| `height`     | `number`                           | `300`       | Canvas height in pixels      |
+| `shape`      | `0 | 1 | 2 | 3 | 4`                | `1`         | Shape mode (see Shape Modes) |
+| `colorBack`  | `[number, number, number, number]` | `[0,0,0,0]` | Background RGBA (0-1)        |
+| `colorTint`  | `[number, number, number, number]` | `[1,1,1,0]` | Tint color for color burn    |
+| `softness`   | `number`                           | `0`         | Blur/softness (0-1)          |
+| `repetition` | `number`                           | `3`         | Stripe count (1-20)          |
+| `shiftRed`   | `number`                           | `0.3`       | Red chromatic shift (0-1)    |
+| `shiftBlue`  | `number`                           | `0.3`       | Blue chromatic shift (0-1)   |
+| `distortion` | `number`                           | `0.07`      | Noise distortion (0-1)       |
+| `contour`    | `number`                           | `0.3`       | Edge sharpness (0-1)         |
+| `angle`      | `number`                           | `30`        | Pattern rotation (degrees)   |
+| `speed`      | `number`                           | `1`         | Animation speed multiplier   |
+
 
 ### PerlinLiquidMetalShader Props
 
 Includes all `LiquidMetalShader` props plus:
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `metal` | `MetalPresetName` | `'silver'` | Metal preset name |
-| `customHighlight` | `[number, number, number]` | - | Custom highlight RGB (if metal='custom') |
-| `customShadow` | `[number, number, number]` | - | Custom shadow RGB (if metal='custom') |
+
+| Prop              | Type                       | Default    | Description                              |
+| ----------------- | -------------------------- | ---------- | ---------------------------------------- |
+| `metal`           | `MetalPresetName`          | `'silver'` | Metal preset name                        |
+| `customHighlight` | `[number, number, number]` | -          | Custom highlight RGB (if metal='custom') |
+| `customShadow`    | `[number, number, number]` | -          | Custom shadow RGB (if metal='custom')    |
+
 
 ### SensorLiquidMetalShader Props
 
 Includes all `PerlinLiquidMetalShader` props plus:
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `sensorInfluence` | `number` | `0.7` | How much device tilt affects reflection (0-1) |
-| `sensorInterval` | `number` | `16` | Sensor update interval in ms (lower = smoother) |
+
+| Prop              | Type     | Default | Description                                     |
+| ----------------- | -------- | ------- | ----------------------------------------------- |
+| `sensorInfluence` | `number` | `0.7`   | How much device tilt affects reflection (0-1)   |
+| `sensorInterval`  | `number` | `16`    | Sensor update interval in ms (lower = smoother) |
+
 
 **Sensor Behavior:**
+
 - **Roll (left/right tilt)**: Rotates reflection angle
 - **Pitch (forward/backward tilt)**: Shifts lighting gradient
 - Requires physical device (simulator won't show sensor effect)
 
 ### Shape Modes
 
-| Value | Shape | Description |
-|-------|-------|-------------|
-| `0` | Full-fill | Fills entire canvas with edge effects |
-| `1` | Circle | Centered circular shape |
-| `2` | Daisy | Flower/petal pattern (animated) |
-| `3` | Diamond | Rotated square |
-| `4` | Metaballs | Animated blob shapes |
+
+| Value | Shape     | Description                           |
+| ----- | --------- | ------------------------------------- |
+| `0`   | Full-fill | Fills entire canvas with edge effects |
+| `1`   | Circle    | Centered circular shape               |
+| `2`   | Daisy     | Flower/petal pattern (animated)       |
+| `3`   | Diamond   | Rotated square                        |
+| `4`   | Metaballs | Animated blob shapes                  |
+
 
 ### Metal Presets
 
-| Preset | Highlight | Shadow | Description |
-|--------|-----------|--------|-------------|
-| `silver` | `[0.98, 0.98, 1.0]` | `[0.10, 0.10, 0.10]` | Classic metallic silver |
-| `gold` | `[1.0, 0.84, 0.0]` | `[0.40, 0.25, 0.0]` | Warm yellow gold |
-| `copper` | `[0.72, 0.45, 0.20]` | `[0.25, 0.12, 0.05]` | Reddish-brown copper |
-| `roseGold` | `[0.98, 0.76, 0.70]` | `[0.35, 0.15, 0.12]` | Pink-tinted gold |
-| `bronze` | `[0.80, 0.50, 0.20]` | `[0.30, 0.15, 0.05]` | Antique bronze |
-| `platinum` | `[0.90, 0.89, 0.88]` | `[0.15, 0.15, 0.17]` | Cool silvery-white |
-| `chrome` | `[1.0, 1.0, 1.0]` | `[0.05, 0.05, 0.05]` | High-contrast chrome |
-| `titanium` | `[0.62, 0.62, 0.65]` | `[0.12, 0.12, 0.15]` | Dark gunmetal |
-| `brass` | `[0.95, 0.80, 0.30]` | `[0.35, 0.28, 0.08]` | Warm yellow brass |
+
+| Preset     | Highlight            | Shadow               | Description             |
+| ---------- | -------------------- | -------------------- | ----------------------- |
+| `silver`   | `[0.98, 0.98, 1.0]`  | `[0.10, 0.10, 0.10]` | Classic metallic silver |
+| `gold`     | `[1.0, 0.84, 0.0]`   | `[0.40, 0.25, 0.0]`  | Warm yellow gold        |
+| `copper`   | `[0.72, 0.45, 0.20]` | `[0.25, 0.12, 0.05]` | Reddish-brown copper    |
+| `roseGold` | `[0.98, 0.76, 0.70]` | `[0.35, 0.15, 0.12]` | Pink-tinted gold        |
+| `bronze`   | `[0.80, 0.50, 0.20]` | `[0.30, 0.15, 0.05]` | Antique bronze          |
+| `platinum` | `[0.90, 0.89, 0.88]` | `[0.15, 0.15, 0.17]` | Cool silvery-white      |
+| `chrome`   | `[1.0, 1.0, 1.0]`    | `[0.05, 0.05, 0.05]` | High-contrast chrome    |
+| `titanium` | `[0.62, 0.62, 0.65]` | `[0.12, 0.12, 0.15]` | Dark gunmetal           |
+| `brass`    | `[0.95, 0.80, 0.30]` | `[0.35, 0.28, 0.08]` | Warm yellow brass       |
+
 
 ---
 
@@ -255,11 +270,13 @@ Includes all `PerlinLiquidMetalShader` props plus:
 The two shader variants use different noise algorithms:
 
 **Simplex Noise** (LiquidMetalShader):
+
 - More organic, irregular patterns
 - Slightly faster computation
 - Used in original paper-design shader
 
 **Perlin Noise** (PerlinLiquidMetalShader):
+
 - Smoother, more regular gradients
 - Quintic interpolation for better quality
 - Differentiates from the original
@@ -289,6 +306,7 @@ Device Tilt → Sensor Data → Shader Uniforms → Visual Effect
 ```
 
 **What changes with tilt:**
+
 1. **Reflection angle**: Stripe pattern rotates as you tilt left/right
 2. **Light gradient**: Highlight shifts up/down as you tilt forward/back
 3. **Bump mapping**: Surface normals respond to orientation
@@ -327,6 +345,7 @@ This shader is ported from [paper-design/shaders](https://github.com/paper-desig
 - Not allowed: Creating competing shader libraries
 
 The `PerlinLiquidMetalShader` variant differentiates from the original by:
+
 1. Using Perlin noise instead of simplex noise
 2. Adding customizable metal color presets
 3. Optimizing for React Native/mobile
@@ -335,7 +354,8 @@ The `PerlinLiquidMetalShader` variant differentiates from the original by:
 
 ## Future Enhancements
 
-- [ ] **Image mode**: Apply liquid metal effect to images using `uniform shader image`
-- [ ] **Touch interaction**: Ripples emanating from tap points
-- [x] **Gyroscope response**: Metal reflects based on device tilt (`SensorLiquidMetalShader`)
-- [ ] **Additional shapes**: Heart, star, rounded rectangle
+- **Image mode**: Apply liquid metal effect to images using `uniform shader image`
+- **Touch interaction**: Ripples emanating from tap points
+- **Gyroscope response**: Metal reflects based on device tilt (`SensorLiquidMetalShader`)
+- **Additional shapes**: Heart, star, rounded rectangle
+

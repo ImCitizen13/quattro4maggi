@@ -1,21 +1,19 @@
-import TextVerticalMove from "@/components/text-vertical-move/TextVerticalMove";
+import { RippleEffect } from "@/components/ripple-effect/RippleEffect";
 import { ThemeHeaderTitle, ThemeView } from "@/components/Theme";
 import { Stack } from "expo-router";
 import React from "react";
 import { StyleSheet } from "react-native";
 
-export default function TextVerticalMoveScreen() {
+export default function Index() {
   return (
     <ThemeView style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
-          headerTitle: () => (
-            <ThemeHeaderTitle text="Text Vertical Move" />
-          ),
+          headerTitle: () => <ThemeHeaderTitle text="Ripple Effect" />,
         }}
       />
-      <TextVerticalMove />
+      <RippleEffect />
     </ThemeView>
   );
 }
@@ -23,7 +21,5 @@ export default function TextVerticalMoveScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

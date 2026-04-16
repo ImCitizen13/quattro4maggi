@@ -29,7 +29,7 @@ export default function RootLayout() {
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
           <Stack>
-            <Stack.Screen name="index" options={{ title: "quattro4maggi" }} />
+            <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen
               name="shared-element"
               options={{ title: "Shared Element" }}
@@ -54,10 +54,7 @@ export default function RootLayout() {
               name="live-border-card"
               options={{ title: "Live Border Card" }}
             />
-            <Stack.Screen
-              name="timer"
-              options={{ title: "Timer"}}
-            />
+            <Stack.Screen name="timer" options={{ title: "Timer" }} />
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>

@@ -1,39 +1,42 @@
-import { Link } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Href, Link } from "expo-router";
+import { FlatList, Pressable, StyleSheet, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const demos = [
-  // { name: 'Shared Element', href: '/shared-element' as const },
-  // { name: 'Ripple Shader', href: '/ripple-shader' as const },
-  // { name: 'Final Ripple', href: '/final-ripple' as const },
-  // { name: 'Shader Wrapper', href: '/shader-wrapper' as const },
-  { name: 'Timer', href: '/timer' as const },
-  { name: 'Scale Flip Card', href: '/scale-flip-card' as const },
-  { name: 'Text Flyin', href: '/text-flyin' as const },
-  { name: 'Bouncy Scale Ball', href: '/bouncy-scale-ball' as const },
-  { name: 'Liquid Metal', href: '/liquid-metal' as const },
-  { name: 'Live Border Card', href: '/live-border-card' as const },
-  { name: 'Text Vertical Move', href: '/text-vertical-move' as const },
-  { name: 'Select From List', href: '/select-from-list' as const },
-  
+type Demo = {
+  name: string;
+  href: Href;
+};
+
+const demos: Demo[] = [
+  { name: "Ripple Effect", href: "/ripple-effect" as const },
+  { name: "Scale Flip Card", href: "/scale-flip-card" as const },
+  { name: "Live Border Card", href: "/live-border-card" as const },
+  { name: "Liquid Metal", href: "/liquid-metal" as const },
 ];
 
+const ItemCellView = ({ index, demo }: { index: number; demo: Demo }) => {
+  return (
+    <Link key={index} href={demo.href} asChild>
+      <Pressable style={styles.card}>
+        <Text style={styles.cardTitle}>{demo.name}</Text>
+      </Pressable>
+    </Link>
+  );
+};
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
-      
       <Text style={styles.title}>Demos</Text>
-      <View style={styles.grid}>
-        {demos.map((demo) => (
-          <Link key={demo.href} href={demo.href} asChild>
-            <Pressable style={styles.card}>
-              <Text style={styles.cardTitle}>{demo.name}</Text>
-            </Pressable>
-          </Link>
+      <FlatList
+        style={{ flex: 1 }}
+        data={demos}
+        renderItem={({ index, item }) => {
+          return <ItemCellView index={index} demo={item} />;
+        }}
+        
+        contentContainerStyle={styles.grid}
+      />
 
-          
-        ))}
-      </View>
     </SafeAreaView>
   );
 }
@@ -41,24 +44,25 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    padding: 14
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 24,
+    fontWeight: "bold",
+    color: "white",
+    marginVertical: 24,
   },
   grid: {
     gap: 12,
   },
   card: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: "#1a1a1a",
     borderRadius: 12,
     padding: 20,
   },
   cardTitle: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
