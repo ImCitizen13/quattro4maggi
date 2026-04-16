@@ -12,10 +12,10 @@ Clone them. Learn from them. Ship them.
 
 | Demo | Preview | Description |
 |------|---------|-------------|
+| [Ripple Effect](./src/components/ripple-effect/) | ![ripple-effect](./assets/demos/ripple-effect.gif) | Touch-reactive ripple shader with customizable colors |
 | [Scale Flip Card](./src/components/scale-flip-card/) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card that expands into fullscreen with 3D flip animation |
-| [Text Flyin](./src/components/text-flyin/) | ![text-flyin](./assets/demos/text-flyin.gif) | Staggered character fly-in with spring physics |
-| [Liquid Metal](./src/components/liquid-metal/) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader with animated liquid metal effects |
 | [Live Border Card](./src/components/live-border-card/) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating gradients |
+| [Liquid Metal](./src/components/liquid-metal/) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader with animated liquid metal effects |
 
 ---
 
