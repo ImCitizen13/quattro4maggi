@@ -1,4 +1,4 @@
-import MorphingHourGlassTimer from "@/components/timer/MorphingHourGlassTimer";
+import WabiTimerExperiment from "@/components/wabi-and-more/WabiTimerExperiment";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -12,7 +12,7 @@ export default function Timer() {
         <LiveBorderTimer />
       </View> */}
       <View style={styles.container} key={2}>
-        <MorphingHourGlassTimer />
+        <WabiTimerExperiment />
       </View>
     </View>
   );

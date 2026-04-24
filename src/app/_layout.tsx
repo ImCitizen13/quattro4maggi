@@ -56,8 +56,8 @@ export default function RootLayout() {
               options={{ title: "Live Border Card" }}
             />
             <Stack.Screen
-              name="timer"
-              options={{ title: "Timer"}}
+              name="wabi-and-more"
+              options={{ title: "Wabi and More"}}
             />
           </Stack>
           <StatusBar style="auto" />
