@@ -31,6 +31,7 @@
     "expo-symbols": "~55.0.5",
     "expo-system-ui": "~55.0.9",
     "expo-web-browser": "~55.0.9",
+    "lottie-react-native": "~7.3.4",
     "pressto": "^0.6.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
