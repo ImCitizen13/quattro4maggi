@@ -10,6 +10,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.meltohamy.quattro4maggi",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "icon": {
         "light": "./assets/icons/ios-light.png",
         "dark": "./assets/icons/ios-dark.png",
@@ -56,6 +59,20 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "root": "./src/app"
+      },
+      "eas": {
+        "projectId": "589debc9-d8d1-442d-8309-6599db2f52d7"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/589debc9-d8d1-442d-8309-6599db2f52d7"
     }
   }
 }

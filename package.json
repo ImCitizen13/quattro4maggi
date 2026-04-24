@@ -30,6 +30,7 @@
     "expo-status-bar": "~55.0.4",
     "expo-symbols": "~55.0.5",
     "expo-system-ui": "~55.0.9",
+    "expo-updates": "~55.0.21",
     "expo-web-browser": "~55.0.9",
     "lottie-react-native": "~7.3.4",
     "pressto": "^0.6.0",
