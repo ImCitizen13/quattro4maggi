@@ -56,6 +56,7 @@ export default function DemoCardView({
         <Text style={styles.cardTitle}>{demo.name}</Text>
         {lottie && (
           <LottieView
+          autoPlay
             ref={animation}
             style={{
               width: 100,
