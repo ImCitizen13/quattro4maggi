@@ -1,5 +1,5 @@
 import DemoCardView, { Demo } from "@/components/ui/DemoCardView";
-import { FlatList, StyleSheet, Text } from "react-native";
+import { FlatList, StyleSheet, Text, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const demos: Demo[] = [
@@ -48,9 +48,10 @@ const demos: Demo[] = [
 ];
 
 export default function HomeScreen() {
+  const isDark = useColorScheme() === "dark"; 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Demos</Text>
+      <Text style={[styles.title, {color: isDark ? "white" : "black"}]}>Demos</Text>
       <FlatList
         style={{ flex: 1 }}
         data={demos}
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "white",
+    
     marginVertical: 24,
   },
   grid: {

@@ -390,6 +390,7 @@ export default function WabiTimerExperiment() {
 
       {/* Social media footer — animated opacity based on reveal state */}
       <SocialFooter animatedStyle={socialAnimatedStyle} handle="@m090009" />
+    {/* <View><MaterialCommunityIcons name="back"</View> */}
     </View>
   );
 }
