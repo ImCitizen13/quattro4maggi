@@ -48,3 +48,5 @@ app-example
 /.vscode
 
 temp/
+
+DEBUG/
