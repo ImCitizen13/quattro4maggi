@@ -19,6 +19,7 @@ export default function RootLayout() {
     "BebasNeue-Regular": require("@/assets/fonts/BebasNeue-Regular.ttf"),
     "IndieFlower-Regular": require("@/assets/fonts/IndieFlower-Regular.ttf"),
     "LobsterTwo-Regular": require("@/assets/fonts/LobsterTwo-Regular.ttf"),
+     "LexendDeca": require("@/assets/fonts/LexendDeca-VariableFont_wght.ttf"),
     Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
   });
 
@@ -54,7 +55,10 @@ export default function RootLayout() {
               name="live-border-card"
               options={{ title: "Live Border Card" }}
             />
-            <Stack.Screen name="timer" options={{ title: "Timer" }} />
+            <Stack.Screen
+              name="wabi-and-more"
+              options={{ title: "Wabi and More"}}
+            />
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>
