@@ -4,6 +4,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const demos: Demo[] = [
   {
+    name: "Wabi and More",
+    href: "/wabi-and-more" as const,
+    tags: [
+      { name: "skia", color: "green" },
+      { name: "reanimated", color: "#6a539a" },
+    ],
+    lottieLink: "wabi-and-more.json"
+  },
+  {
     name: "Ripple Effect",
     href: "/ripple-effect" as const,
     tags: [

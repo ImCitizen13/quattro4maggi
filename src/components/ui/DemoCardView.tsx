@@ -6,6 +6,7 @@ import React, { useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 const LOTTIE_ASSETS = {
+  "wabi-and-more.json": require("../../../assets/lottie/wabi-and-more_dark.json"),
   "liquid-metal.json": require("../../../assets/lottie/liquid-metal_dark.json"),
   "live-border.json": require("../../../assets/lottie/live-border_dark.json"),
   "ripple.json": require("../../../assets/lottie/ripple_dark.json"),
@@ -57,7 +58,7 @@ export default function DemoCardView({
         {lottie && (
           <LottieView
           autoPlay
-            ref={animation}
+            // ref={animation}
             style={{
               width: 100,
               height: 100,
