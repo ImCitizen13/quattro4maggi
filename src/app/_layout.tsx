@@ -19,9 +19,11 @@ export default function RootLayout() {
     "BebasNeue-Regular": require("@/assets/fonts/BebasNeue-Regular.ttf"),
     "IndieFlower-Regular": require("@/assets/fonts/IndieFlower-Regular.ttf"),
     "LobsterTwo-Regular": require("@/assets/fonts/LobsterTwo-Regular.ttf"),
-     "LexendDeca": require("@/assets/fonts/LexendDeca-VariableFont_wght.ttf"),
+    LexendDeca: require("@/assets/fonts/LexendDeca-VariableFont_wght.ttf"),
     Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
   });
+
+  
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -30,7 +32,10 @@ export default function RootLayout() {
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
           <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="index"
+              options={{ headerShown: false, title: "Demos" }}
+            />
             <Stack.Screen
               name="shared-element"
               options={{ title: "Shared Element" }}
@@ -57,7 +62,7 @@ export default function RootLayout() {
             />
             <Stack.Screen
               name="wabi-and-more"
-              options={{ title: "Wabi and More"}}
+              options={{ title: "Wabi and More" }}
             />
           </Stack>
           <StatusBar style="auto" />
