@@ -36,8 +36,10 @@ import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from "react-
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
+import { Presets, Settings } from "react-native-pulsar";
 import { BouncyRippleShader } from "./shaders";
 
+Settings.enableSound(false);
 // ============================================================================
 // Types
 // ============================================================================
@@ -91,6 +93,7 @@ export function RippleEffect({
 
   // Tap gesture handler
   const tapGesture = Gesture.Tap().onEnd((e) => {
+    Presets.ripple()
     const normalizedX = Math.max(0, Math.min(1, e.x / canvasWidth));
     const normalizedY = Math.max(0, Math.min(1, e.y / canvasHeight));
 
