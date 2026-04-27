@@ -31,11 +31,12 @@ import {
   useClock,
   useImage,
 } from "@shopify/react-native-skia";
-import React from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
+import { LabeledSwitch } from "@/components/ui/LabeledSwitch";
 import { Presets, Settings } from "react-native-pulsar";
 import { BouncyRippleShader } from "./shaders";
 
@@ -75,6 +76,7 @@ export function RippleEffect({
   widthRatio = DEFAULT_WIDTH_RATIO,
 }: RippleEffectProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const [isAdvanced, setIsAdvanced] = useState(false);
 
   const canvasWidth = screenWidth * widthRatio;
   const canvasHeight = screenHeight * heightRatio;
@@ -111,6 +113,14 @@ export function RippleEffect({
 
   return (
     <View style={styles.container}>
+      <LabeledSwitch
+        leftLabel="Basic"
+        rightLabel="Advanced"
+        value={isAdvanced}
+        onChange={setIsAdvanced}
+        earlyBadge="right"
+      />
+
       {!image && <ActivityIndicator size="large" color="#fff" style={styles.loader} />}
 
       <GestureDetector gesture={tapGesture}>
@@ -149,6 +159,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: 16
     // backgroundColor: "#1a1a1a",
   },
   canvas: {
