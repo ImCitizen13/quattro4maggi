@@ -22,9 +22,9 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/icons/adaptove-icon.png",
-        "backgroundImage": "./assets/icons/adaptove-icon.png",
-        "monochromeImage": "./assets/icons/adaptove-icon.png"
+        "foregroundImage": "./assets/icons/adaptive-icon.png",
+        "backgroundImage": "./assets/icons/adaptive-icon.png",
+        "monochromeImage": "./assets/icons/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.meltohamy.quattro4maggi"
