@@ -8,8 +8,10 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 
+import Splash from "@/components/common/Splash";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { PortalProvider } from "@gorhom/portal";
+import { useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function RootLayout() {
@@ -23,11 +25,17 @@ export default function RootLayout() {
     Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
   });
 
-  
+  const [isLoading, setIsloading] = useState(true);
+  const isDoneLoading = () => {
+    setIsloading(false);
+  };
+
+  if (isLoading) return <Splash isDoneLoading={isDoneLoading} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PortalProvider>
+        {/* {isLoading && <Splash isDoneLoading={isDoneLoading} />} */}
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
