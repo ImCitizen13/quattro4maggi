@@ -3,7 +3,8 @@ import {
   KineticTextHandle,
 } from "@/components/text-flyin/TextCanvas";
 import { ThemeButton, ThemeHeaderTitle } from "@/components/Theme";
-
+import { Column, Host, Slider, Switch, } from "@expo/ui/jetpack-compose";
+import { disabled, opacity, padding } from "@expo/ui/swift-ui/modifiers";
 import { Stack } from "expo-router";
 import React, { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -81,8 +82,8 @@ export default function TextFlyinDemo() {
       </View>
 
       <View style={styles.durationContainer}>
-        {/* <Host style={{ width: "80%", height: 100 }}>
-          <VStack
+        <Host style={{ width: "80%", height: 100 }}>
+          <Column
             modifiers={[
               // glassEffect({
               //   glass: {
@@ -93,26 +94,29 @@ export default function TextFlyinDemo() {
               //   shape: "rectangle",
               // }),
               padding({ all: 10 }),
+              
             ]}
-            spacing={10}
+            verticalArrangement={{spacedBy: 10}}
+            // spacing={10}
+            
           >
             <Switch
               value={lagChecked}
-              onValueChange={(checked) => {
+              onCheckedChange={(checked) => {
                 setLagChecked(checked);
               }}
-              color="purple"
-              label="Make it laggy"
-              variant="switch"
+              // color="purple"
+              // text="Make it laggy"
+              // variant="switch"
             />
             <Switch
               value={checked}
-              onValueChange={(checked) => {
+              onCheckedChange={(checked) => {
                 setChecked(checked);
               }}
-              color="purple"
-              label="Use Slider"
-              variant="switch"
+              // color="purple"
+              // label="Use Slider"
+              // variant="switch"
             />
             <Slider
               max={1}
@@ -121,13 +125,13 @@ export default function TextFlyinDemo() {
               onValueChange={(value) => {
                 setSliderValue(value);
               }}
-              color="purple"
+              // color="purple"
               modifiers={[opacity(checked ? 1 : 0.5), disabled(!checked)]}
             />
 
 
-          </VStack>
-        </Host> */}
+          </Column>
+        </Host>
       </View>
       {/* <SkiaMorphingButton /> */}
     </SafeAreaView>

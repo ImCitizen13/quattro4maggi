@@ -204,14 +204,15 @@ export default function Index() {
             <Text style={styles.switchLabel}>
               Glow intensity: {glowIntensity.toFixed(1)}
             </Text>
+            {/* */}
             <Host style={styles.sliderHost}>
               <Slider
                 min={0}
                 max={1}
                 value={glowIntensity}
                 onValueChange={setGlowIntensity}
-                steps={10}
-                color="#6644aa"
+                step={10}
+                // color="#6644aa"
               />
             </Host>
           </View>

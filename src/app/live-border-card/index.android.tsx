@@ -1,5 +1,6 @@
 import AdaptableSkiaLiveBorderCard from "@/components/live-border-card/AdaptableSkiaLiveBorderCard";
 import { ThemeView } from "@/components/Theme";
+import { Host, Slider } from "@expo/ui/jetpack-compose";
 import { SimpleLineIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -203,6 +204,17 @@ export default function Index() {
             <Text style={styles.switchLabel}>
               Glow intensity: {glowIntensity.toFixed(1)}
             </Text>
+            {/* */}
+            <Host style={styles.sliderHost}>
+              <Slider
+                min={0}
+                max={1}
+                value={glowIntensity}
+                onValueChange={setGlowIntensity}
+                // step={10}
+                // color="#6644aa"
+              />
+            </Host>
           </View>
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>Pulse</Text>
