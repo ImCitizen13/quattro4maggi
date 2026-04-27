@@ -4,13 +4,8 @@ import { StyleSheet, View } from "react-native";
 
 export default function Timer() {
 
-  console.log("View Refreshed ♻️");
-
   return (
-    <View style={styles.container} >
-      {/* <View style={styles.container} key={1}>
-        <LiveBorderTimer />
-      </View> */}
+    <View style={styles.container}>
       <View style={styles.container} key={2}>
         <WabiTimerExperiment />
       </View>
@@ -25,7 +20,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#1a1a1a",
     gap: 32,
-    width: "100%"
+    width: "100%",
   },
   timerContent: {
     flex: 1,

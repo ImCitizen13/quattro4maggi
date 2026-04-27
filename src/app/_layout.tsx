@@ -25,17 +25,26 @@ export default function RootLayout() {
     Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
   });
 
-  const [isLoading, setIsloading] = useState(true);
-  const isDoneLoading = () => {
-    setIsloading(false);
+  const [isAnimationDone, setIsAnimationDone] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+
+  const onAnimationFinish = () => {
+    setShowSplash(false);
   };
 
-  if (isLoading) return <Splash isDoneLoading={isDoneLoading} />;
+  const onExitComplete = () => {
+    setIsAnimationDone(true);
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PortalProvider>
-        {/* {isLoading && <Splash isDoneLoading={isDoneLoading} />} */}
+        {showSplash && (
+          <Splash
+            onAnimationFinish={onAnimationFinish}
+            onExitComplete={onExitComplete}
+          />
+        )}
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
@@ -45,32 +54,36 @@ export default function RootLayout() {
               options={{ headerShown: false, title: "Demos" }}
             />
             <Stack.Screen
-              name="shared-element"
-              options={{ title: "Shared Element" }}
+              name="bouncy-scale-ball"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
-              name="ripple-shader"
-              options={{ title: "Ripple Shader" }}
-            />
-            <Stack.Screen
-              name="final-ripple"
-              options={{ title: "Final Ripple" }}
-            />
-            <Stack.Screen
-              name="shader-wrapper"
-              options={{ title: "Shader Wrapper" }}
-            />
-            <Stack.Screen
-              name="scale-flip-card"
-              options={{ title: "Scale Flip Card" }}
+              name="liquid-metal"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="live-border-card"
-              options={{ title: "Live Border Card" }}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ripple-effect"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="scale-flip-card"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="select-from-list"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="text-flyin"
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="wabi-and-more"
-              options={{ title: "Wabi and More" }}
+              options={{ headerShown: false }}
             />
           </Stack>
           <StatusBar style="auto" />

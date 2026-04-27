@@ -1,3 +1,5 @@
+import { HeaderBackButton } from "@react-navigation/elements";
+import { useRouter } from "expo-router";
 import { PressableScale } from "pressto";
 import React from "react";
 import {
@@ -19,7 +21,7 @@ export default function Theme() {
 
 export const ThemeView = ({
   children,
-  style
+  style,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -41,6 +43,23 @@ export const ThemeHeaderTitle = ({
   return (
     <View style={styles.header}>
       <ThemeText text={text} style={[styles.title, style]} />
+    </View>
+  );
+};
+
+export const ThemeHeader = ({
+  text,
+  style,
+}: {
+  text: string;
+  style?: StyleProp<TextStyle>;
+}) => {
+  const router = useRouter();
+  return (
+    <View style={styles.themeHeader}>
+      <HeaderBackButton tintColor="#fff" onPress={() => router.back()} />
+      <ThemeHeaderTitle text={text} style={style} />
+      <View style={styles.headerSpacer} />
     </View>
   );
 };
@@ -76,7 +95,6 @@ export const ThemeButton = ({
 
 const styles = StyleSheet.create({
   container: {
-    // flex: 1,
     backgroundColor: "black",
     padding: 10,
   },
@@ -84,13 +102,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  themeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1a1a1a",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  headerSpacer: {
+    width: 40,
+  },
   header: {
     flex: 1,
-    width: "100%",
-    height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    // marginBottom: 20,
   },
   title: {
     fontSize: 30,

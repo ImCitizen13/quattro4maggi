@@ -1,12 +1,12 @@
 import { PerlinLiquidMetalShader } from "@/components/liquid-metal/PerlinLiquidMetalShader";
 import { ThemeHeaderTitle, ThemeText, ThemeView } from "@/components/Theme";
 import { MetalPresetName } from "@/lib/shaders/ColorsLiquidMetal";
-import { SimpleLineIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, SimpleLineIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import { PressableScale } from "pressto";
 import React, { useState } from "react";
-import { FlatList, StyleSheet } from "react-native";
+import { FlatList, StyleSheet, useColorScheme } from "react-native";
 import { useAnimatedStyle } from "react-native-reanimated";
 
 /**
@@ -38,48 +38,107 @@ export default function LiquidMetalDemo() {
     };
   });
   const [metal, setMetal] = useState<MetalPresetName>("bronze");
-
+  const isDark = useColorScheme() == "dark";
   return (
     <ThemeView style={styles.container}>
       <Stack.Screen
         options={{
-          headerShown: true,
-          headerTitle: () => <ThemeHeaderTitle text="Liquid Metal" />,
+          headerStyle: { backgroundColor: "#1a1a1a" },
+          headerTitle: () => (
+            <ThemeHeaderTitle
+              style={{ color: !isDark ? "#000" : "#fff" }}
+              text="Scale Flip Card"
+            />
+          ),
+          headerLeft: () => (
+            <PressableScale onPress={() => router.back()}>
+              <MaterialCommunityIcons
+                name="arrow-left"
+                color={!isDark ? "#000" : "#fff"}
+                size={24}
+              />
+            </PressableScale>
+          ),
         }}
       />
       <ThemeView style={styles.shaderContainer}>
-        <LinearGradient colors={["#2E2E2E", "#000000"]} style={[styles.buttonContainer,
-        { width: size, height: size, borderRadius: size / 2 }]}>
-          <PressableScale onPress={() => { }} style={styles.button}>
-            <LinearGradient colors={["#2E2E2E", "#000000"]} style={[styles.buttonGradient, {
-              borderRadius: (size * .9) / 2,
-              width: size * .92,
-              height: size * .92,
-            }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-
-              
+        <LinearGradient
+          colors={["#2E2E2E", "#000000"]}
+          style={[
+            styles.buttonContainer,
+            { width: size, height: size, borderRadius: size / 2 },
+          ]}
+        >
+          <PressableScale onPress={() => {}} style={styles.button}>
+            <LinearGradient
+              colors={["#2E2E2E", "#000000"]}
+              style={[
+                styles.buttonGradient,
+                {
+                  borderRadius: (size * 0.9) / 2,
+                  width: size * 0.92,
+                  height: size * 0.92,
+                },
+              ]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
               <SimpleLineIcons name="ghost" size={size / 3} color="white" />
             </LinearGradient>
           </PressableScale>
-          <PerlinLiquidMetalShader width={size} height={size} metal={metal as MetalPresetName} customHighlight={[0.9, 0.5, 0.8]} customShadow={[0.3, 0.1, 0.2]} />
+          <PerlinLiquidMetalShader
+            width={size}
+            height={size}
+            metal={metal as MetalPresetName}
+            customHighlight={[0.9, 0.5, 0.8]}
+            customShadow={[0.3, 0.1, 0.2]}
+          />
         </LinearGradient>
-
       </ThemeView>
 
       <FlatList
         style={{ padding: 16 }}
         numColumns={3}
-        columnWrapperStyle={{ width: "100%", gap: 5, paddingVertical: 16, justifyContent: "space-around" }}
+        columnWrapperStyle={{
+          width: "100%",
+          gap: 5,
+          paddingVertical: 16,
+          justifyContent: "space-around",
+        }}
         // contentContainerStyle={{ gap: 16 }}
-        data={["silver", "gold", "copper", "roseGold", "bronze", "platinum", "chrome", "titanium", "brass", "custom"]}
+        data={[
+          "silver",
+          "gold",
+          "copper",
+          "roseGold",
+          "bronze",
+          "platinum",
+          "chrome",
+          "titanium",
+          "brass",
+          "custom",
+        ]}
         renderItem={({ item }) => (
-          <PressableScale onPress={() => { setMetal(item as MetalPresetName) }} style={styles.buttonItem}>
-            <PerlinLiquidMetalShader width={size / 2} height={size / 2} metal={item as MetalPresetName} customHighlight={[0.9, 0.5, 0.8]} customShadow={[0.3, 0.1, 0.2]} />
-            <ThemeText text={item.toLocaleUpperCase()} style={{ fontSize: 16, fontWeight: "bold", color: "white" }} />
+          <PressableScale
+            onPress={() => {
+              setMetal(item as MetalPresetName);
+            }}
+            style={styles.buttonItem}
+          >
+            <PerlinLiquidMetalShader
+              width={size / 2}
+              height={size / 2}
+              metal={item as MetalPresetName}
+              customHighlight={[0.9, 0.5, 0.8]}
+              customShadow={[0.3, 0.1, 0.2]}
+            />
+            <ThemeText
+              text={item.toLocaleUpperCase()}
+              style={{ fontSize: 16, fontWeight: "bold", color: "white" }}
+            />
           </PressableScale>
         )}
       />
-
     </ThemeView>
   );
 }

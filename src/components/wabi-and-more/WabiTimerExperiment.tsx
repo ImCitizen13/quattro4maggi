@@ -12,7 +12,6 @@ import {
   useSVG,
   useTypeface,
 } from "@shopify/react-native-skia";
-import { Stack } from "expo-router";
 import React from "react";
 import {
   PixelRatio,
@@ -31,6 +30,9 @@ import {
   withTiming,
 } from "react-native-reanimated";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { PressableScale } from "pressto";
 import StarsShader from "../common/StarsShader";
 import { BGSHADER } from "./BGTailwindShader";
 import { BShader, DEFAULT_PRISM_COLORS } from "./BShader";
@@ -275,8 +277,7 @@ export default function WabiTimerExperiment() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-
+      {/* <Stack.Screen options={{ headerShown: false }} /> */}
       {/* Gesture wrapper — detects pan gestures on the canvas */}
       <GestureDetector gesture={panGesture}>
         <Canvas style={styles.skiaCanvas}>
@@ -390,7 +391,51 @@ export default function WabiTimerExperiment() {
 
       {/* Social media footer — animated opacity based on reveal state */}
       <SocialFooter animatedStyle={socialAnimatedStyle} handle="@m090009" />
-    {/* <View><MaterialCommunityIcons name="back"</View> */}
+      {/* <View><MaterialCommunityIcons name="back"</View> */}
+
+      <PressableScale
+        style={{
+          position: "absolute",
+          left: CANVAS_WIDTH * 0.1,
+          top: CANVAS_HEIGHT * 0.1,
+          // backgroundColor: "white"
+        }}
+        onPress={() => router.back()}
+      >
+        {/* <Host
+          matchContents
+          style={{
+            position: "absolute",
+            width: 100,
+            height: 100,
+            left: CANVAS_WIDTH * 0.1,
+            top: CANVAS_HEIGHT * 0.1,
+            backgroundColor: "white",
+          }}
+        >
+          <Button
+            label="sklfjlsdkjk"
+            modifiers={[
+              glassEffect({
+                glass: {
+                  variant: "identity",
+                },
+              }),
+            ]}
+          >
+            <Label
+              title="Favorites"
+              systemImage="star.fill"
+              
+            />
+          </Button>
+        </Host> */}
+        <MaterialCommunityIcons
+          name="arrow-left"
+          color={!isDark ? "#000" : "#fff"}
+          size={24}
+        />
+      </PressableScale>
     </View>
   );
 }

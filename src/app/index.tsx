@@ -27,15 +27,15 @@ const demos: Demo[] = [
     tags: [{ name: "reanimated", color: "#6a539a" }],
     lottieLink: "scale-flip-card.json"
   },
-  {
-    name: "Live Border Card",
-    href: "/live-border-card" as const,
-    tags: [
-      { name: "skia", color: "green" },
-      { name: "reanimated", color: "#6a539a" },
-    ],
-    lottieLink: "live-border.json"
-  },
+  // {
+  //   name: "Live Border Card",
+  //   href: "/live-border-card" as const,
+  //   tags: [
+  //     { name: "skia", color: "green" },
+  //     { name: "reanimated", color: "#6a539a" },
+  //   ],
+  //   lottieLink: "live-border.json"
+  // },
   {
     name: "Liquid Metal",
     href: "/liquid-metal" as const,
