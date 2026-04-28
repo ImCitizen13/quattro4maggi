@@ -57,7 +57,8 @@ export default function HomeScreen() {
         data={demos}
         numColumns={2}
         columnWrapperStyle={{
-          justifyContent: "space-between"
+          justifyContent: "center",
+          gap: 12
         }}
         renderItem={({ index, item }) => (
           <DemoCardView index={index} demo={item} />
