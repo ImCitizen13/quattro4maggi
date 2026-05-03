@@ -2,7 +2,7 @@
   "expo": {
     "name": "quattro4maggi",
     "slug": "quattro4maggi",
-    "version": "1.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "quattro4maggi",
@@ -60,6 +60,13 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+      "eas": {
+        "projectId": "589debc9-d8d1-442d-8309-6599db2f52d7"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "router": {
         "root": "./src/app"
@@ -68,25 +75,9 @@
         "projectId": "589debc9-d8d1-442d-8309-6599db2f52d7"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/589debc9-d8d1-442d-8309-6599db2f52d7"
-    },
-    "extra": {
-      "router": {
-        "root": "./src/app"
-      },
-      "eas": {
-        "projectId": "589debc9-d8d1-442d-8309-6599db2f52d7"
-      }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+
     "updates": {
       "url": "https://u.expo.dev/589debc9-d8d1-442d-8309-6599db2f52d7"
     }
   }
-}
+

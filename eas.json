@@ -17,6 +17,10 @@
       "autoIncrement": true,
       "channel": "testflight"
     },
+    "testflight_1.0.0": {
+      "autoIncrement": true,
+      "channel": "testflight_1.0.0"
+    },
     "production": {
       "autoIncrement": true,
       "channel": "production"
