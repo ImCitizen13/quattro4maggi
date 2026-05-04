@@ -28,6 +28,7 @@
   },
   "submit": {
     "production": {},
-    "testflight": {}
+    "testflight": {},
+    "testflight_1.0.0": {}
   }
 }
