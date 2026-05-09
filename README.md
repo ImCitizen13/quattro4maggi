@@ -73,7 +73,7 @@ In the membership, I break these down step-by-step:
 The code here is free.  
 But understanding how to adapt it to your app is where most people get stuck.
 
-**Get early access (free during beta):** [tally.so/r/xXNJLr](https://tally.so/r/xXNJLr)
+**Get early access (free during beta):** [here](https://quattro4maggi-web.netlify.app/)
 
 ![wabi-demo](./src/assets/demos/wabi-demo.gif)
 
