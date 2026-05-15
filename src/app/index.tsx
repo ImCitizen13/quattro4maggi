@@ -10,7 +10,7 @@ const demos: Demo[] = [
       { name: "skia", color: "green" },
       { name: "reanimated", color: "#6a539a" },
     ],
-    lottieLink: "wabi-and-more.json"
+    lottieLink: "wabi-and-more.json",
   },
   {
     name: "Ripple Effect",
@@ -19,23 +19,23 @@ const demos: Demo[] = [
       { name: "skia", color: "green" },
       { name: "reanimated", color: "#6a539a" },
     ],
-    lottieLink: "ripple.json"
+    lottieLink: "ripple.json",
   },
   {
     name: "Scale Flip Card",
     href: "/scale-flip-card" as const,
     tags: [{ name: "reanimated", color: "#6a539a" }],
-    lottieLink: "scale-flip-card.json"
+    lottieLink: "scale-flip-card.json",
   },
-  // {
-  //   name: "Live Border Card",
-  //   href: "/live-border-card" as const,
-  //   tags: [
-  //     { name: "skia", color: "green" },
-  //     { name: "reanimated", color: "#6a539a" },
-  //   ],
-  //   lottieLink: "live-border.json"
-  // },
+  {
+    name: "Live Border Card",
+    href: "/live-border-card" as const,
+    tags: [
+      { name: "skia", color: "green" },
+      { name: "reanimated", color: "#6a539a" },
+    ],
+    lottieLink: "live-border.json",
+  },
   {
     name: "Liquid Metal",
     href: "/liquid-metal" as const,
@@ -43,22 +43,24 @@ const demos: Demo[] = [
       { name: "skia", color: "green" },
       { name: "reanimated", color: "#6a539a" },
     ],
-    lottieLink: "liquid-metal.json"
+    lottieLink: "liquid-metal.json",
   },
 ];
 
 export default function HomeScreen() {
-  const isDark = useColorScheme() === "dark"; 
+  const isDark = useColorScheme() === "dark";
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={[styles.title, {color: isDark ? "white" : "black"}]}>Demos</Text>
+      <Text style={[styles.title, { color: isDark ? "white" : "black" }]}>
+        Demos
+      </Text>
       <FlatList
         style={{ flex: 1 }}
         data={demos}
         numColumns={2}
         columnWrapperStyle={{
           justifyContent: "center",
-          gap: 12
+          gap: 12,
         }}
         renderItem={({ index, item }) => (
           <DemoCardView index={index} demo={item} />
@@ -77,7 +79,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    
+
     marginVertical: 24,
   },
   grid: {

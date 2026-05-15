@@ -6,7 +6,7 @@ export default function Layout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: "#1a1a1a" },
+        headerStyle: { backgroundColor: "#000" },
         headerLeft: () => (
           <HeaderBackButton tintColor="#fff" onPress={() => router.back()} />
         ),

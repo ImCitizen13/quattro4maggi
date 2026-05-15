@@ -42,7 +42,7 @@ export const ThemeHeaderTitle = ({
 }) => {
   return (
     <View style={styles.header}>
-      <ThemeText text={text} style={[styles.title, style]} />
+      <ThemeText text={text} style={[styles.text, style]} />
     </View>
   );
 };

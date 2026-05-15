@@ -20,7 +20,7 @@ export default function Demo() {
   const starts = [{ x: 0, y: 0 }];
   const ends = [{ x: 0, y: 1 }];
   return (
-    <ThemeView style={{ flex: 1, backgroundColor: "0C0C0C"  }}>
+    <ThemeView style={{ flex: 1, backgroundColor: "0C0C0C" }}>
       <Image
         source={require("../../../assets/images/particle_sun.jpg")}
         contentFit="contain"

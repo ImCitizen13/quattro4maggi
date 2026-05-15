@@ -63,6 +63,7 @@ export default function Index() {
         }}
         contentContainerStyle={{
           width: "100%",
+          flex: 1,
           alignItems: "center",
           justifyContent: "center",
           gap: 20,
@@ -70,7 +71,7 @@ export default function Index() {
       >
         <AdaptableSkiaLiveBorderCard
           width={cardWidth * 2}
-          height={cardHeight * 2}
+          height={cardHeight / 2}
           borderRadius={cardWidth}
           showGlow={showGlow}
           duration={2000}
@@ -225,14 +226,17 @@ export default function Index() {
         </View>
         <PressableScale
           style={{
-            width: "80%",
-            height: BASE_SIZE / 2,
+            width: "30%",
+            // height: BASE_SIZE / 2,
+            //
+            marginTop: 20,
+            padding: 12,
             backgroundColor: colors[selectedColors][0],
-            borderRadius: BASE_SIZE * 0.1,
+            borderRadius: BASE_SIZE,
             alignItems: "center",
             justifyContent: "center",
             borderWidth: 2,
-            borderColor: colors[selectedColors][3],
+            // borderColor: colors[selectedColors][3],
           }}
           onPress={() =>
             router.push({
@@ -243,7 +247,7 @@ export default function Index() {
         >
           <Text
             style={{
-              color: colors[selectedColors][2],
+              color: "white", //colors[selectedColors][2],
               fontSize: 16,
               fontWeight: "bold",
             }}

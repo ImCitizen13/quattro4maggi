@@ -43,7 +43,7 @@ import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { LabeledSwitch } from "@/components/ui/LabeledSwitch";
 import { Presets, Settings } from "react-native-pulsar";
-import { BouncyRipplePrismShader } from "../premuim/shaders";
+import { BouncyRipplePrismShader } from "../premium/shaders";
 import { BouncyRippleShader } from "./shaders";
 
 Settings.enableSound(false);
