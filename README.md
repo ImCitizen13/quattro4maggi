@@ -4,6 +4,8 @@ A collection of **production-quality** React Native animation experiments built 
 
 Clone them. Learn from them. Ship them.
 
+**[Join early access (free during beta)](https://quattro4maggi.com)**
+
 [quattro4maggi.com](https://quattro4maggi.com) · [@m090009](https://x.com/m090009)
 
 ---
@@ -12,7 +14,6 @@ Clone them. Learn from them. Ship them.
 
 | Demo | Preview | Description |
 |------|---------|-------------|
-
 | [Wabi & More](/src/components/wabi-and-more/README.md) | ![wabi-and-more](./assets/demos/wabi_demo.gif) | Interactive prism bubble with gesture-driven reveals, split-flap text, and particle effects |
 | [Ripple Effect](./src/components/ripple-effect/) | ![ripple-effect](./src/assets/demos/ripple-effect.gif) | Touch-reactive ripple shader with customizable colors |
 | [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card component that expands into a fullscreen portal with 3D flip animation |
@@ -73,11 +74,11 @@ In the membership, I break these down step-by-step:
 The code here is free.  
 But understanding how to adapt it to your app is where most people get stuck.
 
-**Get early access (free during beta):** [here](https://quattro4maggi-web.netlify.app/)
+### [Join Early Access (free during beta) at quattro4maggi.com](https://quattro4maggi.com)
 
 ![wabi-demo](./src/assets/demos/wabi-demo.gif)
 
-> Full **Wabi Timer replica** (gestures + interactions + bubble particles) is available for early access members — free during beta.
+> Full **Wabi Timer replica** (gestures + interactions + bubble particles) is available exclusively for early access members at [quattro4maggi.com](https://quattro4maggi.com) — free during beta.
 
 ---
 
