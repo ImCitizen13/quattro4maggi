@@ -32,6 +32,7 @@ import {
 } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
+import StarsShader from "../common/StarsShader";
 
 // ============================================================================
 // TYPES
@@ -45,7 +46,6 @@ export type PathMaskShaderProps = {
   viewBoxHeight?: number;
   width?: number;
   height?: number;
-  edgeWidth?: number;
   dispersion?: number;
   refraction?: number;
   specular?: number;
@@ -63,7 +63,6 @@ export function PathMaskShader({
   viewBoxHeight = 20,
   width = 300,
   height = 300,
-  edgeWidth = 15,
   dispersion = 0.05,
   refraction = 0.15,
   specular = 0.8,
@@ -126,7 +125,6 @@ export function PathMaskShader({
   const uniforms = useMemo(
     () => ({
       u_resolution: [width, height],
-      u_edgeWidth: edgeWidth,
       u_dispersion: dispersion,
       u_refraction: refraction,
       u_specular: specular,
@@ -138,16 +136,7 @@ export function PathMaskShader({
       u_prismColor4: prismColors[4],
       u_prismColor5: prismColors[5],
     }),
-    [
-      width,
-      height,
-      edgeWidth,
-      dispersion,
-      refraction,
-      specular,
-      bgColor,
-      prismColors,
-    ]
+    [width, height, dispersion, refraction, specular, bgColor, prismColors]
   );
 
   if (!shader || !path) {
@@ -161,6 +150,7 @@ export function PathMaskShader({
 
   return (
     <Canvas style={[styles.canvas, { width, height }]}>
+      <StarsShader width={width} height={height} />
       <Group
         layer={
           <Paint>
@@ -168,8 +158,11 @@ export function PathMaskShader({
           </Paint>
         }
       >
+
         <Path path={path} color="white" />
+
       </Group>
+
     </Canvas>
   );
 }
@@ -190,7 +183,6 @@ export function PathMaskShaderDemo() {
         viewBoxHeight={20}
         width={350}
         height={350}
-        edgeWidth={20}
         dispersion={0.08}
         specular={1.0}
         bgColor={[0.05, 0.05, 0.08]}

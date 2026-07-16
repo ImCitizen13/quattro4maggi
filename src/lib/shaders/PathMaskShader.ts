@@ -10,8 +10,10 @@
  * UNIFORMS:
  * - image: shader - The mask (white path on transparent background)
  * - u_resolution: float2 - Canvas resolution (width, height)
- * - u_edgeWidth: float - Prismatic edge band width in pixels
  * - u_dispersion: float - Chromatic aberration strength (0-0.1)
+ *
+ * CONSTANTS:
+ * - EDGE_WIDTH: float - Prismatic edge band width in pixels (20.0)
  * - u_refraction: float - Barrel distortion strength (0-0.3)
  * - u_specular: float - Specular highlight intensity (0-1)
  * - u_bgColor: half3 - Background color (RGB 0-1)
@@ -21,8 +23,9 @@
 export const pathMaskShaderSource = `
 uniform shader image;
 uniform float2 u_resolution;
-uniform float u_edgeWidth;
 uniform float u_dispersion;
+
+const float EDGE_WIDTH = 20.0;
 uniform float u_refraction;
 uniform float u_specular;
 uniform half3 u_bgColor;
@@ -80,7 +83,7 @@ float getDistanceFromEdge(float2 fragCoord) {
         float angle = float(i) * 6.28318 / 16.0;
         float2 dir = float2(cos(angle), sin(angle));
 
-        for (float d = 1.0; d <= u_edgeWidth * 2.0; d += 1.0) {
+        for (float d = 1.0; d <= EDGE_WIDTH * 2.0; d += 1.0) {
             float2 samplePos = fragCoord + dir * d;
             float sampleMask = image.eval(samplePos).a;
 
@@ -126,57 +129,56 @@ half3 getPrismColor(float2 fragCoord) {
 half4 main(float2 fragCoord) {
     float mask = image.eval(fragCoord).a;
 
-    // Outside the shape
+    // Outside the shape - fully transparent to show background
     if (mask < 0.01) {
-        return half4(u_bgColor, 1.0);
+        return half4(0.0, 0.0, 0.0, 0.0);
     }
 
     // Get edge info
     float edge = getEdgeFactor(fragCoord);
     float2 normal = getEdgeNormal(fragCoord);
     float distFromEdge = getDistanceFromEdge(fragCoord);
-    float edgeFactor = smoothstep(u_edgeWidth, 0.0, distFromEdge);
+    float edgeFactor = smoothstep(EDGE_WIDTH, 0.0, distFromEdge);
 
-    // Base glass color (slightly tinted)
-    half3 glassColor = half3(0.95, 0.97, 1.0);
+    // Prismatic edge coloring - strong at edges
+    half3 prism = getPrismColor(fragCoord);
 
-    // Apply refraction offset for chromatic aberration
-    float chromaOffset = u_dispersion * edgeFactor * u_edgeWidth;
+    // Apply chromatic aberration at edges
+    float chromaOffset = u_dispersion * edgeFactor * EDGE_WIDTH;
     float2 offsetR = normal * chromaOffset;
     float2 offsetB = normal * -chromaOffset;
 
     float maskR = image.eval(fragCoord + offsetR).a;
     float maskB = image.eval(fragCoord + offsetB).a;
 
-    // Chromatic aberration on the glass
+    // Chromatic split for rainbow edge effect
     half3 chromaColor = half3(
-        glassColor.r * half(maskR),
-        glassColor.g * half(mask),
-        glassColor.b * half(maskB)
+        half(maskR) * prism.r,
+        half(mask) * prism.g,
+        half(maskB) * prism.b
     );
-
-    // Prismatic edge coloring
-    half3 prism = getPrismColor(fragCoord);
-    half3 colorWithPrism = mix(chromaColor, prism, half(edgeFactor * 0.4));
 
     // Specular highlight (top-left light source)
     float2 lightDir = normalize(float2(-0.4, -0.6));
     float specDot = max(dot(normal, lightDir), 0.0);
-    float specular = (pow(specDot, 32.0) * 0.6 + pow(specDot, 8.0) * 0.15) * u_specular;
+    float specular = (pow(specDot, 32.0) * 0.8 + pow(specDot, 8.0) * 0.3) * u_specular;
 
-    // Inner glow/reflection
-    float innerGlow = smoothstep(0.0, u_edgeWidth * 3.0, distFromEdge) * 0.1;
+    // Rim lighting effect - stronger at edges
+    float rim = pow(edgeFactor, 1.5) * 0.6;
 
-    // Combine
-    half3 finalColor = colorWithPrism + half3(specular) + half3(innerGlow);
+    // Combine colors
+    half3 finalColor = chromaColor + half3(specular) + prism * half(rim);
+
+    // Alpha: transparent in center, opaque at edges (glass effect)
+    // This lets background (stars) show through the center
+    float interiorFactor = smoothstep(0.0, EDGE_WIDTH * 2.5, distFromEdge);
+    float glassAlpha = mix(1.0, 0.15, interiorFactor); // edges opaque, center see-through
 
     // Soft edge anti-aliasing
-    float alpha = smoothstep(0.0, 0.02, mask);
+    float edgeAA = smoothstep(0.0, 0.02, mask);
+    float finalAlpha = glassAlpha * edgeAA;
 
-    // Blend with background
-    half3 blended = mix(u_bgColor, finalColor, half(alpha));
-
-    return half4(blended, 1.0);
+    return half4(finalColor, half(finalAlpha));
 }
 `;
 
