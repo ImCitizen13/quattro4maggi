@@ -18,21 +18,45 @@
  * - Specular highlights
  */
 
-import {
-  DEFAULT_PRISM_COLORS,
-  pathMaskShaderSource,
-} from "@/lib/shaders/PathMaskShader";
+import { pathMaskShaderSource } from "@/lib/shaders/PathMaskShader";
 import {
   Canvas,
   Group,
   Paint,
   Path,
+  Rect,
   RuntimeShader,
+  Shader,
   Skia,
+  useClock,
+  vec,
 } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import StarsShader from "../common/StarsShader";
+import { useDerivedValue } from "react-native-reanimated";
+
+// Stars shader - outputs to GREEN channel only (R=0, G=stars, B=stars)
+// This leaves RED channel free for the mask
+const starsShaderSource = Skia.RuntimeEffect.Make(`
+  uniform float2 resolution;
+  uniform float time;
+
+  float hash12(float2 p) {
+    float3 p3 = fract(float3(p.x, p.y, p.x) * 0.1031);
+    p3 += dot(p3, float3(p3.y, p3.z, p3.x) + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+
+  half4 main(float2 fragCoord) {
+    float d = hash12(fragCoord);
+    d = pow(d, 3.0);
+    float mult = sin(1.2 * time + fragCoord.x + fragCoord.y) + 1.0;
+    mult *= 0.5;
+    d = smoothstep(0.99, 1.0, d) * mult;
+    // Output stars to G and B channels, leave R for mask
+    return half4(0.0, half(d), half(d), 1.0);
+  }
+`)!;
 
 // ============================================================================
 // TYPES
@@ -76,6 +100,8 @@ export function PathMaskShader({
     [1, 0.4, 0.8],
   ],
 }: PathMaskShaderProps) {
+  const clock = useClock();
+
   // ============================================================================
   // SVG PATH
   // ============================================================================
@@ -84,12 +110,10 @@ export function PathMaskShader({
     const p = Skia.Path.MakeFromSVGString(svgPath);
     if (!p) return null;
 
-    // Get actual path bounds
     const bounds = p.getBounds();
     const boundsWidth = bounds.width || viewBoxWidth;
     const boundsHeight = bounds.height || viewBoxHeight;
 
-    // Scale to fit with padding
     const padding = 40;
     const availableWidth = width - padding * 2;
     const availableHeight = height - padding * 2;
@@ -98,7 +122,6 @@ export function PathMaskShader({
       availableHeight / boundsHeight
     );
 
-    // Center the path
     const scaledWidth = boundsWidth * scale;
     const scaledHeight = boundsHeight * scale;
     const offsetX = (width - scaledWidth) / 2;
@@ -115,12 +138,17 @@ export function PathMaskShader({
   }, [svgPath, viewBoxWidth, viewBoxHeight, width, height]);
 
   // ============================================================================
-  // SHADER
+  // SHADERS
   // ============================================================================
 
-  const shader = useMemo(() => {
+  const mainShader = useMemo(() => {
     return Skia.RuntimeEffect.Make(pathMaskShaderSource);
   }, []);
+
+  const starsUniforms = useDerivedValue(() => ({
+    resolution: vec(width, height),
+    time: clock.value / 1000,
+  }));
 
   const uniforms = useMemo(
     () => ({
@@ -139,7 +167,7 @@ export function PathMaskShader({
     [width, height, dispersion, refraction, specular, bgColor, prismColors]
   );
 
-  if (!shader || !path) {
+  if (!mainShader || !path || !starsShaderSource) {
     console.error("Failed to compile shader or parse path");
     return null;
   }
@@ -148,21 +176,26 @@ export function PathMaskShader({
   // RENDER
   // ============================================================================
 
+  // Channel encoding approach:
+  // - Stars render to G/B channels (cyan-ish)
+  // - Mask path renders to R channel (red)
+  // - Shader reads R for mask detection, G/B for star content
   return (
     <Canvas style={[styles.canvas, { width, height }]}>
-      <StarsShader width={width} height={height} />
       <Group
         layer={
           <Paint>
-            <RuntimeShader source={shader} uniforms={uniforms} />
+            <RuntimeShader source={mainShader} uniforms={uniforms} />
           </Paint>
         }
       >
-
-        <Path path={path} color="white" />
-
+        {/* Stars background - outputs to G/B channels */}
+        <Rect x={0} y={0} width={width} height={height}>
+          <Shader source={starsShaderSource} uniforms={starsUniforms} />
+        </Rect>
+        {/* Mask path - outputs to R channel */}
+        <Path path={path} color="red" />
       </Group>
-
     </Canvas>
   );
 }

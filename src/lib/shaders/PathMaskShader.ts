@@ -127,58 +127,61 @@ half3 getPrismColor(float2 fragCoord) {
 // ============================================================================
 
 half4 main(float2 fragCoord) {
-    float mask = image.eval(fragCoord).a;
+    // Channel encoding:
+    // R channel = mask (1.0 where path is)
+    // G/B channels = stars content
+    half4 img = image.eval(fragCoord);
 
-    // Outside the shape - fully transparent to show background
-    if (mask < 0.01) {
-        return half4(0.0, 0.0, 0.0, 0.0);
+    float mask = img.r;      // Mask from red channel
+    float stars = img.g;     // Stars from green channel
+
+    // Outside the shape - show stars (convert G to grayscale)
+    if (mask < 0.5) {
+        return half4(half3(stars), 1.0);
     }
 
+    // Inside the shape - apply glass effect
+
     // Get edge info
-    float edge = getEdgeFactor(fragCoord);
     float2 normal = getEdgeNormal(fragCoord);
     float distFromEdge = getDistanceFromEdge(fragCoord);
     float edgeFactor = smoothstep(EDGE_WIDTH, 0.0, distFromEdge);
 
-    // Prismatic edge coloring - strong at edges
+    // Refraction: sample stars with offset toward center
+    float refractionStrength = u_refraction * (1.0 - edgeFactor * 0.3);
+    float2 center = u_resolution * 0.5;
+    float2 toCenter = normalize(center - fragCoord);
+    float2 refractOffset = toCenter * refractionStrength * 60.0;
+
+    // Chromatic aberration - sample G channel at different offsets
+    float chromaOffset = u_dispersion * EDGE_WIDTH * 3.0;
+    float starsR = image.eval(fragCoord + refractOffset + normal * chromaOffset).g;
+    float starsG = image.eval(fragCoord + refractOffset).g;
+    float starsB = image.eval(fragCoord + refractOffset - normal * chromaOffset).g;
+
+    half3 refracted = half3(half(starsR), half(starsG), half(starsB));
+
+    // Prismatic edge coloring
     half3 prism = getPrismColor(fragCoord);
 
-    // Apply chromatic aberration at edges
-    float chromaOffset = u_dispersion * edgeFactor * EDGE_WIDTH;
-    float2 offsetR = normal * chromaOffset;
-    float2 offsetB = normal * -chromaOffset;
-
-    float maskR = image.eval(fragCoord + offsetR).a;
-    float maskB = image.eval(fragCoord + offsetB).a;
-
-    // Chromatic split for rainbow edge effect
-    half3 chromaColor = half3(
-        half(maskR) * prism.r,
-        half(mask) * prism.g,
-        half(maskB) * prism.b
-    );
-
-    // Specular highlight (top-left light source)
+    // Specular highlight
     float2 lightDir = normalize(float2(-0.4, -0.6));
     float specDot = max(dot(normal, lightDir), 0.0);
     float specular = (pow(specDot, 32.0) * 0.8 + pow(specDot, 8.0) * 0.3) * u_specular;
 
-    // Rim lighting effect - stronger at edges
-    float rim = pow(edgeFactor, 1.5) * 0.6;
+    // Rim lighting
+    float rim = pow(edgeFactor, 1.5) * 0.4;
 
-    // Combine colors
-    half3 finalColor = chromaColor + half3(specular) + prism * half(rim);
+    // Blend: edges show prismatic colors, interior shows refracted stars
+    float interiorFactor = smoothstep(0.0, EDGE_WIDTH * 1.5, distFromEdge);
+    half3 edgeColor = prism * half(0.8) + half3(specular);
+    half3 interiorColor = refracted * 2.0 + prism * half(0.1);
+    half3 finalColor = mix(edgeColor, interiorColor, half(interiorFactor));
 
-    // Alpha: transparent in center, opaque at edges (glass effect)
-    // This lets background (stars) show through the center
-    float interiorFactor = smoothstep(0.0, EDGE_WIDTH * 2.5, distFromEdge);
-    float glassAlpha = mix(1.0, 0.15, interiorFactor); // edges opaque, center see-through
+    // Add rim glow
+    finalColor += prism * half(rim);
 
-    // Soft edge anti-aliasing
-    float edgeAA = smoothstep(0.0, 0.02, mask);
-    float finalAlpha = glassAlpha * edgeAA;
-
-    return half4(finalColor, half(finalAlpha));
+    return half4(finalColor, 1.0);
 }
 `;
 
