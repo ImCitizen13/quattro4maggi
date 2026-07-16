@@ -45,6 +45,13 @@ const demos: Demo[] = [
     ],
     lottieLink: "liquid-metal.json",
   },
+  {
+    name: "Path Mask Shader",
+    href: "/path-mask-shader" as const,
+    tags: [
+      { name: "skia", color: "green" },
+    ],
+  },
 ];
 
 export default function HomeScreen() {
