@@ -24,8 +24,8 @@
  * - iContour: float - Edge/contour definition (0-1)
  * - iAngle: float - Pattern rotation angle in degrees
  * - iShape: float - Shape mode (0=full, 1=circle, 2=daisy, 3=diamond, 4=metaballs)
- * - iIridescence: float - Iridescence intensity (0-1)
- * - iIridColor0-5: float3 - Six rainbow color stops around the effect (RGB)
+ * - iIridescence: float - Iridescence intensity (0-1), applied at stripe edges
+ * - iIridColor0-5: float3 - Six rainbow color stops that follow the wave motion (RGB)
  *
  * @see ColorsLiquidMetal.tsx for metal color presets
  */
@@ -70,12 +70,9 @@ float2 rotate(float2 v, float a) {
   return float2(v.x * c - v.y * s, v.x * s + v.y * c);
 }
 
-// Iridescence - angle-based rainbow interpolation
-float3 getIridescence(float2 uv, float t) {
-  float2 centered = uv - 0.5;
-  float angle = atan(centered.y, centered.x);
-  float hue = fract(angle / (2.0 * PI) + 0.5 + t * 0.1);
-  float segment = hue * 6.0;
+// Iridescence - stripe-based rainbow that follows wave motion
+float3 getRainbowColor(float hue) {
+  float segment = fract(hue) * 6.0;
   float idx = floor(segment);
   float f = segment - idx;
 
@@ -88,6 +85,25 @@ float3 getIridescence(float2 uv, float t) {
   else                rainbow = mix(iIridColor5, iIridColor0, f);
 
   return rainbow;
+}
+
+// Detect stripe transition edges (where dark meets light)
+float getStripeEdgeMask(float stripe_p, float3 w, float blur) {
+  float edgeMask = 0.0;
+
+  // Edge at stripe start (0)
+  edgeMask = max(edgeMask, 1.0 - smoothstep(0.0, blur * 3.0, stripe_p));
+  edgeMask = max(edgeMask, 1.0 - smoothstep(0.0, blur * 3.0, 1.0 - stripe_p));
+
+  // Edge at thin_strip_1 boundary
+  float b1 = w.x;
+  edgeMask = max(edgeMask, 1.0 - smoothstep(0.0, blur * 3.0, abs(stripe_p - b1)));
+
+  // Edge at thin_strip_2 boundary
+  float b2 = w.x + w.y;
+  edgeMask = max(edgeMask, 1.0 - smoothstep(0.0, blur * 3.0, abs(stripe_p - b2)));
+
+  return edgeMask;
 }
 
 // ============================================================================
@@ -321,11 +337,22 @@ half4 main(float2 fragCoord) {
 
   float3 color = float3(r, g, b);
 
-  // Apply iridescence effect
+  // Apply iridescence at stripe edges (follows wave motion)
   if (iIridescence > 0.0) {
-    float3 irid = getIridescence(uv, t);
-    float iridMask = 1.0 - edge;
-    color = mix(color, color * irid + irid * 0.15, iIridescence * iridMask);
+    // Use direction (before fract) to get full rainbow range across stripes
+    // Multiply to cycle through all colors multiple times
+    float hue = direction * 0.5 + noise * 0.4;
+    float3 irid = getRainbowColor(hue);
+
+    // Detect where we're at stripe transitions (dark/light edges)
+    float edgeMask = getStripeEdgeMask(stripe_g, w, blur);
+
+    // Also add some iridescence based on the noise-distorted areas
+    float noiseMask = abs(noise) * 0.5;
+    float combinedMask = max(edgeMask, noiseMask) * (1.0 - edge);
+
+    // Blend: tint the color with rainbow at edges + subtle additive glow
+    color = mix(color, color * irid * 1.2 + irid * 0.1, iIridescence * combinedMask);
   }
 
   color *= opacity;
