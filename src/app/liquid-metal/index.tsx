@@ -1,4 +1,9 @@
+import { ExpoLiquidMetalShader } from "@/components/liquid-metal/ExpoLiquidMetalShader";
 import { PerlinLiquidMetalShader } from "@/components/liquid-metal/PerlinLiquidMetalShader";
+import { SvgLiquidMetalShader } from "@/components/liquid-metal/SvgLiquidMetalShader";
+
+const LOGO_SVG_PATH =
+  "M9.477 7.638c.164-.24.343-.27.488-.27.145 0 .387.03.551.27 2.13 2.901 6.55 10.56 6.959 10.976.605.618 1.436.233 1.918-.468.475-.69.607-1.174.607-1.69 0-.352-6.883-13.05-7.576-14.106-.667-1.017-.884-1.274-2.025-1.274h-.854c-1.138 0-1.302.257-1.969 1.274C6.883 3.406 0 16.104 0 16.456c0 .517.132 1 .607 1.69.482.7 1.313 1.086 1.918.468.41-.417 4.822-8.075 6.952-10.977z";
 import { ThemeHeaderTitle, ThemeText, ThemeView } from "@/components/Theme";
 import { MetalPresetName } from "@/lib/shaders/ColorsLiquidMetal";
 import { MaterialCommunityIcons, SimpleLineIcons } from "@expo/vector-icons";
@@ -63,7 +68,24 @@ export default function LiquidMetalDemo() {
           end={{ x: 1, y: 0 }}
         >*/}
       {/*Button*/}
-      <LinearGradient
+
+
+      <SvgLiquidMetalShader
+        svgPath={LOGO_SVG_PATH}
+        viewBoxWidth={20}
+        viewBoxHeight={20}
+        width={BUTTON_SIZE}
+        height={BUTTON_SIZE}
+        metal={metal as MetalPresetName}
+        customHighlight={[0.9, 0.5, 0.8]}
+        customShadow={[0.3, 0.1, 0.2]}
+        iridescence={0.3}
+        angle={30}
+        contour={0.07}
+        distortion={0.6}
+        repetition={3}
+      />
+      {/*<LinearGradient
         colors={["#2E2E2E", "#000000"]}
         style={[
           styles.buttonContainer,
@@ -102,7 +124,7 @@ export default function LiquidMetalDemo() {
           customHighlight={[0.9, 0.5, 0.8]}
           customShadow={[0.3, 0.1, 0.2]}
         />
-      </LinearGradient>
+      </LinearGradient>*/}
       {/*</LinearGradient>
         <PerlinLiquidMetalShader
           width={CONTAINER_SIZE}
