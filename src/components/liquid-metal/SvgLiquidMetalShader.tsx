@@ -198,16 +198,33 @@ export function SvgLiquidMetalShader({
   // SVG PATH
   // ============================================================================
 
-  const path = useMemo(() => {
+  const { path, pathWidth, pathHeight } = useMemo(() => {
     const p = Skia.Path.MakeFromSVGString(svgPath);
-    if (!p) return null;
+    if (!p) return { path: null, pathWidth: width, pathHeight: height };
 
-    // Scale from viewBox to canvas size
-    const scaleX = width / viewBoxWidth;
-    const scaleY = height / viewBoxHeight;
-    p.transform(Skia.Matrix().scale(scaleX, scaleY));
+    // Get actual path bounds
+    const bounds = p.getBounds();
+    const boundsWidth = bounds.width || viewBoxWidth;
+    const boundsHeight = bounds.height || viewBoxHeight;
 
-    return p;
+    // Calculate scale to fit desired size while maintaining aspect ratio
+    const scale = Math.min(width / boundsWidth, height / boundsHeight);
+
+    // Center the path within the canvas
+    const scaledWidth = boundsWidth * scale;
+    const scaledHeight = boundsHeight * scale;
+    const offsetX = (width - scaledWidth) / 2;
+    const offsetY = (height - scaledHeight) / 2;
+
+    // Translate to origin, scale, then center
+    p.transform(
+      Skia.Matrix()
+        .translate(-bounds.x, -bounds.y)
+        .scale(scale, scale)
+        .translate(offsetX / scale, offsetY / scale)
+    );
+
+    return { path: p, pathWidth: scaledWidth, pathHeight: scaledHeight };
   }, [svgPath, viewBoxWidth, viewBoxHeight, width, height]);
 
   // ============================================================================
@@ -259,7 +276,7 @@ export function SvgLiquidMetalShader({
     return Skia.RuntimeEffect.Make(expoLiquidMetalShader);
   }, []);
 
-  if (!shader || !path) {
+  if (!shader || !path || !pathWidth || !pathHeight) {
     console.error("Failed to compile shader or parse SVG path");
     return null;
   }
@@ -307,6 +324,7 @@ export function SvgLiquidMetalShader({
 
 const styles = StyleSheet.create({
   canvas: {
-    // backgroundColor: "red"
+
+
   },
 });
