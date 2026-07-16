@@ -269,25 +269,32 @@ export function SvgLiquidMetalShader({
   // ============================================================================
 
   return (
-    <Canvas style={[styles.canvas, { width: width + PADDING * 2, height: height + PADDING * 2  }]}>
+    <Canvas
+      style={[
+        styles.canvas,
+        { width: width + PADDING * 2, height: height + PADDING * 2 },
+      ]}
+    >
       <Group transform={[{ translateX: PADDING }, { translateY: PADDING }]}>
-      {/* Outer shadow (bottom-right) */}
-      <Group transform={[{ translateX: 2 }, { translateY: 2 }]}>
-        <Path path={path} color="rgba(0,0,0,0.8)">
-          <Blur blur={4} />
-        </Path>
-      </Group>
+        {/* Outer shadow (bottom-right) */}
+        <Group transform={[{ translateX: 2 }, { translateY: 2 }]}>
+          <Path path={path} color="rgba(0,0,0,0.2)">
+            <Blur blur={1} />
+          </Path>
+        </Group>
 
-      {/* Inner highlight (top-left) */}
-      <Group transform={[{ translateX: -1 }, { translateY: -1 }]}>
-        <Path path={path} color="rgba(255,255,255,0.6)">
-          <Blur blur={2} />
-        </Path>
-      </Group>
-      <Group clip={path}>
-        <Fill>
-          <Shader source={shader} uniforms={uniforms} />
-        </Fill>
+        {/* Inner highlight (top-left) */}
+        <Group transform={[{ translateX: -1 }, { translateY: -1 }]}>
+          <Path path={path} color="rgba(255,255,255,0.3)">
+            <Blur blur={1} />
+          </Path>
+        </Group>
+
+        {/* Main surface */}
+        <Group clip={path}>
+          <Fill>
+            <Shader source={shader} uniforms={uniforms} />
+          </Fill>
         </Group>
       </Group>
     </Canvas>

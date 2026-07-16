@@ -56,6 +56,8 @@ module.exports = {
 | ------------------------- | ---------- | ------------------------ | ----------- | ------------------------------- |
 | `LiquidMetalShader`       | Simplex    | No (silver only)         | None        | Original paper-design port      |
 | `PerlinLiquidMetalShader` | Perlin     | Yes (9 presets + custom) | None        | Differentiated version          |
+| `ExpoLiquidMetalShader`   | Perlin     | Yes (9 presets + custom) | None        | With iridescence support        |
+| `SvgLiquidMetalShader`    | Perlin     | Yes (9 presets + custom) | None        | Custom SVG path clipping        |
 | `SensorLiquidMetalShader` | Perlin     | Yes (9 presets + custom) | Device tilt | Mobile-optimized with gyroscope |
 
 
@@ -145,6 +147,55 @@ import { SensorLiquidMetalShader } from "@/components/liquid-metal/SensorLiquidM
 />
 ```
 
+### With SVG Path Clipping
+
+```tsx
+import { SvgLiquidMetalShader } from "@/components/liquid-metal/SvgLiquidMetalShader";
+
+// Logo "A" shape with liquid metal
+const LOGO_PATH = "M9.477 7.638c.164-.24.343-.27.488-.27...z";
+
+<SvgLiquidMetalShader
+  svgPath={LOGO_PATH}
+  viewBoxWidth={20}
+  viewBoxHeight={20}
+  width={200}
+  height={200}
+  metal="gold"
+  iridescence={0.3}
+/>
+```
+
+### With Iridescence Effect
+
+```tsx
+import { ExpoLiquidMetalShader } from "@/components/liquid-metal/ExpoLiquidMetalShader";
+
+// Rainbow iridescence on metal
+<ExpoLiquidMetalShader
+  width={200}
+  height={200}
+  metal="silver"
+  iridescence={0.5}
+/>
+
+// Custom rainbow colors
+<ExpoLiquidMetalShader
+  width={200}
+  height={200}
+  metal="chrome"
+  iridescence={0.7}
+  iridColors={[
+    [1, 0.5, 0],    // Orange
+    [1, 1, 0],      // Yellow
+    [0.5, 1, 0],    // Lime
+    [0, 1, 0.5],    // Teal
+    [0, 0.5, 1],    // Sky
+    [0.5, 0, 1],    // Purple
+  ]}
+/>
+```
+
 ### Full Customization
 
 ```tsx
@@ -218,6 +269,34 @@ Includes all `LiquidMetalShader` props plus:
 | `customShadow`    | `[number, number, number]` | -          | Custom shadow RGB (if metal='custom')    |
 
 
+### ExpoLiquidMetalShader Props
+
+Includes all `PerlinLiquidMetalShader` props plus:
+
+
+| Prop         | Type                                     | Default         | Description                          |
+| ------------ | ---------------------------------------- | --------------- | ------------------------------------ |
+| `iridescence`| `number`                                 | `0`             | Iridescence intensity (0-1)          |
+| `iridColors` | `[RGB, RGB, RGB, RGB, RGB, RGB]`         | Rainbow spectrum| Six color stops for iridescence      |
+
+
+### SvgLiquidMetalShader Props
+
+Includes all `ExpoLiquidMetalShader` props plus:
+
+
+| Prop           | Type     | Default | Description                              |
+| -------------- | -------- | ------- | ---------------------------------------- |
+| `svgPath`      | `string` | -       | SVG path string (d attribute)            |
+| `viewBoxWidth` | `number` | `20`    | Original SVG viewBox width               |
+| `viewBoxHeight`| `number` | `20`    | Original SVG viewBox height              |
+
+
+**SVG Path Features:**
+- Automatic scaling from viewBox to canvas size
+- 3D bevel effect with shadow/highlight layers
+- Canvas padding to prevent blur clipping
+
 ### SensorLiquidMetalShader Props
 
 Includes all `PerlinLiquidMetalShader` props plus:
@@ -283,6 +362,19 @@ The two shader variants use different noise algorithms:
 - Quintic interpolation for better quality
 - Differentiates from the original
 
+### Iridescence Effect
+
+The `ExpoLiquidMetalShader` and `SvgLiquidMetalShader` support iridescence — rainbow colors that follow the wave motion:
+
+```
+Stripe Position → Rainbow Hue → Edge Detection → Blend with Metal
+       │               │               │                │
+   direction      6 color stops   stripe edges     iIridescence
+   + noise        (configurable)   (dark/light)      intensity
+```
+
+The iridescence appears at stripe transition edges (where dark meets light), creating a prismatic effect that moves with the liquid metal animation.
+
 ### Chromatic Aberration
 
 The liquid metal effect uses chromatic aberration to create color fringing:
@@ -325,12 +417,15 @@ src/
 ├── components/liquid-metal/
 │   ├── LiquidMetalShader.tsx        # Original shader component (simplex)
 │   ├── PerlinLiquidMetalShader.tsx  # Differentiated component (perlin + colors)
+│   ├── ExpoLiquidMetalShader.tsx    # With iridescence support
+│   ├── SvgLiquidMetalShader.tsx     # Custom SVG path clipping
 │   ├── SensorLiquidMetalShader.tsx  # Sensor-reactive component (gyroscope)
 │   └── README.md                    # This file
 │
 └── lib/shaders/
     ├── liquidMetal.tsx              # Simplex noise SkSL shader
     ├── PerlinLiquidMetal.ts         # Perlin noise SkSL shader with color uniforms
+    ├── ExpoLiquidMetal.ts           # Perlin shader with iridescence uniforms
     ├── SensorLiquidMetal.ts         # Perlin shader with sensor uniforms
     └── ColorsLiquidMetal.tsx        # Metal color presets and helpers
 ```
