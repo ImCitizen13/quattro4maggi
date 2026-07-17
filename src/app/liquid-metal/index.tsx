@@ -1,4 +1,4 @@
-import { SvgLiquidMetalShader } from "@/components/liquid-metal/SvgLiquidMetalShader";
+import { SdfLiquidMetalShader } from "@/components/liquid-metal/SdfLiquidMetalShader";
 import { extractPathsFromSvg } from "@/components/liquid-metal/utils";
 
 import {  ThemeText, ThemeView } from "@/components/Theme";
@@ -40,6 +40,7 @@ export default function LiquidMetalDemo() {
   const [metal, setMetal] = useState<MetalPresetName>("platinum");
 const [isLight, setLight] = useState(false)
 const [logoIndex, setLogoIndex] = useState<number>(0)
+const [debugSdf, setDebugSdf] = useState(false)
   return (
     <ThemeView style={styles.container}>
       {/*<ThemeView style={styles.shaderContainer}>*/}
@@ -50,7 +51,10 @@ const [logoIndex, setLogoIndex] = useState<number>(0)
         style={{marginBottom: 20}}
         onPress={() => {
         setLight((prev) => (!prev))
-      }} >
+      }}
+        onLongPress={() => {
+          setDebugSdf((prev) => !prev)
+        }} >
         <SimpleLineIcons
           name="ghost"
           size={BUTTON_SIZE / 4}
@@ -71,20 +75,18 @@ const [logoIndex, setLogoIndex] = useState<number>(0)
         <PressableScale onPress={() => {
           setLogoIndex((prev) => (prev + 1) % LOGOS.length)
 }} >
-      <SvgLiquidMetalShader
+      <SdfLiquidMetalShader
           svgPath={LOGOS[logoIndex] || EXPO_LOGO_SVG_PATH}
-        viewBoxWidth={30}
-        viewBoxHeight={30}
         width={BUTTON_SIZE}
         height={BUTTON_SIZE}
+        debug={debugSdf}
         metal={metal as MetalPresetName}
         customHighlight={[0.9, 0.5, 0.8]}
         customShadow={[0.3, 0.1, 0.2]}
         iridescence={0.3}
-        angle={30}
-        contour={0.07}
+        contour={0.00}
         distortion={0.6}
-        repetition={3}
+        repetition={1}
         />
 </PressableScale>
 
