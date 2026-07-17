@@ -123,6 +123,46 @@ verified on-device against before/after screenshots.
   the planned bubble gradient-ascent motion exploits it (the ridge is the
   attractor bubbles climb toward).
 
+## Text as path (2026-07-17)
+
+The pipeline is source-agnostic: `SdfLiquidMetalShader` accepts either
+`svgPath` (an SVG `d` string) or `path` (a ready `SkPath`, takes precedence;
+copied before fitting, never mutated). Anything that produces an `SkPath`
+gets the liquid metal treatment.
+
+The demo uses this for **typed text**: one call turns a string into glyph
+outlines —
+
+```ts
+const font = useFont(require(".../LobsterTwo-Regular.ttf"), 128);
+const path = Skia.Path.MakeFromText(text, 0, 128, font); // baseline at y=128
+```
+
+— inside a `useMemo` keyed on `[font, text]`, so every keystroke re-bakes the
+field live. Guard against empty/whitespace text (zero-area bounds) before
+passing it down.
+
+**Perf note:** the bake runs per keystroke on the JS thread; at demo size ×3
+pixel ratio that's a ~1050×750 field per key. Fine in practice so far — if
+typing ever stutters on device, debounce the bake or drop the text bake to
+`pixelScale` 2.
+
+## Demo interactions (`src/app/liquid-metal/index.tsx`)
+
+- **Icon ↔ text mode morph:** a round pencil button springs into the text
+  input (one `morph` shared value drives width/borderRadius via `interpolate`
+  + `withSpring`; the two faces cross-fade in opposite halves so they never
+  overlap, `pointerEvents` gated by mode). `mode` also decides what the shader
+  renders: logos (tap to cycle) vs the typed text.
+- **Keyboard:** `react-native-keyboard-controller` — `KeyboardProvider` wraps
+  the app in `_layout.tsx`; the demo lifts its content with
+  `useReanimatedKeyboardAnimation().height * 0.6` so the input clears the
+  keyboard, frame-locked with the native animation in both directions.
+  Requires a dev build containing the native module (red "doesn't seem to be
+  linked" screen after a JS-only reload means rebuild with `expo run:ios`).
+  Dismiss paths: background tap (full-screen `Pressable` → `Keyboard.dismiss`),
+  the ✕ (collapses the morph too), or the Done key.
+
 ## Debug view
 
 `debug` prop on `SdfLiquidMetalShader` renders the raw field: green inside /

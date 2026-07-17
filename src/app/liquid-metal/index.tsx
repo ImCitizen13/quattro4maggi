@@ -4,11 +4,26 @@ import { extractPathsFromSvg } from "@/components/liquid-metal/utils";
 import {  ThemeText, ThemeView } from "@/components/Theme";
 import { MetalPresetName } from "@/lib/shaders/ColorsLiquidMetal";
 import { SimpleLineIcons } from "@expo/vector-icons";
+import { Skia, useFont } from "@shopify/react-native-skia";
 import { LinearGradient } from "expo-linear-gradient";
 import { PressableScale } from "pressto";
-import React, { useState } from "react";
-import { FlatList, StyleSheet, useColorScheme } from "react-native";
-import { useAnimatedStyle } from "react-native-reanimated";
+import React, { useMemo, useRef, useState } from "react";
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  useColorScheme,
+} from "react-native";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated, {
+  interpolate,
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 const EXPO_LOGO_SVG_PATH =
   "M9.477 7.638c.164-.24.343-.27.488-.27.145 0 .387.03.551.27 2.13 2.901 6.55 10.56 6.959 10.976.605.618 1.436.233 1.918-.468.475-.69.607-1.174.607-1.69 0-.352-6.883-13.05-7.576-14.106-.667-1.017-.884-1.274-2.025-1.274h-.854c-1.138 0-1.302.257-1.969 1.274C6.883 3.406 0 16.104 0 16.456c0 .517.132 1 .607 1.69.482.7 1.313 1.086 1.918.468.41-.417 4.822-8.075 6.952-10.977z";
 const X_LOGO_SVG_PATH = extractPathsFromSvg('<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.746 9.75L5.9645 4.1605L9.4925 0H8.2645L5.419 3.357L3.149 0H0.0545L3.6995 5.388L0 9.75H1.228L4.2455 6.191L6.6545 9.75H9.75H9.746ZM2.7445 0.784L8.28 8.966H7.0565L1.52 0.784H2.7435H2.7445Z" fill="black"/></svg>')
@@ -34,20 +49,96 @@ const LOGOS = [EXPO_LOGO_SVG_PATH, ,APPLE_LOGO_SVG_PATH, X_LOGO_SVG_PATH]
  */
 const BG_COLOR = "rgb(64 64 64)";
 const CONTAINER_SIZE = 400;
-const BUTTON_SIZE = 200;
+const BUTTON_SIZE = 250;
 const gradientColors = ["#2E2E2E", "#000000"];
+
+// Morph pill: collapsed round button ↔ expanded text input
+const PILL_HEIGHT = 56;
+const PILL_EXPANDED_WIDTH = BUTTON_SIZE * 1.5;
+const MORPH_SPRING = {
+  stiffness: 900,
+        damping: 90,
+        mass: 4,
+        overshootClamping: undefined,
+        energyThreshold: 6e-9,
+        velocity: 0,
+        reduceMotion: ReduceMotion.System,
+};
 export default function LiquidMetalDemo() {
   const [metal, setMetal] = useState<MetalPresetName>("platinum");
 const [isLight, setLight] = useState(false)
 const [logoIndex, setLogoIndex] = useState<number>(0)
 const [debugSdf, setDebugSdf] = useState(false)
+const [text, setText] = useState("")
+
+  // Glyph outlines of the typed text as one SkPath — this is what the SDF
+  // bake consumes, exactly like an SVG logo path
+  const font = useFont(
+    require("../../assets/fonts/LobsterTwo-Regular.ttf"),
+    128
+  );
+  const textPath = useMemo(() => {
+    if (!font || !text.trim()) return undefined;
+    const p = Skia.Path.MakeFromText(text.trim(), 0, 128, font);
+    if (!p) return undefined;
+    const b = p.getBounds();
+    return b.width > 0 && b.height > 0 ? p : undefined;
+  }, [font, text]);
+
+  // Keyboard-driven lift: height goes 0 → -keyboardHeight as it shows, and
+  // the native controller animates it frame-locked with the keyboard — the
+  // content rises just enough (60%) to keep the input clear of the keyboard
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const keyboardLift = useAnimatedStyle(() => ({
+    transform: [{ translateY: keyboardHeight.value * 0.6 }],
+  }));
+
+  // ============================================================================
+  // MODE SWITCH — round button morphs into the text input
+  // ============================================================================
+
+  const [mode, setMode] = useState<"icon" | "text">("icon");
+  const inputRef = useRef<TextInput>(null);
+  const morph = useSharedValue(0); // 0 = round button, 1 = input pill
+
+  const openInput = () => {
+    setMode("text");
+    morph.value = withSpring(1, MORPH_SPRING);
+    inputRef.current?.focus();
+  };
+
+  const closeInput = () => {
+    setMode("icon");
+    inputRef.current?.blur();
+    morph.value = withSpring(0, MORPH_SPRING);
+  };
+
+  const pillStyle = useAnimatedStyle(() => ({
+    width: interpolate(morph.value, [0, 1], [PILL_HEIGHT, PILL_EXPANDED_WIDTH]),
+    borderRadius: interpolate(morph.value, [0, 1], [PILL_HEIGHT / 2, 12]),
+  }));
+  // Icon fades out in the first half of the morph, input fades in second half
+  const iconFaceStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(morph.value, [0, 0.5], [1, 0], "clamp"),
+  }));
+  const inputFaceStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(morph.value, [0.5, 1], [0, 1], "clamp"),
+  }));
   return (
     <ThemeView style={styles.container}>
+      <Pressable
+        style={styles.dismissArea}
+        onPress={Keyboard.dismiss}
+        accessible={false}
+      >
+      <Animated.View style={[styles.dismissArea, keyboardLift]}>
+
+
       {/*<ThemeView style={styles.shaderContainer}>*/}
 
       {/*Button*/}
 
-      <PressableScale
+      {/*<PressableScale
         style={{marginBottom: 20}}
         onPress={() => {
         setLight((prev) => (!prev))
@@ -71,26 +162,61 @@ const [debugSdf, setDebugSdf] = useState(false)
             borderRadius: BUTTON_SIZE / 2,
           },
         ]}
-      >
+      >*/}
+
         <PressableScale onPress={() => {
           setLogoIndex((prev) => (prev + 1) % LOGOS.length)
 }} >
       <SdfLiquidMetalShader
           svgPath={LOGOS[logoIndex] || EXPO_LOGO_SVG_PATH}
-        width={BUTTON_SIZE}
+        path={mode === "text" ? textPath : undefined}
+        width={mode === "text" && textPath ? BUTTON_SIZE * 1.4 : BUTTON_SIZE}
         height={BUTTON_SIZE}
         debug={debugSdf}
         metal={metal as MetalPresetName}
         customHighlight={[0.9, 0.5, 0.8]}
         customShadow={[0.3, 0.1, 0.2]}
-        iridescence={0.3}
-        contour={0.00}
-        distortion={0.6}
-        repetition={1}
+        iridescence={0.05}
+        contour={0.1}
+        distortion={0.0}
+            repetition={1}
+            speed={1}
         />
 </PressableScale>
+{/* Round button ↔ text input morph */}
+<Animated.View style={[styles.morphPill, pillStyle]}>
+  <Animated.View
+    style={[StyleSheet.absoluteFill, styles.pillIconFace, iconFaceStyle]}
+    pointerEvents={mode === "icon" ? "auto" : "none"}
+  >
+    <Pressable style={styles.pillIconFace} onPress={openInput} hitSlop={8}>
+      <SimpleLineIcons name="pencil" size={20} color="#fff" />
+    </Pressable>
+  </Animated.View>
 
-      </LinearGradient>
+  <Animated.View
+    style={[styles.pillInputFace, inputFaceStyle]}
+    pointerEvents={mode === "text" ? "auto" : "none"}
+  >
+    <TextInput
+      ref={inputRef}
+      style={styles.textInput}
+      value={text}
+      onChangeText={setText}
+      placeholder="Type to liquify…"
+      placeholderTextColor="#666"
+      autoCapitalize="characters"
+      autoCorrect={false}
+      maxLength={12}
+      returnKeyType="done"
+    />
+    <Pressable onPress={closeInput} hitSlop={8}>
+      <SimpleLineIcons name="close" size={18} color="#666" />
+    </Pressable>
+  </Animated.View>
+</Animated.View>
+
+      {/*</LinearGradient>
 
 
 
@@ -128,10 +254,12 @@ const [debugSdf, setDebugSdf] = useState(false)
             <ThemeText
               text={item.toLocaleUpperCase()}
               style={{ fontSize: 16, fontWeight: "bold", color: "white" }}
-            />
-          </PressableScale>
+            />*/}
+          {/*</PressableScale>
         )}
-      />
+      />*/}
+      </Animated.View>
+      </Pressable>
     </ThemeView>
   );
 }
@@ -144,6 +272,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: "100%",
     gap: 10
+  },
+  dismissArea: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
   },
   shaderContainer: {
     flexDirection: "row",
@@ -170,6 +305,30 @@ const styles = StyleSheet.create({
     // padding: 10,
     justifyContent: "center",
     alignItems: "center",
+  },
+  morphPill: {
+    height: PILL_HEIGHT,
+    borderWidth: 1,
+    borderColor: "#2E2E2E",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  pillIconFace: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pillInputFace: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  textInput: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 18,
   },
   buttonItem: {
     paddingHorizontal: 16,

@@ -35,6 +35,7 @@ import {
   Shader,
   Skia,
   useClock,
+  type SkPath,
 } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
 import { PixelRatio } from "react-native";
@@ -46,7 +47,13 @@ import { useDerivedValue } from "react-native-reanimated";
 
 export type SdfLiquidMetalShaderProps = {
   /** SVG path string (the "d" attribute from an SVG path element) */
-  svgPath: string;
+  svgPath?: string;
+
+  /**
+   * A ready-made SkPath (e.g. from Skia.Path.MakeFromText). Takes precedence
+   * over svgPath. The path is copied before fitting, never mutated.
+   */
+  path?: SkPath;
 
   /** Width of the canvas @default 300 */
   width?: number;
@@ -106,6 +113,7 @@ export type SdfLiquidMetalShaderProps = {
 
 export function SdfLiquidMetalShader({
   svgPath,
+  path,
   width = 300,
   height = 300,
   metal = "silver",
@@ -136,7 +144,11 @@ export function SdfLiquidMetalShader({
   // ============================================================================
 
   const sdf = useMemo(() => {
-    const p = Skia.Path.MakeFromSVGString(svgPath);
+    const p = path
+      ? path.copy()
+      : svgPath
+        ? Skia.Path.MakeFromSVGString(svgPath)
+        : null;
     if (!p) return null;
 
     const bounds = p.getBounds();
@@ -168,7 +180,7 @@ export function SdfLiquidMetalShader({
       height * pixelScale,
       pixelScale
     );
-  }, [svgPath, width, height]);
+  }, [svgPath, path, width, height]);
 
   // ============================================================================
   // METAL COLORS
