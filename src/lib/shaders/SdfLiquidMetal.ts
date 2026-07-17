@@ -11,8 +11,9 @@
  *
  * UNIFORMS (beyond ExpoLiquidMetal's set):
  * - iSdfTexture: shader - Baked distance field
- * - iSdfMax: float - Normalization scale (pixels) to reconstruct d
- * - iSdfMaxInside: float - Deepest inside distance (pixels)
+ * - iSdfMax: float - Normalization scale (field pixels) to reconstruct d
+ * - iSdfMaxInside: float - Deepest inside distance (field pixels)
+ * - iSdfScale: float - Field pixels per logical point (bake supersampling)
  * - iDebug: float - 1 = render the raw field with isolines instead of metal
  *
  * @see pathSdf.ts for the bake, ExpoLiquidMetal.ts for the original ramp field
@@ -24,6 +25,7 @@ uniform float2 iResolution;
 uniform float iTime;
 uniform float iSdfMax;
 uniform float iSdfMaxInside;
+uniform float iSdfScale;
 uniform float iDebug;
 uniform float4 iColorBack;
 uniform float4 iColorTint;
@@ -49,9 +51,11 @@ const float PI = 3.14159265359;
 // DISTANCE FIELD
 // ============================================================================
 
-// Signed distance in pixels, positive inside the path
+// Signed distance in field pixels, positive inside the path.
+// The field is baked at iSdfScale× the logical resolution, so logical
+// fragCoords are scaled up into texture space (fix B: bake at pixel ratio).
 float sdPath(float2 fragCoord) {
-  float r = iSdfTexture.eval(fragCoord).r;
+  float r = iSdfTexture.eval(fragCoord * iSdfScale).r;
   return (r - 0.5) * 2.0 * iSdfMax;
 }
 

@@ -38,6 +38,12 @@ export type PathSdf = {
   width: number;
   /** Field height in pixels */
   height: number;
+  /**
+   * Field pixels per logical point (the bake supersampling factor).
+   * Multiply logical coordinates by this before calling `sample`/`gradient`;
+   * divide sampled distances by it to get logical points.
+   */
+  scale: number;
   /** Largest |distance| in the field — the normalization scale of the texture */
   maxDist: number;
   /** Largest inside distance (depth of the deepest point / medial-axis peak) */
@@ -123,15 +129,20 @@ function edt2d(grid: Float32Array, width: number, height: number) {
 // ============================================================================
 
 /**
- * Rasterize `path` (already transformed into canvas coordinates) at
+ * Rasterize `path` (already transformed into bake-pixel coordinates) at
  * `width`×`height` and return its signed distance field.
+ *
+ * `scale` is metadata only: field pixels per logical point, recorded so
+ * consumers can convert coordinates. The caller is responsible for having
+ * scaled both the path and the dimensions by it.
  *
  * Returns null if the offscreen surface or the float image cannot be created.
  */
 export function bakePathSdf(
   path: SkPath,
   width: number,
-  height: number
+  height: number,
+  scale = 1
 ): PathSdf | null {
   const w = Math.max(1, Math.round(width));
   const h = Math.max(1, Math.round(height));
@@ -239,5 +250,15 @@ export function bakePathSdf(
     return len > 1e-6 ? [gx / len, gy / len] : [0, 0];
   };
 
-  return { field, width: w, height: h, maxDist, maxInside, image, sample, gradient };
+  return {
+    field,
+    width: w,
+    height: h,
+    scale,
+    maxDist,
+    maxInside,
+    image,
+    sample,
+    gradient,
+  };
 }

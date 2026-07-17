@@ -37,6 +37,7 @@ import {
   useClock,
 } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
+import { PixelRatio } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";
 
 // ============================================================================
@@ -143,21 +144,30 @@ export function SdfLiquidMetalShader({
 
     // Fit into the canvas with a margin so the outside field is visible too
     const margin = 0.1;
-    const scale = Math.min(
+    const fitScale = Math.min(
       (width * (1 - 2 * margin)) / bounds.width,
       (height * (1 - 2 * margin)) / bounds.height
     );
-    const offsetX = (width - bounds.width * scale) / 2;
-    const offsetY = (height - bounds.height * scale) / 2;
+    const offsetX = (width - bounds.width * fitScale) / 2;
+    const offsetY = (height - bounds.height * fitScale) / 2;
+
+    // Fix B: bake at device pixel ratio so the field matches the physical
+    // pixel grid (capped — beyond 3× the F32 texture cost buys nothing)
+    const pixelScale = Math.min(PixelRatio.get(), 3);
 
     p.transform(
       Skia.Matrix()
         .translate(-bounds.x, -bounds.y)
-        .scale(scale, scale)
-        .translate(offsetX / scale, offsetY / scale)
+        .scale(fitScale * pixelScale, fitScale * pixelScale)
+        .translate(offsetX / fitScale, offsetY / fitScale)
     );
 
-    return bakePathSdf(p, width, height);
+    return bakePathSdf(
+      p,
+      width * pixelScale,
+      height * pixelScale,
+      pixelScale
+    );
   }, [svgPath, width, height]);
 
   // ============================================================================
@@ -175,6 +185,7 @@ export function SdfLiquidMetalShader({
   const clock = useClock();
   const sdfMax = sdf?.maxDist ?? 1;
   const sdfMaxInside = sdf?.maxInside ?? 1;
+  const sdfScale = sdf?.scale ?? 1;
 
   const uniforms = useDerivedValue(() => {
     const time = (clock.value / 1000) * speed;
@@ -183,6 +194,7 @@ export function SdfLiquidMetalShader({
       iTime: time,
       iSdfMax: sdfMax,
       iSdfMaxInside: sdfMaxInside,
+      iSdfScale: sdfScale,
       iDebug: debug ? 1 : 0,
       iColorBack: colorBack,
       iColorTint: colorTint,

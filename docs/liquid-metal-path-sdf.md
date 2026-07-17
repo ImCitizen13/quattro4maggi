@@ -53,8 +53,15 @@ where the metal flows.
      `RGBA_F32` image → child shader. Render cost: **one texture read per
      pixel**. `iSdfMax` reconstructs pixel units in SkSL.
 
+The bake runs at **device pixel ratio** (capped at 3×) so the field matches
+the physical pixel grid — fix B, 2026-07-17. The component scales the path and
+dimensions before baking; the shader maps logical fragCoords into texture
+space via `iSdfScale`, and `PathSdf.scale` records the factor for JS-side
+consumers (multiply logical coords by it before `sample`/`gradient`, divide
+sampled distances by it).
+
 Bake cost is one-time at mount inside a `useMemo` keyed on path+size (a few ms
-at 200²). Re-baking per frame (morphing paths) would need a different route
+at 600²). Re-baking per frame (morphing paths) would need a different route
 (polyline uniforms or a coarse GPU bake).
 
 ### Why CPU bake (vs the alternatives)
@@ -102,12 +109,14 @@ The EDT itself is unchanged — it now measures to points on the *true curve*
 instead of a staircase. Same trick SDF font atlases use to stay crisp at 4×
 upscale. Cost: zero (smarter init loop).
 
+A second cause was fixed the same day (fix B): the field was baked at logical
+points but displayed at device pixel ratio (~3× finer), so each texel spanned
+~3×3 physical pixels and amplified any residual wiggle. The bake now runs at
+pixel ratio (see above). With A+B applied the silhouette renders clean —
+verified on-device against before/after screenshots.
+
 ### Known remaining artifacts
 
-- **Residual softness/ripple on diagonals:** the field is baked at logical
-  points but displayed at device pixel ratio (~3× finer). Fix when needed:
-  bake at 2–3× resolution (EDT is O(n), one-time; F32 texture grows 16
-  bytes/px). Not yet applied.
 - **Bright seams along stroke centers, triangles at corners:** the **medial
   axis** — isolines of a distance field genuinely crease where two walls are
   equidistant. Geometry, not sampling. `distortion` noise partially hides it;
