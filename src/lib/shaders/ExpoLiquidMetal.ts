@@ -1,13 +1,8 @@
 /**
  * Expo Liquid Metal Shader (SkSL)
  *
- * A differentiated liquid metal shader using Perlin noise (instead of simplex)
- * and customizable metal color presets.
+ * A liquid metal shader using Perlin noise and customizable metal color presets.
  *
- * DIFFERENTIATORS from original paper-design shader:
- * - Uses Perlin noise instead of simplex noise
- * - Customizable metal colors via uniforms (gold, copper, rose gold, etc.)
- * - Optimized for mobile/React Native
  *
  * UNIFORMS:
  * - iResolution: float2 - Canvas resolution (width, height)
@@ -107,7 +102,7 @@ float getStripeEdgeMask(float stripe_p, float3 w, float blur) {
 }
 
 // ============================================================================
-// PERLIN NOISE (2D) - Different from simplex in the original
+// PERLIN NOISE (2D)
 // ============================================================================
 
 float2 hash2(float2 p) {
