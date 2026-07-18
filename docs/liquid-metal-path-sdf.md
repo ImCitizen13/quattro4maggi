@@ -202,6 +202,40 @@ on-device; logo→logo morph logic is in but its on-device check was cut short
 — verify visually next session (toggle particles, tap the canvas twice: the
 Expo→Apple transition should shift dots in place, never re-scatter).
 
+## Mixed effect: MorphingLiquidMetal (2026-07-18)
+
+`MorphingLiquidMetal.tsx` mixes the two effects: shapes render as liquid
+metal, and every path change transitions through particles — the metal
+particalizes into dots pre-assembled as the old silhouette (seamless by
+construction), the swarm morphs into the new shape, then the metal fades
+back in (350ms FadeIn). Render-phase ref guard detects path changes (no
+useEffect); mid-transition changes just retarget `to` and the mounted
+particle view morphs in place. `ParticlePathAssembly` gained
+`fromSvgPath`/`fromPath` (mount pre-assembled) and `onSettled` (timing
+completion → `scheduleOnRN`). The demo's main display routes logo taps and
+every keystroke through this.
+
+## Shared bake: usePathSdf (roadmap step 1, 2026-07-18)
+
+`src/hooks/usePathSdf.ts` owns the fit + bake, memoized per (source, size);
+`fitPathToCanvas` is the single shared fitting function. Consumers:
+
+- `SdfLiquidMetalShader` uses the hook internally, or accepts a pre-baked
+  `sdf` prop (its internal hook no-ops on an empty source).
+- `MorphingLiquidMetal` bakes **once per path change** and passes the field
+  down — the bake runs while the particle transition plays, so the field is
+  warm when the metal remounts on settle.
+- `ParticlePathAssembly` shares `fitPathToCanvas`; its target sampling still
+  rasterizes privately — replacing that with field-threshold sampling is
+  roadmap step 2.
+
+**Remaining roadmap** (agreed 2026-07-18): 2) field-driven targets + dot
+sizing `min(r_max, d)`; 3) gradient-flow settle in the RSXform worklet
+(needs a worklet-side bilinear sampler over the raw field); 4) metal-colored
+dots from a snapshot of the rendered metal (Atlas `colors` buffer); 5)
+~200ms cross-fade overlap at both handoffs. Then bubble containment
+(original handoff steps 3–5) as a specialization of step 3's machinery.
+
 ## Debug view
 
 `debug` prop on `SdfLiquidMetalShader` renders the raw field: green inside /

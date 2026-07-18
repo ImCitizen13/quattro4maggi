@@ -23,8 +23,9 @@ import {
   type MetalPresetName,
   type RGB,
 } from "@/lib/shaders/ColorsLiquidMetal";
-import { bakePathSdf } from "@/lib/shaders/pathSdf";
+import { type PathSdf } from "@/lib/shaders/pathSdf";
 import { sdfLiquidMetalShader } from "@/lib/shaders/SdfLiquidMetal";
+import { usePathSdf } from "@/hooks/usePathSdf";
 import {
   Canvas,
   Fill,
@@ -38,7 +39,6 @@ import {
   type SkPath,
 } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
-import { PixelRatio } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";
 
 // ============================================================================
@@ -54,6 +54,13 @@ export type SdfLiquidMetalShaderProps = {
    * over svgPath. The path is copied before fitting, never mutated.
    */
   path?: SkPath;
+
+  /**
+   * Pre-baked distance field (from usePathSdf). When provided, svgPath/path
+   * are not baked here — pass this when a parent already owns the bake
+   * (e.g. MorphingLiquidMetal) to avoid duplicate work.
+   */
+  sdf?: PathSdf | null;
 
   /** Width of the canvas @default 300 */
   width?: number;
@@ -114,6 +121,7 @@ export type SdfLiquidMetalShaderProps = {
 export function SdfLiquidMetalShader({
   svgPath,
   path,
+  sdf: sdfProp,
   width = 300,
   height = 300,
   metal = "silver",
@@ -143,44 +151,14 @@ export function SdfLiquidMetalShader({
   // PATH + SDF BAKE (one-time per path/size)
   // ============================================================================
 
-  const sdf = useMemo(() => {
-    const p = path
-      ? path.copy()
-      : svgPath
-        ? Skia.Path.MakeFromSVGString(svgPath)
-        : null;
-    if (!p) return null;
-
-    const bounds = p.getBounds();
-    if (!bounds.width || !bounds.height) return null;
-
-    // Fit into the canvas with a margin so the outside field is visible too
-    const margin = 0.1;
-    const fitScale = Math.min(
-      (width * (1 - 2 * margin)) / bounds.width,
-      (height * (1 - 2 * margin)) / bounds.height
-    );
-    const offsetX = (width - bounds.width * fitScale) / 2;
-    const offsetY = (height - bounds.height * fitScale) / 2;
-
-    // Fix B: bake at device pixel ratio so the field matches the physical
-    // pixel grid (capped — beyond 3× the F32 texture cost buys nothing)
-    const pixelScale = Math.min(PixelRatio.get(), 3);
-
-    p.transform(
-      Skia.Matrix()
-        .translate(-bounds.x, -bounds.y)
-        .scale(fitScale * pixelScale, fitScale * pixelScale)
-        .translate(offsetX / fitScale, offsetY / fitScale)
-    );
-
-    return bakePathSdf(
-      p,
-      width * pixelScale,
-      height * pixelScale,
-      pixelScale
-    );
-  }, [svgPath, path, width, height]);
+  // Bake locally only when no pre-baked field was passed in — the hook
+  // no-ops on an empty source, so standalone usage keeps working unchanged
+  const internalSdf = usePathSdf(
+    sdfProp ? {} : { svgPath, path },
+    width,
+    height
+  );
+  const sdf = sdfProp ?? internalSdf;
 
   // ============================================================================
   // METAL COLORS

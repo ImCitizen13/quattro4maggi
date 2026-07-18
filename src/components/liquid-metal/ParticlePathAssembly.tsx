@@ -38,6 +38,8 @@ import {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
+import { fitPathToCanvas } from "@/hooks/usePathSdf";
 
 // ============================================================================
 // TYPES
@@ -74,6 +76,18 @@ export type ParticlePathAssemblyProps = {
    * then morphs the dots in place).
    */
   onPress?: () => void;
+
+  /**
+   * Shape the dots start pre-assembled as (instead of random scatter) on
+   * first mount — the metal→particles handoff shape. SVG string variant.
+   */
+  fromSvgPath?: string;
+
+  /** Same as fromSvgPath but as a ready SkPath. Takes precedence */
+  fromPath?: SkPath;
+
+  /** Called on the JS thread when the gather animation completes */
+  onSettled?: () => void;
 };
 
 // ============================================================================
@@ -92,34 +106,6 @@ const mulberry32 = (seed: number) => {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-};
-
-/** Fit the source path into the canvas (same fitting as the SDF shader) */
-const fitPath = (
-  svgPath: string | undefined,
-  path: SkPath | undefined,
-  width: number,
-  height: number
-): SkPath | null => {
-  const p = path ? path.copy() : svgPath ? Skia.Path.MakeFromSVGString(svgPath) : null;
-  if (!p) return null;
-  const bounds = p.getBounds();
-  if (!bounds.width || !bounds.height) return null;
-
-  const margin = 0.1;
-  const scale = Math.min(
-    (width * (1 - 2 * margin)) / bounds.width,
-    (height * (1 - 2 * margin)) / bounds.height
-  );
-  const offsetX = (width - bounds.width * scale) / 2;
-  const offsetY = (height - bounds.height * scale) / 2;
-  p.transform(
-    Skia.Matrix()
-      .translate(-bounds.x, -bounds.y)
-      .scale(scale, scale)
-      .translate(offsetX / scale, offsetY / scale)
-  );
-  return p;
 };
 
 /** Rasterize the fitted path and sample its filled area into target points */
@@ -193,6 +179,9 @@ export function ParticlePathAssembly({
   color = "#dcdce2",
   duration = 2400,
   onPress,
+  fromSvgPath,
+  fromPath,
+  onSettled,
 }: ParticlePathAssemblyProps) {
   const [seed, setSeed] = useState(1);
 
@@ -201,10 +190,22 @@ export function ParticlePathAssembly({
   // ============================================================================
 
   const targets = useMemo(() => {
-    const fitted = fitPath(svgPath, path, width, height);
+    const fitted = fitPathToCanvas({ svgPath, path }, width, height);
     if (!fitted) return null;
     return sampleTargets(fitted, width, height, dotCount, mulberry32(7));
   }, [svgPath, path, width, height, dotCount]);
+
+  // Optional handoff shape: dots start pre-assembled as this on first mount
+  const fromTargets = useMemo(() => {
+    if (!fromSvgPath && !fromPath) return null;
+    const fitted = fitPathToCanvas(
+      { svgPath: fromSvgPath, path: fromPath },
+      width,
+      height
+    );
+    if (!fitted) return null;
+    return sampleTargets(fitted, width, height, dotCount, mulberry32(7));
+  }, [fromSvgPath, fromPath, width, height, dotCount]);
 
   // Previous shape's targets: when the path changes, dots shift from where
   // they are instead of re-scattering. Random scatter only on first mount
@@ -216,7 +217,10 @@ export function ParticlePathAssembly({
     if (!targets) return null;
     const n = targets.length / 2;
     const rand = mulberry32(seed * 7919 + 13);
-    const prev = prevTargetsRef.current;
+    // Morph source: previous shape when the path changed in place, or the
+    // handoff shape on first mount; random scatter otherwise (and always on
+    // tap-replay, when the seed changes)
+    const prev = prevTargetsRef.current ?? fromTargets;
     const morphFrom =
       seed === prevSeedRef.current &&
       prev !== null &&
@@ -262,7 +266,7 @@ export function ParticlePathAssembly({
       sizes[i] = 0.7 + rand() * 0.6;
     }
     return { starts, ctrls, staggers, sizes, n };
-  }, [targets, seed, width, height]);
+  }, [targets, fromTargets, seed, width, height]);
 
   // Record what this render is assembling toward — the next path change
   // morphs from here (render-phase ref writes; the memo above already ran)
@@ -277,11 +281,18 @@ export function ParticlePathAssembly({
 
   const play = () => {
     progress.value = 0;
-    progress.value = withTiming(1, {
-      duration,
-      easing: Easing.linear, // per-dot easing lives in the worklet
-      reduceMotion: ReduceMotion.System,
-    });
+    progress.value = withTiming(
+      1,
+      {
+        duration,
+        easing: Easing.linear, // per-dot easing lives in the worklet
+        reduceMotion: ReduceMotion.System,
+      },
+      (finished) => {
+        "worklet";
+        if (finished && onSettled) scheduleOnRN(onSettled);
+      }
+    );
   };
 
   // Auto-play on mount and whenever the sampled path changes (no useEffect:
