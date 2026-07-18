@@ -163,6 +163,45 @@ typing ever stutters on device, debounce the bake or drop the text bake to
   Dismiss paths: background tap (full-screen `Pressable` → `Keyboard.dismiss`),
   the ✕ (collapses the morph too), or the Done key.
 
+## Particle assembly (2026-07-18)
+
+`src/components/liquid-metal/ParticlePathAssembly.tsx` — the path
+particalized: dots scatter randomly, then swarm along curved paths and
+assemble into the shape. Same `svgPath`/`path` API as the shader; in the demo
+the grid/drop button toggles between metal and particle views.
+
+**Pipeline:**
+
+1. Rasterize the fitted path offscreen once; sample the filled area on a
+   jittered stride-2 grid, shuffle (seeded PRNG), keep exactly `dotCount`
+   targets — wrapping when the shape has fewer points, so every dot always
+   has a destination and morphs keep a 1:1 dot mapping.
+2. Per dot precomputed: start, quadratic-bezier control point, stagger
+   window, size variance.
+3. One `progress` value (linear timing) drives the swarm; per-dot ease-out +
+   stagger live in the `useRSXformBuffer` worklet — JS thread idle during the
+   animation.
+4. Render = **one Atlas draw call**: a single soft-dot sprite, N RSXforms.
+
+**Shape-to-shape morphs:** when the path changes, dots shift from the
+previous shape's targets instead of re-scattering (previous targets held in a
+render-phase ref; gentler bend 0.35 vs 0.8, tighter stagger 0.3 vs 0.45).
+Random scatter happens only on first mount and tap-replay (seed bump). An
+`onPress` prop can repurpose the tap — the demo uses it to cycle logos in
+icon mode, morphing dots logo→logo.
+
+**⚠️ Gotcha that cost a debugging round:** a `makeImageSnapshot()` of an
+offscreen GPU surface is texture-backed and **silently draws nothing** in the
+on-screen canvas's context — call `.makeNonTextureImage()` on it first. (The
+SDF bake never hit this because it round-trips through `readPixels` CPU
+data.) Also: kick shared-value animations from render via `queueMicrotask`,
+not directly — Reanimated warns on render-phase writes.
+
+**Verification status:** initial scatter→gather and tap-replay verified
+on-device; logo→logo morph logic is in but its on-device check was cut short
+— verify visually next session (toggle particles, tap the canvas twice: the
+Expo→Apple transition should shift dots in place, never re-scatter).
+
 ## Debug view
 
 `debug` prop on `SdfLiquidMetalShader` renders the raw field: green inside /

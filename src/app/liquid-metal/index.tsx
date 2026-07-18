@@ -1,3 +1,4 @@
+import { ParticlePathAssembly } from "@/components/liquid-metal/ParticlePathAssembly";
 import { SdfLiquidMetalShader } from "@/components/liquid-metal/SdfLiquidMetalShader";
 import { extractPathsFromSvg } from "@/components/liquid-metal/utils";
 
@@ -70,6 +71,7 @@ const [isLight, setLight] = useState(false)
 const [logoIndex, setLogoIndex] = useState<number>(0)
 const [debugSdf, setDebugSdf] = useState(false)
 const [text, setText] = useState("")
+const [showParticles, setShowParticles] = useState(false)
 
   // Glyph outlines of the typed text as one SkPath — this is what the SDF
   // bake consumes, exactly like an SVG logo path
@@ -164,6 +166,19 @@ const [text, setText] = useState("")
         ]}
       >*/}
 
+        {showParticles ? (
+          <ParticlePathAssembly
+            svgPath={LOGOS[logoIndex] || EXPO_LOGO_SVG_PATH}
+            path={mode === "text" ? textPath : undefined}
+            width={mode === "text" && textPath ? BUTTON_SIZE * 1.4 : BUTTON_SIZE}
+            height={BUTTON_SIZE}
+            onPress={
+              mode === "icon"
+                ? () => setLogoIndex((prev) => (prev + 1) % LOGOS.length)
+                : undefined
+            }
+          />
+        ) : (
         <PressableScale onPress={() => {
           setLogoIndex((prev) => (prev + 1) % LOGOS.length)
 }} >
@@ -183,6 +198,19 @@ const [text, setText] = useState("")
             speed={1}
         />
 </PressableScale>
+        )}
+
+        {/* Metal ↔ particles view toggle */}
+        <PressableScale
+          style={styles.particleToggle}
+          onPress={() => setShowParticles((prev) => !prev)}
+        >
+          <SimpleLineIcons
+            name={showParticles ? "drop" : "grid"}
+            size={18}
+            color="#fff"
+          />
+        </PressableScale>
 {/* Round button ↔ text input morph */}
 <Animated.View style={[styles.morphPill, pillStyle]}>
   <Animated.View
@@ -303,6 +331,15 @@ const styles = StyleSheet.create({
   },
   buttonGradient: {
     // padding: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  particleToggle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#2E2E2E",
     justifyContent: "center",
     alignItems: "center",
   },
