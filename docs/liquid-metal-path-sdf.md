@@ -202,7 +202,18 @@ on-device; logo→logo morph logic is in but its on-device check was cut short
 — verify visually next session (toggle particles, tap the canvas twice: the
 Expo→Apple transition should shift dots in place, never re-scatter).
 
-## Mixed effect: MorphingLiquidMetal (2026-07-18)
+## Mixed effect: MorphingLiquidMetal (2026-07-18) — PARKED
+
+> **Status 2026-07-19:** the mixed effect is **not used by the demo anymore**
+> — handoffs popped (hard mount/unmount cuts), and the cross-fade attempt on
+> top made things worse, so both were reverted. The demo shows the two
+> effects **separately** (metal shader / particle view, toggled). The
+> component remains in the tree for a future attempt. The reverted work
+> (roadmap step 2 field-sampling + cross-fades) is preserved in
+> `docs/handoffs/liquid-metal-step2-crossfades-reverted-2026-07-19.patch`.
+> Lesson for the next attempt: don't rely on Reanimated entering/exiting
+> mount animations with heavy Skia canvases — build one component that owns
+> **two stacked canvases** with explicit opacity shared values.
 
 `MorphingLiquidMetal.tsx` mixes the two effects: shapes render as liquid
 metal, and every path change transitions through particles — the metal

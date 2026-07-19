@@ -1,0 +1,368 @@
+diff --git a/src/components/liquid-metal/MorphingLiquidMetal.tsx b/src/components/liquid-metal/MorphingLiquidMetal.tsx
+index 8965859..12fed28 100644
+--- a/src/components/liquid-metal/MorphingLiquidMetal.tsx
++++ b/src/components/liquid-metal/MorphingLiquidMetal.tsx
+@@ -23,9 +23,10 @@
+  */
+ 
+ import { usePathSdf } from "@/hooks/usePathSdf";
++import { type PathSdf } from "@/lib/shaders/pathSdf";
+ import { type SkPath } from "@shopify/react-native-skia";
+ import React, { useRef, useState } from "react";
+-import Animated, { FadeIn } from "react-native-reanimated";
++import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+ import { ParticlePathAssembly } from "./ParticlePathAssembly";
+ import {
+   SdfLiquidMetalShader,
+@@ -49,6 +50,11 @@ export type MorphingLiquidMetalProps = SdfLiquidMetalShaderProps & {
+   transitionDuration?: number;
+ };
+ 
++/** Metal↔dots swap fade (old metal out / dots in, and reverse) */
++const FADE_SWAP_MS = 250;
++/** Settle fade (new metal in / settled dots out) */
++const FADE_SETTLE_MS = 300;
++
+ // ============================================================================
+ // COMPONENT
+ // ============================================================================
+@@ -65,6 +71,7 @@ export function MorphingLiquidMetal({
+ }: MorphingLiquidMetalProps) {
+   const [transition, setTransition] = useState<{
+     from: PathSource;
++    fromSdf: PathSdf | null;
+     to: PathSource;
+   } | null>(null);
+ 
+@@ -73,6 +80,10 @@ export function MorphingLiquidMetal({
+   // remounts on settle (and nothing downstream re-rasterizes the path)
+   const sdf = usePathSdf({ svgPath, path }, width, height);
+ 
++  // The previous render's bake — still the OLD shape's field when the
++  // render-phase guard below runs on a path change (assigned at the bottom)
++  const lastSdfRef = useRef<PathSdf | null>(null);
++
+   // Render-phase change detection: the path identity (SkPath object or SVG
+   // string) differing from what we last saw starts/retargets a transition
+   const key = path ?? svgPath;
+@@ -84,31 +95,49 @@ export function MorphingLiquidMetal({
+     // Mid-transition changes keep the original `from`; the mounted particle
+     // view morphs in place from wherever its dots currently are
+     const from = transition ? transition.from : seenRef.current.source;
++    const fromSdf = transition ? transition.fromSdf : lastSdfRef.current;
+     seenRef.current = { key, source: { svgPath, path } };
+-    setTransition({ from, to: { svgPath, path } });
++    setTransition({ from, fromSdf, to: { svgPath, path } });
+   }
++  lastSdfRef.current = sdf;
+ 
+   const settle = () => setTransition(null);
+ 
++  // Both handoffs cross-fade: the exiting layer keeps rendering while it
++  // fades (Reanimated exiting), overlapping the entering layer's fade-in.
++  // Metal→dots: old metal fades out over dots holding its silhouette
++  // (playDelayMs keeps them still until the fade completes).
++  // Dots→metal: settled dots fade out over the new metal fading in.
+   if (transition) {
+     return (
+-      <ParticlePathAssembly
+-        svgPath={transition.to.svgPath}
+-        path={transition.to.path}
+-        fromSvgPath={transition.from.svgPath}
+-        fromPath={transition.from.path}
+-        width={width}
+-        height={height}
+-        dotCount={dotCount}
+-        color={particleColor}
+-        duration={transitionDuration}
+-        onSettled={settle}
+-      />
++      <Animated.View
++        entering={FadeIn.duration(FADE_SWAP_MS)}
++        exiting={FadeOut.duration(FADE_SETTLE_MS)}
++      >
++        <ParticlePathAssembly
++          svgPath={transition.to.svgPath}
++          path={transition.to.path}
++          sdf={sdf}
++          fromSvgPath={transition.from.svgPath}
++          fromPath={transition.from.path}
++          fromSdf={transition.fromSdf}
++          width={width}
++          height={height}
++          dotCount={dotCount}
++          color={particleColor}
++          duration={transitionDuration}
++          playDelayMs={FADE_SWAP_MS + 50}
++          onSettled={settle}
++        />
++      </Animated.View>
+     );
+   }
+ 
+   return (
+-    <Animated.View entering={FadeIn.duration(350)}>
++    <Animated.View
++      entering={FadeIn.duration(FADE_SETTLE_MS)}
++      exiting={FadeOut.duration(FADE_SWAP_MS)}
++    >
+       <SdfLiquidMetalShader
+         svgPath={svgPath}
+         path={path}
+diff --git a/src/components/liquid-metal/ParticlePathAssembly.tsx b/src/components/liquid-metal/ParticlePathAssembly.tsx
+index 6a7eaab..d389407 100644
+--- a/src/components/liquid-metal/ParticlePathAssembly.tsx
++++ b/src/components/liquid-metal/ParticlePathAssembly.tsx
+@@ -36,10 +36,12 @@ import {
+   Easing,
+   ReduceMotion,
+   useSharedValue,
++  withDelay,
+   withTiming,
+ } from "react-native-reanimated";
+ import { scheduleOnRN } from "react-native-worklets";
+ import { fitPathToCanvas } from "@/hooks/usePathSdf";
++import { type PathSdf } from "@/lib/shaders/pathSdf";
+ 
+ // ============================================================================
+ // TYPES
+@@ -88,6 +90,23 @@ export type ParticlePathAssemblyProps = {
+ 
+   /** Called on the JS thread when the gather animation completes */
+   onSettled?: () => void;
++
++  /**
++   * Pre-baked field of the target shape (from usePathSdf). When provided,
++   * targets are sampled from the field — depth-weighted density, and each
++   * dot sized by its local wall distance — instead of a private raster.
++   */
++  sdf?: PathSdf | null;
++
++  /** Pre-baked field of the handoff (from) shape */
++  fromSdf?: PathSdf | null;
++
++  /**
++   * Hold time in ms before the FIRST play starts moving — the dots sit
++   * pre-assembled while a cross-fade above them completes. Replays and
++   * mid-flight retargets are not delayed.
++   */
++  playDelayMs?: number;
+ };
+ 
+ // ============================================================================
+@@ -108,6 +127,63 @@ const mulberry32 = (seed: number) => {
+   };
+ };
+ 
++/** Sampled destinations: positions in logical points + wall distance per dot */
++type SampledTargets = {
++  points: Float32Array;
++  /** Signed distance to the outline at each point, logical points; null when
++   * sampled from a raster (no field available) */
++  depths: Float32Array | null;
++};
++
++/**
++ * Sample targets from a baked distance field: cells at least ~1pt inside,
++ * accepted with probability rising with depth (denser on the spine, sparser
++ * at the fragile edge), each carrying its wall distance for dot sizing.
++ */
++const sampleFieldTargets = (
++  sdf: PathSdf,
++  dotCount: number,
++  rand: () => number
++): SampledTargets | null => {
++  const { field, width: fw, height: fh, scale, maxInside } = sdf;
++  const stride = Math.max(1, Math.round(2 * scale)); // ≈ every 2 logical pts
++  const minDepth = 1 * scale; // ≥1pt inside the outline
++  const depthNorm = Math.max(0.35 * maxInside, minDepth + 1);
++
++  const candidates: number[] = []; // x, y (logical pts), d (logical pts)
++  for (let y = 0; y < fh; y += stride) {
++    for (let x = 0; x < fw; x += stride) {
++      const d = field[y * fw + x];
++      if (d <= minDepth) continue;
++      // Depth-weighted acceptance: deep cells ~always, edge cells ~40%
++      const w = Math.min(1, 0.4 + 0.6 * (d / depthNorm));
++      if (rand() < w) candidates.push(x / scale, y / scale, d / scale);
++    }
++  }
++  const total = candidates.length / 3;
++  if (total === 0) return null;
++
++  // Fisher-Yates on triples
++  for (let i = total - 1; i > 0; i--) {
++    const j = Math.floor(rand() * (i + 1));
++    for (let k = 0; k < 3; k++) {
++      const tmp = candidates[i * 3 + k];
++      candidates[i * 3 + k] = candidates[j * 3 + k];
++      candidates[j * 3 + k] = tmp;
++    }
++  }
++
++  const points = new Float32Array(dotCount * 2);
++  const depths = new Float32Array(dotCount);
++  for (let i = 0; i < dotCount; i++) {
++    const c = i % total;
++    points[i * 2] = candidates[c * 3] + (rand() * 2 - 1);
++    points[i * 2 + 1] = candidates[c * 3 + 1] + (rand() * 2 - 1);
++    depths[i] = candidates[c * 3 + 2];
++  }
++  return { points, depths };
++};
++
+ /** Rasterize the fitted path and sample its filled area into target points */
+ const sampleTargets = (
+   fitted: SkPath,
+@@ -115,7 +191,7 @@ const sampleTargets = (
+   height: number,
+   dotCount: number,
+   rand: () => number
+-): Float32Array | null => {
++): SampledTargets | null => {
+   const w = Math.round(width);
+   const h = Math.round(height);
+   const surface = Skia.Surface.MakeOffscreen(w, h) ?? Skia.Surface.Make(w, h);
+@@ -154,17 +230,28 @@ const sampleTargets = (
+   // Always exactly dotCount targets: wrap when the shape has fewer sample
+   // points, so every dot has a destination and shape-to-shape morphs keep a
+   // stable 1:1 dot mapping
+-  const targets = new Float32Array(dotCount * 2);
++  const points = new Float32Array(dotCount * 2);
+   for (let i = 0; i < dotCount; i++) {
+     const c = i % total;
+     // ±1px jitter so the stride-2 grid doesn't read as a lattice (and so
+     // wrapped dots don't sit exactly on top of each other)
+-    targets[i * 2] = candidates[c * 2] + (rand() * 2 - 1);
+-    targets[i * 2 + 1] = candidates[c * 2 + 1] + (rand() * 2 - 1);
++    points[i * 2] = candidates[c * 2] + (rand() * 2 - 1);
++    points[i * 2 + 1] = candidates[c * 2 + 1] + (rand() * 2 - 1);
+   }
+-  return targets;
++  return { points, depths: null } satisfies SampledTargets;
+ };
+ 
++/** True when a baked field's logical size matches this canvas — a field
++ * baked for a differently-sized canvas would place dots at wrong offsets */
++const sdfMatchesCanvas = (
++  sdf: PathSdf | null | undefined,
++  width: number,
++  height: number
++): sdf is PathSdf =>
++  !!sdf &&
++  Math.round(sdf.width / sdf.scale) === Math.round(width) &&
++  Math.round(sdf.height / sdf.scale) === Math.round(height);
++
+ // ============================================================================
+ // COMPONENT
+ // ============================================================================
+@@ -182,21 +269,35 @@ export function ParticlePathAssembly({
+   fromSvgPath,
+   fromPath,
+   onSettled,
++  sdf,
++  fromSdf,
++  playDelayMs = 0,
+ }: ParticlePathAssemblyProps) {
+   const [seed, setSeed] = useState(1);
+ 
+   // ============================================================================
+-  // SAMPLING — targets from the path, scatter/trajectory per seed
++  // SAMPLING — targets from the field when available, raster fallback
+   // ============================================================================
+ 
+-  const targets = useMemo(() => {
++  const sampledTo = useMemo(() => {
++    if (sdfMatchesCanvas(sdf, width, height)) {
++      const fromField = sampleFieldTargets(sdf, dotCount, mulberry32(7));
++      if (fromField) return fromField;
++    }
+     const fitted = fitPathToCanvas({ svgPath, path }, width, height);
+     if (!fitted) return null;
+     return sampleTargets(fitted, width, height, dotCount, mulberry32(7));
+-  }, [svgPath, path, width, height, dotCount]);
++  }, [sdf, svgPath, path, width, height, dotCount]);
++
++  const targets = sampledTo?.points ?? null;
++  const targetDepths = sampledTo?.depths ?? null;
+ 
+   // Optional handoff shape: dots start pre-assembled as this on first mount
+   const fromTargets = useMemo(() => {
++    if (sdfMatchesCanvas(fromSdf, width, height)) {
++      const fromField = sampleFieldTargets(fromSdf, dotCount, mulberry32(7));
++      if (fromField) return fromField.points;
++    }
+     if (!fromSvgPath && !fromPath) return null;
+     const fitted = fitPathToCanvas(
+       { svgPath: fromSvgPath, path: fromPath },
+@@ -204,8 +305,11 @@ export function ParticlePathAssembly({
+       height
+     );
+     if (!fitted) return null;
+-    return sampleTargets(fitted, width, height, dotCount, mulberry32(7));
+-  }, [fromSvgPath, fromPath, width, height, dotCount]);
++    return (
++      sampleTargets(fitted, width, height, dotCount, mulberry32(7))?.points ??
++      null
++    );
++  }, [fromSdf, fromSvgPath, fromPath, width, height, dotCount]);
+ 
+   // Previous shape's targets: when the path changes, dots shift from where
+   // they are instead of re-scattering. Random scatter only on first mount
+@@ -263,10 +367,16 @@ export function ParticlePathAssembly({
+ 
+       // Each dot animates in a 0.55-wide window offset by its stagger
+       staggers[i] = rand() * staggerAmp;
+-      sizes[i] = 0.7 + rand() * 0.6;
++      // Wall-aware sizing: a dot's radius can't exceed its distance to the
++      // outline (min(r, d) as a scale factor) — edge dots shrink to fit,
++      // deep dots swell slightly. Raster-sampled targets have no depth.
++      const depthFactor = targetDepths
++        ? Math.min(1.15, Math.max(0.4, targetDepths[i] / (dotRadius * 2)))
++        : 1;
++      sizes[i] = (0.7 + rand() * 0.6) * depthFactor;
+     }
+     return { starts, ctrls, staggers, sizes, n };
+-  }, [targets, fromTargets, seed, width, height]);
++  }, [targets, targetDepths, fromTargets, seed, width, height, dotRadius]);
+ 
+   // Record what this render is assembling toward — the next path change
+   // morphs from here (render-phase ref writes; the memo above already ran)
+@@ -279,19 +389,26 @@ export function ParticlePathAssembly({
+ 
+   const progress = useSharedValue(0);
+ 
++  const firstPlayRef = useRef(true);
++
+   const play = () => {
++    const delay = firstPlayRef.current ? playDelayMs : 0;
++    firstPlayRef.current = false;
+     progress.value = 0;
+-    progress.value = withTiming(
+-      1,
+-      {
+-        duration,
+-        easing: Easing.linear, // per-dot easing lives in the worklet
+-        reduceMotion: ReduceMotion.System,
+-      },
+-      (finished) => {
+-        "worklet";
+-        if (finished && onSettled) scheduleOnRN(onSettled);
+-      }
++    progress.value = withDelay(
++      delay,
++      withTiming(
++        1,
++        {
++          duration,
++          easing: Easing.linear, // per-dot easing lives in the worklet
++          reduceMotion: ReduceMotion.System,
++        },
++        (finished) => {
++          "worklet";
++          if (finished && onSettled) scheduleOnRN(onSettled);
++        }
++      )
+     );
+   };
+ 

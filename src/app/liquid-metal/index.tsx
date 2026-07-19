@@ -1,5 +1,5 @@
-import { MorphingLiquidMetal } from "@/components/liquid-metal/MorphingLiquidMetal";
 import { ParticlePathAssembly } from "@/components/liquid-metal/ParticlePathAssembly";
+import { SdfLiquidMetalShader } from "@/components/liquid-metal/SdfLiquidMetalShader";
 import { extractPathsFromSvg } from "@/components/liquid-metal/utils";
 
 import {  ThemeText, ThemeView } from "@/components/Theme";
@@ -178,7 +178,7 @@ const [showParticles, setShowParticles] = useState(false)
         <PressableScale onPress={() => {
           setLogoIndex((prev) => (prev + 1) % LOGOS.length)
 }} >
-      <MorphingLiquidMetal
+      <SdfLiquidMetalShader
           svgPath={LOGOS[logoIndex] || EXPO_LOGO_SVG_PATH}
         path={mode === "text" ? textPath : undefined}
         width={mode === "text" && textPath ? BUTTON_SIZE * 1.4 : BUTTON_SIZE}
