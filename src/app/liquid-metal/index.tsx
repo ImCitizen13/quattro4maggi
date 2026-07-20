@@ -46,7 +46,7 @@ import { EXPO_LOGO_SVG_PATH, LOGOS } from "../../../svgs/svgs";
  */
 const BG_COLOR = "rgb(64 64 64)";
 const CONTAINER_SIZE = 400;
-const BUTTON_SIZE = 250;
+const BUTTON_SIZE = 300;
 const gradientColors = ["#2E2E2E", "#000000"];
 
 // Morph pill: collapsed round button ↔ expanded text input
@@ -179,7 +179,7 @@ const [showParticles, setShowParticles] = useState(false)
           setLogoIndex((prev) => (prev + 1) % LOGOS.length)
 }} >
       <SdfLiquidMetalShader
-          svgPath={LOGOS[logoIndex] || EXPO_LOGO_SVG_PATH}
+        svgPath={LOGOS[logoIndex] || EXPO_LOGO_SVG_PATH}
         path={mode === "text" ? textPath : undefined}
         width={mode === "text" && textPath ? BUTTON_SIZE * 1.4 : BUTTON_SIZE}
         height={BUTTON_SIZE}
@@ -188,12 +188,12 @@ const [showParticles, setShowParticles] = useState(false)
         customHighlight={[0.9, 0.5, 0.8]}
         customShadow={[0.3, 0.1, 0.2]}
         iridescence={0.05}
-        contour={0.1}
-        distortion={0.0}
-            repetition={1}
-            speed={1}
+        contour={0.6}
+        distortion={0.1}
+        repetition={0.7}
+        speed={1}
         />
-</PressableScale>
+      </PressableScale>
         )}
 
         {/* Metal ↔ particles view toggle */}

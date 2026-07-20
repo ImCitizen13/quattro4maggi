@@ -10,22 +10,30 @@
  * child shader. R holds `0.5 + 0.5 * d / iSdfMax` with d positive inside.
  *
  * UNIFORMS (beyond ExpoLiquidMetal's set):
- * - iSdfTexture: shader - Baked distance field
- * - iSdfMax: float - Normalization scale (field pixels) to reconstruct d
- * - iSdfMaxInside: float - Deepest inside distance (field pixels)
+ * - iSdfTexA / iSdfTexB: shader - Two baked-field slots. Path changes load
+ *   the new field into the hidden slot and animate iMorph toward it, so the
+ *   just-committed texture never shows before its animation starts
+ * - iSdfMaxA / iSdfMaxB: float - Normalization scale (field pixels) per slot
+ * - iSdfMaxInsideA / iSdfMaxInsideB: float - Deepest inside distance per slot
  * - iSdfScale: float - Field pixels per logical point (bake supersampling)
+ * - iMorph: float - Blend position: 0 = slot A, 1 = slot B. Fields are
+ *   lerped, so intermediate values fuse/melt the silhouettes like metaballs
  * - iDebug: float - 1 = render the raw field with isolines instead of metal
  *
  * @see pathSdf.ts for the bake, ExpoLiquidMetal.ts for the original ramp field
  */
 
 export const sdfLiquidMetalShader = `
-uniform shader iSdfTexture;
+uniform shader iSdfTexA;
+uniform shader iSdfTexB;
 uniform float2 iResolution;
 uniform float iTime;
-uniform float iSdfMax;
-uniform float iSdfMaxInside;
+uniform float iSdfMaxA;
+uniform float iSdfMaxB;
+uniform float iSdfMaxInsideA;
+uniform float iSdfMaxInsideB;
 uniform float iSdfScale;
+uniform float iMorph;
 uniform float iDebug;
 uniform float4 iColorBack;
 uniform float4 iColorTint;
@@ -51,12 +59,16 @@ const float PI = 3.14159265359;
 // DISTANCE FIELD
 // ============================================================================
 
-// Signed distance in field pixels, positive inside the path.
-// The field is baked at iSdfScale× the logical resolution, so logical
-// fragCoords are scaled up into texture space (fix B: bake at pixel ratio).
-float sdPath(float2 fragCoord) {
-  float r = iSdfTexture.eval(fragCoord * iSdfScale).r;
-  return (r - 0.5) * 2.0 * iSdfMax;
+// Signed distance in field pixels, positive inside the path — the lerp of
+// the two slot fields at morph position m (0 = A, 1 = B). Each texture is
+// denormalized with its own max before mixing. The field is baked at
+// iSdfScale× the logical resolution, so logical fragCoords are scaled up
+// into texture space (fix B: bake at pixel ratio).
+float sdPath(float2 fragCoord, float m) {
+  float2 tc = fragCoord * iSdfScale;
+  float dA = (iSdfTexA.eval(tc).r - 0.5) * 2.0 * iSdfMaxA;
+  float dB = (iSdfTexB.eval(tc).r - 0.5) * 2.0 * iSdfMaxB;
+  return mix(dA, dB, m);
 }
 
 // ============================================================================
@@ -153,14 +165,20 @@ half4 main(float2 fragCoord) {
   float2 uv = fragCoord / iResolution;
   uv.y = 1.0 - uv.y;
 
-  // --- Field ---------------------------------------------------------------
-  float d = sdPath(fragCoord);
+  // --- Field (morph-blended) -------------------------------------------------
+  // Static spatial noise biases the morph parameter so regions of metal flow
+  // ahead of others (liquid melt, not a uniform dissolve). The m*(1-m)
+  // envelope pins the endpoints: settled shapes are exact, bias peaks mid-morph.
+  float meltNoise = perlinNoise(uv * 2.5 + float2(4.7, 9.2));
+  float m = clamp(iMorph + 1.4 * meltNoise * iMorph * (1.0 - iMorph), 0.0, 1.0);
+
+  float d = sdPath(fragCoord, m);
   // Depth normalized against the deepest point: 0 at outline, 1 on the spine
-  float depth = clamp(d / max(iSdfMaxInside, 1.0), 0.0, 1.0);
+  float depth = clamp(d / max(mix(iSdfMaxInsideA, iSdfMaxInsideB, m), 1.0), 0.0, 1.0);
 
   // --- Debug view: raw field + isolines --------------------------------------
   if (iDebug > 0.5) {
-    float dn = d / iSdfMax;
+    float dn = d / mix(iSdfMaxA, iSdfMaxB, m);
     // inside green, outside red, ramped by |distance|
     float3 c = d >= 0.0
       ? float3(0.0, 0.4 + 0.6 * dn, 0.2)

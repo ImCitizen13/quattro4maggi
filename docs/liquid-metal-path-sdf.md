@@ -60,9 +60,18 @@ space via `iSdfScale`, and `PathSdf.scale` records the factor for JS-side
 consumers (multiply logical coords by it before `sample`/`gradient`, divide
 sampled distances by it).
 
-Bake cost is one-time at mount inside a `useMemo` keyed on path+size (a few ms
-at 600²). Re-baking per frame (morphing paths) would need a different route
-(polyline uniforms or a coarse GPU bake).
+**Bake cost (measured 2026-07-19, dev build on iOS sim): ~1.1s at 750²,
+~1.5s at 1050×750** — not "a few ms" as previously assumed. Profile: raster
+10ms / seed 60ms / **EDT 950ms** / pack+upload 70ms. The Felzenszwalb passes
+are O(n) but Hermes has no JIT, so interpreted-JS loop cost dominates.
+`usePathSdf` therefore keeps a module-level cache (SVG-string sources only,
+keyed source+size, cap 6 ≈ 11MB/entry): logo cycling and StrictMode
+double-renders re-bake nothing — verified on-device, 5 bakes for two full
+5-logo cycles. The *first* bake of a shape still blocks the JS thread ~1.1s
+(this is what delays the morph start on a fresh shape); typed text misses
+the cache by construction (fresh `SkPath` per keystroke). Candidate fixes if
+it matters: progressive two-phase bake (coarse field immediately, full-res
+swap async), a native/JSI EDT, or a lower `pixelScale` for text.
 
 ### Why CPU bake (vs the alternatives)
 
@@ -162,6 +171,28 @@ typing ever stutters on device, debounce the bake or drop the text bake to
   linked" screen after a JS-only reload means rebuild with `expo run:ios`).
   Dismiss paths: background tap (full-screen `Pressable` → `Keyboard.dismiss`),
   the ✕ (collapses the morph too), or the Done key.
+
+## Shape morph: two-slot field blend (2026-07-19)
+
+Path changes melt from shape to shape instead of popping. The shader holds
+**two field textures** (`iSdfTexA`/`iSdfTexB`, each with its own
+max/maxInside) and blends their denormalized distances at `iMorph`
+(0 = A, 1 = B); mask, bands, edge all derive from the blended field, so the
+whole metal effect morphs coherently — the metaball fuse falls out of
+thresholding the lerped fields. A static perlin bias on the morph parameter
+(`m = iMorph + 1.4·noise·m(1−m)`, envelope zero at the endpoints) makes
+regions flow unevenly — liquid melt, not a uniform dissolve.
+
+**The slot dance (flash-proof by construction):** a new bake always loads
+into the *hidden* slot, then the blend springs toward it
+(`SPRING_SDF_MORPH`, 600ms, kicked via `queueMicrotask`). The
+just-committed texture has zero weight under the current blend value, so
+the new shape can never flash before the animation starts. (The first
+attempt reset morph 0→1 on swap — the reset raced the React commit and the
+new shape ghosted for a frame.) Mid-morph changes retarget from wherever
+the blend is; a canvas resize snaps both slots to the new bake. All inside
+`SdfLiquidMetalShader` — logo taps and text keystrokes morph with no
+demo changes.
 
 ## Particle assembly (2026-07-18)
 

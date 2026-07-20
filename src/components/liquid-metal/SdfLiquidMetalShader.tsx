@@ -14,6 +14,9 @@
  *
  * KEY FEATURES:
  * - Bands follow the letterform outline (parallel offset contours)
+ * - Path changes morph: the previous field is kept and lerped into the new
+ *   one in the shader (noise-biased), so shapes melt/fuse like metaballs
+ *   instead of popping — no extra canvas, no mount/unmount
  * - Field stays readable in JS for future bubble-containment physics
  * - `debug` prop renders the raw field with isolines for verification
  */
@@ -38,8 +41,13 @@ import {
   useClock,
   type SkPath,
 } from "@shopify/react-native-skia";
-import React, { useMemo } from "react";
-import { useDerivedValue } from "react-native-reanimated";
+import React, { useMemo, useRef } from "react";
+import {
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { SPRING_SDF_MORPH } from "@/lib/animations/constants";
 
 // ============================================================================
 // TYPES
@@ -161,6 +169,47 @@ export function SdfLiquidMetalShader({
   const sdf = sdfProp ?? internalSdf;
 
   // ============================================================================
+  // SHAPE MORPH (two-slot field blend)
+  // ============================================================================
+
+  // The shader blends two field slots: iMorph 0 = slot A, 1 = slot B. A path
+  // change loads the new field into the HIDDEN slot and springs the blend
+  // toward it — the just-committed texture has zero weight under the current
+  // blend value, so the new shape can never flash before the animation starts
+  // (a reset-to-0 scheme raced the commit and did exactly that). Mid-morph
+  // changes retarget from wherever the blend currently is.
+  const morph = useSharedValue(0);
+  const slotsRef = useRef<{
+    a: PathSdf | null;
+    b: PathSdf | null;
+    showing: "a" | "b";
+  }>({ a: null, b: null, showing: "a" });
+
+  const slots = slotsRef.current;
+  if (sdf) {
+    const current = slots.showing === "a" ? slots.a : slots.b;
+    if (
+      !current ||
+      current.width !== sdf.width ||
+      current.height !== sdf.height
+    ) {
+      // First bake, or canvas resized: fill both slots, nothing to animate
+      slots.a = sdf;
+      slots.b = sdf;
+    } else if (sdf !== current) {
+      const target = slots.showing === "a" ? "b" : "a";
+      slots[target] = sdf;
+      slots.showing = target;
+      // Shared values must not be written during render — defer the kick
+      queueMicrotask(() => {
+        morph.value = withSpring(target === "b" ? 1 : 0, SPRING_SDF_MORPH);
+      });
+    }
+  }
+  const sdfA = slots.a ?? sdf;
+  const sdfB = slots.b ?? sdf;
+
+  // ============================================================================
   // METAL COLORS
   // ============================================================================
 
@@ -173,8 +222,10 @@ export function SdfLiquidMetalShader({
   // ============================================================================
 
   const clock = useClock();
-  const sdfMax = sdf?.maxDist ?? 1;
-  const sdfMaxInside = sdf?.maxInside ?? 1;
+  const sdfMaxA = sdfA?.maxDist ?? 1;
+  const sdfMaxB = sdfB?.maxDist ?? 1;
+  const sdfMaxInsideA = sdfA?.maxInside ?? 1;
+  const sdfMaxInsideB = sdfB?.maxInside ?? 1;
   const sdfScale = sdf?.scale ?? 1;
 
   const uniforms = useDerivedValue(() => {
@@ -182,9 +233,12 @@ export function SdfLiquidMetalShader({
     return {
       iResolution: [width, height],
       iTime: time,
-      iSdfMax: sdfMax,
-      iSdfMaxInside: sdfMaxInside,
+      iSdfMaxA: sdfMaxA,
+      iSdfMaxB: sdfMaxB,
+      iSdfMaxInsideA: sdfMaxInsideA,
+      iSdfMaxInsideB: sdfMaxInsideB,
       iSdfScale: sdfScale,
+      iMorph: morph.value,
       iDebug: debug ? 1 : 0,
       iColorBack: colorBack,
       iColorTint: colorTint,
@@ -228,8 +282,15 @@ export function SdfLiquidMetalShader({
       <Group>
         <Fill>
           <Shader source={shader} uniforms={uniforms}>
+            {/* Child order matches the uniform shader declarations:
+                iSdfTexA, then iSdfTexB */}
             <ImageShader
-              image={sdf.image}
+              image={(sdfA ?? sdf).image}
+              fit="none"
+              sampling={{ filter: FilterMode.Linear, mipmap: MipmapMode.None }}
+            />
+            <ImageShader
+              image={(sdfB ?? sdf).image}
               fit="none"
               sampling={{ filter: FilterMode.Linear, mipmap: MipmapMode.None }}
             />

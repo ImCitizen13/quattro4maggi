@@ -80,6 +80,19 @@ export const fitPathToCanvas = (
 };
 
 // ============================================================================
+// BAKE CACHE
+// ============================================================================
+
+// The bake's EDT runs ~1s at 750² in interpreted Hermes (profiled 2026-07-19:
+// raster 10ms / seed 60ms / edt 950ms / pack 70ms), so repeat visits to the
+// same shape — logo cycling, StrictMode double-render — must not re-bake.
+// Keyed by SVG string + size; SkPath sources (typed text) are new objects per
+// keystroke and skip the cache. Entries hold ~11MB (field + F32 texture),
+// hence the small cap, evicting oldest-inserted first.
+const bakeCache = new Map<string, PathSdf>();
+const BAKE_CACHE_MAX = 6;
+
+// ============================================================================
 // HOOK
 // ============================================================================
 
@@ -95,16 +108,35 @@ export function usePathSdf(
   const { svgPath, path } = source;
 
   return useMemo(() => {
+    const key = svgPath && !path ? `${svgPath}|${width}x${height}` : null;
+    if (key) {
+      const hit = bakeCache.get(key);
+      if (hit) return hit;
+    }
+
     // Bake at device pixel ratio so the field matches the physical pixel
     // grid (capped — beyond 3× the F32 texture cost buys nothing)
+    const t0 = performance.now();
     const pixelScale = Math.min(PixelRatio.get(), 3);
     const fitted = fitPathToCanvas({ svgPath, path }, width, height, pixelScale);
     if (!fitted) return null;
-    return bakePathSdf(
+    const baked = bakePathSdf(
       fitted,
       width * pixelScale,
       height * pixelScale,
       pixelScale
     );
+    console.log(
+      `[usePathSdf] bake ${Math.round(width * pixelScale)}x${Math.round(height * pixelScale)}: ${(performance.now() - t0).toFixed(1)}ms`
+    );
+
+    if (key && baked) {
+      if (bakeCache.size >= BAKE_CACHE_MAX) {
+        const oldest = bakeCache.keys().next().value;
+        if (oldest !== undefined) bakeCache.delete(oldest);
+      }
+      bakeCache.set(key, baked);
+    }
+    return baked;
   }, [svgPath, path, width, height]);
 }

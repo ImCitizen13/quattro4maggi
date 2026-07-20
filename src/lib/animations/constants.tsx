@@ -26,6 +26,18 @@ export const SPRING_TEXT_CONFIG = {
   reduceMotion: ReduceMotion.System,
 };
 
+/** SDF shape morph: previous distance field melting into the new one */
+export const SPRING_SDF_MORPH = {
+        stiffness: 900,
+        damping: 120,
+        mass: 4,
+        overshootClamping: false,
+        energyThreshold: 6e-9,
+        velocity: 0,
+        reduceMotion: ReduceMotion.System,
+
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,
