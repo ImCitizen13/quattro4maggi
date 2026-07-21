@@ -40,6 +40,8 @@ uniform float iDistortion;
 uniform float iContour;
 uniform float iAngle;
 uniform float iShape;
+uniform float iRimLight;
+uniform float iBrightness;
 uniform float iIridescence;
 uniform float3 iIridColor0;
 uniform float3 iIridColor1;
@@ -251,6 +253,9 @@ half4 main(float2 fragCoord) {
 
   float edge = getShapeEdge(uv, t);
   float opacity = 1.0 - smoothstep(0.85, 0.95, edge);
+  // Clean, pre-distortion edge field for the rim bevel (see iRimLight below).
+  // 0 at the center, ~1 at the outline; the shape fades out over [0.85, 0.95].
+  float rimEdge = edge;
 
   if (iShape < 1.5) {
     edge = 1.2 * edge;
@@ -349,6 +354,21 @@ half4 main(float2 fragCoord) {
     // Blend: tint the color with rainbow at edges + subtle additive glow
     color = mix(color, color * irid * 1.2 + irid * 0.1, iIridescence * combinedMask);
   }
+
+  // --- Rim bevel -------------------------------------------------------------
+  // A bright polished bevel in a thin band just inside the outline, so the rim
+  // stays a clean highlight instead of being darkened by the bands (matches a
+  // chrome-button edge). Rises toward the outline, then fades right before the
+  // shape goes transparent so the very edge isn't a hard bright line.
+  float rim = smoothstep(0.55, 0.85, rimEdge) * (1.0 - smoothstep(0.82, 0.93, rimEdge));
+  color = mix(color, iColorHighlight, iRimLight * rim);
+
+  // --- Brightness (shadow lift) ----------------------------------------------
+  // Screen-blend the color toward white by iBrightness: raises the dark floor
+  // (shadows/lobes) while leaving highlights ~unchanged, so the metal reads
+  // bright-biased (chrome) without flattening the bright reflections. This
+  // decouples "how dark it reads overall" from the shadow color / lobe depth.
+  color = 1.0 - (1.0 - color) * (1.0 - iBrightness);
 
   color *= opacity;
 

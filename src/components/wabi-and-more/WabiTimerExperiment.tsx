@@ -240,6 +240,9 @@ export default function WabiTimerExperiment() {
     u_shadowColor: isDark ? [1, 1, 1] : [0, 0, 0],
     u_shadowOpacity: isDark ? 0.15 : 0.25,
     u_shadowSpread: 0.2,
+    u_transparentBg: 0, // keep the opaque bg fill this screen relies on
+    u_bubbleColor: [0, 0, 0],
+    u_bubbleOpacity: 0, // no glass tint
     ...DEFAULT_PRISM_COLORS,
   }));
 

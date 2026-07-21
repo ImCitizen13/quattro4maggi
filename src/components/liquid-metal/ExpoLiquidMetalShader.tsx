@@ -7,14 +7,18 @@ import { expoLiquidMetalShader } from "@/lib/shaders/ExpoLiquidMetal";
 import { perlinLiquidMetalShader } from "@/lib/shaders/PerlinLiquidMetal";
 import {
   Canvas,
-  Fill,
+  Group,
+  Paint,
+  Rect,
+  RuntimeShader,
   Shader,
   Skia,
   useClock,
 } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
-import { StyleSheet } from "react-native";
+import { PixelRatio, StyleSheet } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";
+import { BShader, gray_PRISM_COLORS } from "../wabi-and-more/BShader";
 
 // ============================================================================
 // TYPES
@@ -139,6 +143,33 @@ export type ExpoLiquidMetalShaderProps = {
    * Each is [R, G, B] in 0-1 range
    */
   iridColors?: [RGB, RGB, RGB, RGB, RGB, RGB];
+
+  /**
+   * Rim bevel brightness (0-1). Pushes a thin band just inside the outline
+   * toward the highlight color so the edge stays a bright polished bevel
+   * instead of being darkened by the bands. @default 0
+   */
+  rimLight?: number;
+
+  /**
+   * Overall brightness / shadow lift (0-1). Screen-blends the metal toward
+   * white, raising the dark floor (shadow lobes) while leaving highlights
+   * ~unchanged — makes the metal read bright-biased (chrome) without
+   * flattening. Decoupled from shadow color / lobe depth. @default 0
+   */
+  brightness?: number;
+
+  /**
+   * Glass tint color for the refraction bubble, RGB 0-1
+   * @default [1, 1, 1]
+   */
+  bubbleColor?: RGB;
+
+  /**
+   * Bubble glass tint strength (0 = clear refraction, 1 = solid color)
+   * @default 0
+   */
+  bubbleOpacity?: number;
 };
 
 // ============================================================================
@@ -153,7 +184,7 @@ export type ExpoLiquidMetalShaderProps = {
  *
  * FLOW:
  * 1. Component mounts → shader compiles with uniforms
- * 2. Clock updates every frame → uniforms recalculate
+ * 2. Clockates every frame → uniforms recalculate
  * 3. Shader renders liquid metal with selected metal preset and shape
  *
  * KEY FEATURES:
@@ -201,6 +232,10 @@ export function ExpoLiquidMetalShader({
     [0, 0, 1],
     [1, 0, 1],
   ],
+  rimLight = 0,
+  brightness = 0,
+  bubbleColor = [1, 1, 1],
+  bubbleOpacity = 0,
 }: ExpoLiquidMetalShaderProps) {
   // ============================================================================
   // METAL COLORS
@@ -217,7 +252,12 @@ export function ExpoLiquidMetalShader({
   const clock = useClock();
 
   const uniforms = useDerivedValue(() => {
-    const time = (clock.value / 1000) * speed;
+    const timeSec = clock.value / 1000;
+    const time = timeSec * speed;
+    // Rotate the sweep angle clockwise over time. Rate scales with speed/3;
+    // ×36 makes it a visible gentle spin (~10°/s at speed 1 → ~36s/rev).
+    // Literal speed/3 deg/s would be ~imperceptible.
+    const animatedAngle = angle + timeSec * (speed / 3) * 36;
     return {
       iResolution: [width, height],
       iTime: time,
@@ -231,8 +271,10 @@ export function ExpoLiquidMetalShader({
       iShiftBlue: shiftBlue,
       iDistortion: distortion,
       iContour: contour,
-      iAngle: angle,
+      iAngle: animatedAngle,
       iShape: shape,
+      iRimLight: rimLight,
+      iBrightness: brightness,
       iIridescence: iridescence,
       iIridColor0: iridColors[0],
       iIridColor1: iridColors[1],
@@ -243,6 +285,40 @@ export function ExpoLiquidMetalShader({
     };
   });
 
+
+
+  // Device pixel ratio. The BShader is applied as a Group `layer`, whose
+  // offscreen is otherwise rasterized at LOGICAL size (e.g. 250²) and then
+  // upscaled ~3× to the physical screen → a pixelated rim. The DPR trick
+  // (outer group scale 1/pd, inner scale pd, layer uniforms ×pd) forces the
+  // offscreen to device resolution so the bubble samples a crisp metal.
+  // Same pattern as WabiTimerExperiment.
+  const pd = PixelRatio.get();
+
+  // Prism bubble shader uniforms — controls refraction, glow, and colors.
+  // Radius is derived from the canvas so the bubble sits centered with a
+  // padding gap to the metal's edge (was hardcoded 220 > canvas → no rim).
+  // Pixel-space values are ×pd because the layer filter runs in device pixels.
+  const bubblePadding = 10;
+  const shaderUniforms = useDerivedValue(() => ({
+    u_resolution: [width * pd, height * pd],
+    u_center: [(width / 2) * pd, (height / 2) * pd],
+    u_radius: (Math.min(width, height) / 2 - bubblePadding) * pd,
+    u_refraction: 0.3,
+    u_edgeWidth: 0.1,
+    // Low dispersion keeps the rim colorless — high values reintroduce a
+    // rainbow via R/B channel splitting regardless of the gray prism stops.
+    u_dispersion: 0.12,
+    u_bgColor: [1, 1, 1], // ignored while u_transparentBg = 1
+    u_specular: 0.1,
+    u_shadowColor: [0, 0, 0] ,
+    u_shadowOpacity: 0,
+    u_shadowSpread: 0.2,
+    u_transparentBg: 1, // transparent outside the bubble — no corner fill
+    u_bubbleColor: bubbleColor,
+    u_bubbleOpacity: bubbleOpacity,
+    ...gray_PRISM_COLORS,
+  }));
   // ============================================================================
   // SHADER COMPILATION
   // ============================================================================
@@ -262,9 +338,24 @@ export function ExpoLiquidMetalShader({
 
   return (
     <Canvas style={[styles.canvas, { width, height }]}>
-      <Fill>
-        <Shader source={shader} uniforms={uniforms} />
-      </Fill>
+      {/* DPR scaling trick: outer 1/pd cancels the inner pd, but the inner
+          scale forces the layer's offscreen to device resolution → crisp rim.
+          The metal shader stays in LOGICAL space (Rect + iResolution), the
+          bubble layer filter runs in device pixels (uniforms ×pd). */}
+      <Group transform={[{ scale: 1 / pd }]}>
+        <Group
+          transform={[{ scale: pd }]}
+          layer={
+            <Paint>
+              <RuntimeShader source={BShader} uniforms={shaderUniforms} />
+            </Paint>
+          }
+        >
+          <Rect x={0} y={0} width={width} height={height}>
+            <Shader source={shader} uniforms={uniforms} />
+          </Rect>
+        </Group>
+      </Group>
     </Canvas>
   );
 }

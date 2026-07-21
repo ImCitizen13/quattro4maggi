@@ -177,7 +177,7 @@ export function SvgLiquidMetalShader({
   colorBack = [0, 0, 0, 0],
   colorTint = [1, 1, 1, 0],
   softness = 0,
-  repetition = 3,
+  repetition = 2,
   shiftRed = 0.3,
   shiftBlue = 0.3,
   distortion = 0.07,
@@ -258,6 +258,8 @@ export function SvgLiquidMetalShader({
       iContour: contour,
       iAngle: angle,
       iShape: 0, // Full-fill, let the SVG path do the clipping
+      iRimLight: 0, // rim bevel not used for path-clipped metal
+      iBrightness: 0, // no shadow lift for path-clipped metal
       iIridescence: iridescence,
       iIridColor0: iridColors[0],
       iIridColor1: iridColors[1],

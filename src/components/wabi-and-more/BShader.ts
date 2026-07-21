@@ -17,6 +17,10 @@ export const BShader = Skia.RuntimeEffect.Make(`
     uniform float u_shadowOpacity; // shadow strength (0-1)
     uniform float u_shadowSpread;  // shadow spread as fraction of radius (e.g. 0.3)
 
+    uniform float u_transparentBg; // 0 = fill outside with u_bgColor (opaque), 1 = transparent (keep source alpha)
+    uniform half3 u_bubbleColor;   // glass tint color inside the bubble (RGB 0-1)
+    uniform float u_bubbleOpacity; // glass tint strength (0 = clear refraction, 1 = solid color)
+
     // 6 rainbow color stops around the bubble edge (RGB 0-1)
     uniform half3 u_prismColor0;   // 0°   (right)
     uniform half3 u_prismColor1;   // 60°
@@ -78,7 +82,16 @@ export const BShader = Skia.RuntimeEffect.Make(`
         half3 shadowed = mix(bg, half3(u_shadowColor), shadowAlpha);
 
         if (mask <= 0.0) {
-            return half4(shadowed, 1.0);
+            if (u_transparentBg < 0.5) {
+                // Opaque mode (wabi): fill with bg + shadow, fully opaque
+                return half4(shadowed, 1.0);
+            }
+            // Transparent mode: keep source coverage, shadow sits behind it.
+            // Premultiplied output so canvas corners stay clear.
+            float aOut = src.a + shadowAlpha * (1.0 - src.a);
+            half3 cOut = src.rgb * src.a
+                       + half3(u_shadowColor) * (shadowAlpha * (1.0 - src.a));
+            return half4(cOut, aOut);
         }
 
         // ============================================================
@@ -111,10 +124,20 @@ export const BShader = Skia.RuntimeEffect.Make(`
             sampleSmooth(coordB).b
         );
 
-        // Composite distorted content over bgColor (source may be transparent)
-        half3 distortedBg = mix(half3(u_bgColor), distortedSrc.rgb, distortedSrc.a);
-        half3 chromaBg = mix(half3(u_bgColor), chromaSrc, distortedSrc.a);
-        half3 interior = mix(distortedBg, chromaBg, edgeFactor);
+        // Interior color. In opaque mode we composite over u_bgColor (keeps the
+        // wabi look); in transparent mode we keep the raw refracted colors and
+        // carry alpha separately at the end.
+        half3 interior;
+        if (u_transparentBg < 0.5) {
+            half3 distortedBg = mix(half3(u_bgColor), distortedSrc.rgb, distortedSrc.a);
+            half3 chromaBg = mix(half3(u_bgColor), chromaSrc, distortedSrc.a);
+            interior = mix(distortedBg, chromaBg, edgeFactor);
+        } else {
+            interior = mix(distortedSrc.rgb, chromaSrc, edgeFactor);
+        }
+
+        // Glass tint — colors the bubble. No-op when u_bubbleOpacity == 0.
+        interior = mix(interior, half3(u_bubbleColor), u_bubbleOpacity);
 
         // ============================================================
         // PRISMATIC TINT — configurable rainbow colors around the edge
@@ -153,9 +176,20 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // COMPOSITE — blend source content with bubble effects
         // ============================================================
 
-        half3 finalColor = mix(shadowed, color, mask);
+        if (u_transparentBg < 0.5) {
+            // Opaque mode (wabi): blend over the shadowed background, alpha 1
+            half3 finalColor = mix(shadowed, color, mask);
+            return half4(finalColor, 1.0);
+        }
 
-        return half4(finalColor, 1.0);
+        // Transparent mode: carry alpha so the bubble sits on a clear canvas.
+        float aOut = src.a + shadowAlpha * (1.0 - src.a);
+        half3 cOut = src.rgb * src.a
+                   + half3(u_shadowColor) * (shadowAlpha * (1.0 - src.a));
+        float aIn = distortedSrc.a;
+        float aFinal = mix(aOut, aIn, mask);
+        half3 cFinal = mix(cOut, color * aIn, mask); // premultiplied
+        return half4(cFinal, aFinal);
     }
 `)!;
 
@@ -167,4 +201,17 @@ export const DEFAULT_PRISM_COLORS = {
   u_prismColor3: [0, 1, 1],       // Cyan     (180°)
   u_prismColor4: [0, 0, 1],       // Blue     (240°)
   u_prismColor5: [1, 0, 1],       // Magenta  (300°)
+} as const;
+// Grayscale prism — same 6 faceted stops around the rim, but desaturated so
+// the edge reads as a silver/chrome bevel instead of a rainbow. Values alternate
+// light/dark around the circle to keep some faceted variation.
+// NOTE: u_dispersion still splits the R/B channels and adds color fringing on
+// its own — drop u_dispersion toward 0 for a truly colorless rim.
+export const gray_PRISM_COLORS = {
+  u_prismColor0: [0.75, 0.75, 0.75], //   0° light gray
+  u_prismColor1: [0.95, 0.95, 0.95], //  60° near white
+  u_prismColor2: [0.55, 0.55, 0.55], // 120° mid gray
+  u_prismColor3: [0.85, 0.85, 0.85], // 180° light gray
+  u_prismColor4: [0.45, 0.45, 0.45], // 240° dark gray
+  u_prismColor5: [0.70, 0.70, 0.70], // 300° gray
 } as const;
