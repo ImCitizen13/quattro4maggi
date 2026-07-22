@@ -21,7 +21,7 @@
 import { bakePathSdf, type PathSdf } from "@/lib/shaders/pathSdf";
 import { Skia, type SkPath } from "@shopify/react-native-skia";
 import { useMemo } from "react";
-import { PixelRatio } from "react-native";
+import { InteractionManager, PixelRatio } from "react-native";
 
 // ============================================================================
 // TYPES
@@ -92,12 +92,96 @@ export const fitPathToCanvas = (
 const bakeCache = new Map<string, PathSdf>();
 const BAKE_CACHE_MAX = 6;
 
+const cacheKey = (svgPath: string, width: number, height: number) =>
+  `${svgPath}|${width}x${height}`;
+
+/** Fit + bake a source at device pixel ratio. Uncached; returns null if empty. */
+function bakeSource(
+  source: PathSource,
+  width: number,
+  height: number
+): PathSdf | null {
+  // Bake at device pixel ratio so the field matches the physical pixel grid
+  // (capped — beyond 3× the F32 texture cost buys nothing)
+  const t0 = performance.now();
+  const pixelScale = Math.min(PixelRatio.get(), 3);
+  const fitted = fitPathToCanvas(source, width, height, pixelScale);
+  if (!fitted) return null;
+  const baked = bakePathSdf(
+    fitted,
+    width * pixelScale,
+    height * pixelScale,
+    pixelScale
+  );
+  console.log(
+    `[usePathSdf] bake ${Math.round(width * pixelScale)}x${Math.round(height * pixelScale)}: ${(performance.now() - t0).toFixed(1)}ms`
+  );
+  return baked;
+}
+
+/** Bake an SVG path through the module cache (get-or-bake + eviction). */
+function bakeSvgCached(
+  svgPath: string,
+  width: number,
+  height: number
+): PathSdf | null {
+  const key = cacheKey(svgPath, width, height);
+  const hit = bakeCache.get(key);
+  if (hit) return hit;
+
+  const baked = bakeSource({ svgPath }, width, height);
+  if (baked) {
+    if (bakeCache.size >= BAKE_CACHE_MAX) {
+      const oldest = bakeCache.keys().next().value;
+      if (oldest !== undefined) bakeCache.delete(oldest);
+    }
+    bakeCache.set(key, baked);
+  }
+  return baked;
+}
+
+// ============================================================================
+// PREWARM
+// ============================================================================
+
+/**
+ * Idle-bake the given SVG paths into the cache so a later swipe onto one finds
+ * it warm instead of eating a ~1.1s synchronous bake mid-gesture. Skips paths
+ * already cached, then bakes the rest ONE AT A TIME, each after interactions —
+ * so a tap landing between bakes is never blocked for the whole batch.
+ *
+ * Call it on shape-settle with the neighbour shapes. The first-ever shape (and
+ * a shape reached by outrunning prewarm with fast repeated swipes) still bakes
+ * cold once; that is acceptable and unavoidable without a background thread.
+ */
+export function prewarmPathSdf(
+  svgPaths: (string | undefined)[],
+  width: number,
+  height: number
+): void {
+  const todo = svgPaths.filter(
+    (p): p is string => !!p && !bakeCache.has(cacheKey(p, width, height))
+  );
+  if (todo.length === 0) return;
+
+  const step = (i: number) => {
+    if (i >= todo.length) return;
+    InteractionManager.runAfterInteractions(() => {
+      bakeSvgCached(todo[i], width, height);
+      step(i + 1);
+    });
+  };
+  step(0);
+}
+
 // ============================================================================
 // HOOK
 // ============================================================================
 
 /**
  * Bake the source path's signed distance field, memoized per path and size.
+ * SVG sources are additionally cached module-wide (see prewarmPathSdf); SkPath
+ * sources (typed text) are new objects per keystroke and skip the cache.
  * Returns null while the source is empty/invalid.
  */
 export function usePathSdf(
@@ -108,35 +192,7 @@ export function usePathSdf(
   const { svgPath, path } = source;
 
   return useMemo(() => {
-    const key = svgPath && !path ? `${svgPath}|${width}x${height}` : null;
-    if (key) {
-      const hit = bakeCache.get(key);
-      if (hit) return hit;
-    }
-
-    // Bake at device pixel ratio so the field matches the physical pixel
-    // grid (capped — beyond 3× the F32 texture cost buys nothing)
-    const t0 = performance.now();
-    const pixelScale = Math.min(PixelRatio.get(), 3);
-    const fitted = fitPathToCanvas({ svgPath, path }, width, height, pixelScale);
-    if (!fitted) return null;
-    const baked = bakePathSdf(
-      fitted,
-      width * pixelScale,
-      height * pixelScale,
-      pixelScale
-    );
-    console.log(
-      `[usePathSdf] bake ${Math.round(width * pixelScale)}x${Math.round(height * pixelScale)}: ${(performance.now() - t0).toFixed(1)}ms`
-    );
-
-    if (key && baked) {
-      if (bakeCache.size >= BAKE_CACHE_MAX) {
-        const oldest = bakeCache.keys().next().value;
-        if (oldest !== undefined) bakeCache.delete(oldest);
-      }
-      bakeCache.set(key, baked);
-    }
-    return baked;
+    if (svgPath && !path) return bakeSvgCached(svgPath, width, height);
+    return bakeSource({ svgPath, path }, width, height);
   }, [svgPath, path, width, height]);
 }

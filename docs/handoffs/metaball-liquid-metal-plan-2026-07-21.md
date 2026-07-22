@@ -1,3 +1,8 @@
+> **STATUS (shipped):** built and merged. See `docs/liquid-metal-metaball.md`
+> for what actually shipped (and where it diverged: `float4` balls, prev/next
+> buttons instead of pan-scrub, erode-dissolve, optional density bridge). This
+> file is kept as the original design record.
+
 > **Resume:** read this, then `git log -5 --oneline && git status`. The
 > pipeline doc (`docs/liquid-metal-path-sdf.md`) is the reference for *how
 > things work today*; this handoff is the **agreed plan** for the metaball
