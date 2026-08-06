@@ -40,6 +40,7 @@
     "react-native": "0.83.6",
     "react-native-ease": "^0.7.0",
     "react-native-gesture-handler": "~2.30.0",
+    "react-native-keyboard-controller": "1.20.7",
     "react-native-pager-view": "8.0.0",
     "react-native-pulsar": "^1.0.2",
     "react-native-reanimated": "4.2.1",

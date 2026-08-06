@@ -93,18 +93,4 @@ export const BouncyRippleShader = Skia.RuntimeEffect.Make(`
 // Prism Effect Shader (Coming Soon)
 // ============================================================================
 
-/**
- * EARLY ACCESS PREVIEW
- *
- * A prismatic light dispersion shader that splits light into rainbow colors.
- * Creates chromatic aberration effects based on touch interaction.
- *
- * Features:
- * - RGB channel separation with angular dispersion
- * - Touch-reactive prism positioning
- * - Animated light beam direction
- * - Realistic refraction indices per wavelength
- *
- * Coming soon to quattro4maggi members.
- */
 // export const PrismEffectShader = Skia.RuntimeEffect.Make(`...`)!;

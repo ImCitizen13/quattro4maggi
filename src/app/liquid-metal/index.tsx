@@ -1,144 +1,40 @@
-import { PerlinLiquidMetalShader } from "@/components/liquid-metal/PerlinLiquidMetalShader";
-import { ThemeHeaderTitle, ThemeText, ThemeView } from "@/components/Theme";
-import { MetalPresetName } from "@/lib/shaders/ColorsLiquidMetal";
-import { MaterialCommunityIcons, SimpleLineIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { router, Stack } from "expo-router";
-import { PressableScale } from "pressto";
-import React, { useState } from "react";
-import { FlatList, StyleSheet, useColorScheme } from "react-native";
-import { useAnimatedStyle } from "react-native-reanimated";
+import { MetaballLiquidMetal } from "@/components/liquid-metal/MetaballLiquidMetal";
+import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
+import { ThemeView } from "@/components/Theme";
+import { StyleSheet, View } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
+import { LOGOS } from "../../../svgs/svgs";
+import { ExpoLiquidMetalShader } from "@/components/liquid-metal/ExpoLiquidMetalShader";
+import MorphingMetalView from "@/components/liquid-metal/MorphingMetal";
+import LiquidButtonTest from "@/components/liquid-metal/LiquidButtonTest";
+import LiquidPillTest from "@/components/liquid-metal/LiquidPillTest";
 
-/**
- * Liquid Metal Demo
- *
- * A shader-based demo showcasing a liquid metal effect using React Native Skia.
- * The effect creates a smooth, reflective metallic surface with animated flow.
- *
- * FLOW:
- * 1. Shader initializes with liquid metal parameters
- * 2. Animation continuously updates shader uniforms for flow effect
- * 3. User can interact to modify the liquid motion (optional)
- *
- * KEY FEATURES:
- * - GPU-accelerated shader rendering via Skia
- * - Smooth liquid metal animation
- * - Customizable metallic properties
- */
-const BG_COLOR = "rgb(64 64 64)";
-const size = 150;
-const gradientColors = ["#2E2E2E", "#000000"];
-export default function LiquidMetalDemo() {
-  const gradientContainerAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      width: size,
-      height: size,
-      padding: 10,
-      borderRadius: size / 2,
-    };
-  });
-  const [metal, setMetal] = useState<MetalPresetName>("bronze");
-  const isDark = useColorScheme() == "dark";
+const BUTTON_SIZE = 280;
+
+export default function LiquidMetalScreen() {
+  // Live tuning — all drive shader uniforms on the UI thread (no re-render).
+  // Stickiness is a fraction of shape depth (consistent across logos). With the
+  // density bridge on, Stringiness controls how far the thin strings stretch
+  // between separating balls before they snap; higher Spread pulls them apart
+  // so the strings actually show.
+  // Keep stickiness low: high smooth-max merges the balls into the body so the
+  // reform's final convergence bulges and pops. The bridge does the connecting.
+  const stickiness = useSharedValue(0.03);
+  const spread = useSharedValue(0.95);
+  const size = useSharedValue(1);
+  const stringiness = useSharedValue(2.6);
+
   return (
     <ThemeView style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerStyle: { backgroundColor: "#1a1a1a" },
-          headerTitle: () => (
-            <ThemeHeaderTitle
-              style={{ color: !isDark ? "#000" : "#fff" }}
-              text="Scale Flip Card"
-            />
-          ),
-          headerLeft: () => (
-            <PressableScale onPress={() => router.back()}>
-              <MaterialCommunityIcons
-                name="arrow-left"
-                color={!isDark ? "#000" : "#fff"}
-                size={24}
-              />
-            </PressableScale>
-          ),
-        }}
-      />
-      <ThemeView style={styles.shaderContainer}>
-        <LinearGradient
-          colors={["#2E2E2E", "#000000"]}
-          style={[
-            styles.buttonContainer,
-            { width: size, height: size, borderRadius: size / 2 },
-          ]}
-        >
-          <PressableScale onPress={() => {}} style={styles.button}>
-            <LinearGradient
-              colors={["#2E2E2E", "#000000"]}
-              style={[
-                styles.buttonGradient,
-                {
-                  borderRadius: (size * 0.9) / 2,
-                  width: size * 0.92,
-                  height: size * 0.92,
-                },
-              ]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <SimpleLineIcons name="ghost" size={size / 3} color="white" />
-            </LinearGradient>
-          </PressableScale>
-          <PerlinLiquidMetalShader
-            width={size}
-            height={size}
-            metal={metal as MetalPresetName}
-            customHighlight={[0.9, 0.5, 0.8]}
-            customShadow={[0.3, 0.1, 0.2]}
-          />
-        </LinearGradient>
-      </ThemeView>
-
-      <FlatList
-        style={{ padding: 16 }}
-        numColumns={3}
-        columnWrapperStyle={{
-          width: "100%",
-          gap: 5,
-          paddingVertical: 16,
-          justifyContent: "space-around",
-        }}
-        // contentContainerStyle={{ gap: 16 }}
-        data={[
-          "silver",
-          "gold",
-          "copper",
-          "roseGold",
-          "bronze",
-          "platinum",
-          "chrome",
-          "titanium",
-          "brass",
-          "custom",
-        ]}
-        renderItem={({ item }) => (
-          <PressableScale
-            onPress={() => {
-              setMetal(item as MetalPresetName);
-            }}
-            style={styles.buttonItem}
-          >
-            <PerlinLiquidMetalShader
-              width={size / 2}
-              height={size / 2}
-              metal={item as MetalPresetName}
-              customHighlight={[0.9, 0.5, 0.8]}
-              customShadow={[0.3, 0.1, 0.2]}
-            />
-            <ThemeText
-              text={item.toLocaleUpperCase()}
-              style={{ fontSize: 16, fontWeight: "bold", color: "white" }}
-            />
-          </PressableScale>
-        )}
-      />
+      {/*<MorphingMetalView />*/}
+      {/*<LiquidPillTest/>*/}
+      <LiquidButtonTest/>
+      {/*<View style={styles.panel}>
+        <TuningSlider label="Stickiness" value={stickiness} min={0} max={3} decimals={2} />
+        <TuningSlider label="Spread" value={spread} min={0.1} max={1.5} decimals={2} />
+        <TuningSlider label="Size" value={size} min={0.3} max={2} decimals={2} />
+        <TuningSlider label="Stringiness" value={stringiness} min={1.2} max={5} decimals={2} />
+      </View>*/}
     </ThemeView>
   );
 }
@@ -146,43 +42,13 @@ export default function LiquidMetalDemo() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
-  },
-  shaderContainer: {
-    flexDirection: "row",
-    borderRadius: 999,
-    gap: 16,
-    padding: 16,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "black",
+    gap: 18,
+    backgroundColor: "white"
   },
-  buttonContainer: {
-    padding: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    // backgroundColor: "red",
-  },
-  button: {
-    position: "absolute",
-    zIndex: 100,
-    flexDirection: "row",
-    gap: 16,
-  },
-  buttonGradient: {
-    // padding: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  buttonItem: {
-    width: "30%",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 30,
-    gap: 10,
-    borderRadius: 10,
-    // backgroundColor: "black",
-    borderWidth: 1,
-    borderColor: "#2E2E2E",
+  panel: {
+    paddingHorizontal: 16,
+    gap: 14,
   },
 });

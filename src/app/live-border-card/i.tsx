@@ -130,26 +130,6 @@ export default function Index() {
           </LinearGradient>
         </AdaptableSkiaLiveBorderCard>
 
-        {/* <AdaptableSkiaLiveBorderCard
-          width={cardWidth}
-          height={cardHeight}
-          showGlow={showGlow}
-          glowIntensity={glowIntensity}
-          glowSpread={glowSpread}
-          glowBlurRadius={glowBlurRadius}
-          colors={colors[selectedColors]}
-          uniformColors={uniformColors}
-          pulsateGlow={pulsateGlow}
-          pulsateDuration={2000}
-        >
-          <LinearGradient
-            style={{ width: "100%", height: "100%" }}
-            colors={["#000000", "#ffffff"]}
-            start={starts[0]}
-            end={ends[0]}
-          />
-        </AdaptableSkiaLiveBorderCard> */}
-
         {/* Color Palette Selector */}
         <View
           style={{

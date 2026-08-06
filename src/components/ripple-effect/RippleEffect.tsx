@@ -32,12 +32,18 @@ import {
   useImage,
 } from "@shopify/react-native-skia";
 import React, { useState } from "react";
-import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { LabeledSwitch } from "@/components/ui/LabeledSwitch";
 import { Presets, Settings } from "react-native-pulsar";
+import { BouncyRipplePrismShader } from "../premium/shaders";
 import { BouncyRippleShader } from "./shaders";
 
 Settings.enableSound(false);
@@ -76,7 +82,8 @@ export function RippleEffect({
   widthRatio = DEFAULT_WIDTH_RATIO,
 }: RippleEffectProps) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const [isAdvanced, setIsAdvanced] = useState(false);
+  const [isAdvancedState, setIsAdvancedState] = useState(false);
+  const isAdvanced = useSharedValue(false);
 
   const canvasWidth = screenWidth * widthRatio;
   const canvasHeight = screenHeight * heightRatio;
@@ -89,13 +96,18 @@ export function RippleEffect({
   const center = useSharedValue([0.5, 0.5]);
   const tapStartTime = useSharedValue(-1);
 
+  // Shader source based on mode
+  const shaderSource = useDerivedValue(
+    () => (isAdvanced.value ? BouncyRipplePrismShader : BouncyRippleShader)!
+  );
+
   // Clip path for rounded corners
   const imageRect = rect(0, 0, canvasWidth, canvasHeight);
   const roundedClip = rrect(imageRect, borderRadius, borderRadius);
 
   // Tap gesture handler
   const tapGesture = Gesture.Tap().onEnd((e) => {
-    Presets.ripple()
+    Presets.ripple();
     const normalizedX = Math.max(0, Math.min(1, e.x / canvasWidth));
     const normalizedY = Math.max(0, Math.min(1, e.y / canvasHeight));
 
@@ -111,26 +123,40 @@ export function RippleEffect({
     u_tapTime: tapStartTime.value / 1000,
   }));
 
+
+
   return (
     <View style={styles.container}>
       <LabeledSwitch
         leftLabel="Basic"
         rightLabel="Advanced"
-        value={isAdvanced}
-        onChange={setIsAdvanced}
+        value={isAdvancedState}
+        onChange={(val) => {
+          setIsAdvancedState(val);
+          isAdvanced.value = val;
+        }}
         earlyBadge="right"
       />
 
-      {!image && <ActivityIndicator size="large" color="#fff" style={styles.loader} />}
+      {!image && (
+        <ActivityIndicator size="large" color="#fff" style={styles.loader} />
+      )}
 
       <GestureDetector gesture={tapGesture}>
-        <Canvas style={[styles.canvas, { width: canvasWidth, height: canvasHeight }]}>
+        <Canvas
+          style={[styles.canvas, { width: canvasWidth, height: canvasHeight }]}
+        >
           {image && (
             <Group
               clip={roundedClip}
               layer={
                 <Paint>
-                  <RuntimeShader source={BouncyRippleShader} uniforms={uniforms} />
+                  <RuntimeShader
+                    source={
+                      shaderSource
+                    }
+                    uniforms={uniforms}
+                  />
                 </Paint>
               }
             >
@@ -159,7 +185,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 16
+    gap: 16,
     // backgroundColor: "#1a1a1a",
   },
   canvas: {

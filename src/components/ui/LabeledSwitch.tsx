@@ -2,6 +2,7 @@ import { SPRING_BOUNCE_ANIMATION } from "@/lib/animations/constants";
 import { PressableScale } from "pressto";
 import React from "react";
 import { StyleSheet, Text, useColorScheme, View } from "react-native";
+import { Presets, Settings } from "react-native-pulsar";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -9,6 +10,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import AdaptableSkiaLiveBorderCard from "../live-border-card/AdaptableSkiaLiveBorderCard";
+Settings.enableSound(false)
 
 type LabeledSwitchProps = {
   leftLabel: string;
@@ -77,19 +79,24 @@ export function LabeledSwitch({
     color: interpolateColor(progress.value, [0, 1], ["#888", "#1a1a1a"]),
   }));
 
+  const onSwitch = (choice: boolean) => {
+    Presets.latch();
+    onChange(choice);
+  }
+
   return (
     <View style={styles.container}>
       <View style={[styles.track, {backgroundColor: isDark ? "#2E2E2E" : "#e0e0e0"}]}>
         <Animated.View style={[styles.indicator, indicatorStyle]} />
 
-        <PressableScale style={styles.option} onPress={() => onChange(false)}>
+        <PressableScale style={styles.option} onPress={() => onSwitch(false)}>
           <Animated.Text style={[styles.label, leftTextStyle]}>
             {leftLabel}
           </Animated.Text>
           {earlyBadge === "left" && <EarlyLabel position="left" />}
         </PressableScale>
 
-        <PressableScale style={styles.option} onPress={() => onChange(true)}>
+        <PressableScale style={styles.option} onPress={() => onSwitch(true)}>
           <Animated.Text style={[styles.label, rightTextStyle]}>
             {rightLabel}
           </Animated.Text>

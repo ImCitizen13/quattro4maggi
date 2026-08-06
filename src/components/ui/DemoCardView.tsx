@@ -3,7 +3,7 @@ import { Href, Link } from "expo-router";
 import LottieView from "lottie-react-native";
 import { PressableScale } from "pressto";
 import React, { useRef } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 const LOTTIE_ASSETS = {
   "wabi-and-more.json": require("../../../assets/lottie/wabi-and-more_dark.json"),
@@ -34,11 +34,12 @@ export default function DemoCardView({
 }) {
   const animation = useRef<LottieView>(null);
   const lottie = demo.lottieLink ? LOTTIE_ASSETS[demo.lottieLink] : null;
+  const {width} = useWindowDimensions()
   return (
     <Link
       style={{
         backgroundColor: "transparent",
-        width: 180,
+        width: width/2.5,
         justifyContent: "center",
       }}
       key={index}

@@ -2,7 +2,7 @@
   "expo": {
     "name": "quattro4maggi",
     "slug": "quattro4maggi",
-    "version": "1.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "quattro4maggi",
@@ -59,6 +59,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "eas": {
+      "projectId": "589debc9-d8d1-442d-8309-6599db2f52d7"
     },
     "extra": {
       "router": {

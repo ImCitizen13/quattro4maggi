@@ -13,6 +13,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { PortalProvider } from "@gorhom/portal";
 import { useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -38,6 +39,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
       <PortalProvider>
         {showSplash && (
           <Splash
@@ -89,6 +91,7 @@ export default function RootLayout() {
           <StatusBar style="auto" />
         </ThemeProvider>
       </PortalProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
