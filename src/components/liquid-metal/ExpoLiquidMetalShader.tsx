@@ -46,6 +46,11 @@ export type ExpoLiquidMetalShaderProps = {
    * @default 300
    */
   height?: number;
+  /**
+   * Border Radius of the canvas
+   * @default 0
+   */
+  borderRadius?: number;
 
   /**
    * Metal preset name or 'custom' for custom colors
@@ -170,6 +175,27 @@ export type ExpoLiquidMetalShaderProps = {
    * @default 0
    */
   bubbleOpacity?: number;
+
+  /**
+   * Whether to render the BShader refraction bubble layer at all. When false,
+   * the metal Rect renders directly (no offscreen layer / DPR pass).
+   * @default true
+   */
+  bubble?: boolean;
+
+  /**
+   * Bubble size in logical px. Its meaning follows the bubble shape:
+   * - shape 0 (pill/rounded-rect): the bubble's corner radius.
+   * - any other shape (circle bubble): the bubble's radius.
+   * Defaults are derived from the canvas + `bubblePadding`.
+   */
+  bubbleRadius?: number;
+
+  /**
+   * Inset (logical px) between the metal's edge and the bubble, so the bubble
+   * inherits the metal's shape shrunk by this gap. @default 10
+   */
+  bubblePadding?: number;
 };
 
 // ============================================================================
@@ -209,6 +235,7 @@ export type ExpoLiquidMetalShaderProps = {
 export function ExpoLiquidMetalShader({
   width = 300,
   height = 300,
+  borderRadius = 0,
   metal = "silver",
   customHighlight,
   customShadow,
@@ -236,6 +263,9 @@ export function ExpoLiquidMetalShader({
   brightness = 0,
   bubbleColor = [1, 1, 1],
   bubbleOpacity = 0,
+  bubble = true,
+  bubbleRadius,
+  bubblePadding = 10,
 }: ExpoLiquidMetalShaderProps) {
   // ============================================================================
   // METAL COLORS
@@ -273,6 +303,7 @@ export function ExpoLiquidMetalShader({
       iContour: contour,
       iAngle: animatedAngle,
       iShape: shape,
+      iBorderRadius: borderRadius,
       iRimLight: rimLight,
       iBrightness: brightness,
       iIridescence: iridescence,
@@ -299,11 +330,26 @@ export function ExpoLiquidMetalShader({
   // Radius is derived from the canvas so the bubble sits centered with a
   // padding gap to the metal's edge (was hardcoded 220 > canvas → no rim).
   // Pixel-space values are ×pd because the layer filter runs in device pixels.
-  const bubblePadding = 10;
+  // The bubble inherits the metal's shape, inset by `bubblePadding`. Shape 0 is
+  // the pill/rounded-rect fill → the bubble is a concentric rounded rect whose
+  // corner radius follows borderRadius (minus the inset). Every other shape uses
+  // the original circular bubble.
+  const isRoundedBubble = shape === 0;
+  const bubbleHalfW = width / 2 - bubblePadding;
+  const bubbleHalfH = height / 2 - bubblePadding;
+  // Circle bubble radius (non-pill shapes).
+  const circleBubbleRadius =
+    bubbleRadius ?? Math.min(width, height) / 2 - bubblePadding;
+  // Rounded-rect corner radius, kept concentric with the outer borderRadius.
+  const bubbleCornerRadius =
+    bubbleRadius ?? Math.max(borderRadius - bubblePadding, 0);
   const shaderUniforms = useDerivedValue(() => ({
     u_resolution: [width * pd, height * pd],
     u_center: [(width / 2) * pd, (height / 2) * pd],
-    u_radius: (Math.min(width, height) / 2 - bubblePadding) * pd,
+    u_radius: circleBubbleRadius * pd,
+    u_shape: isRoundedBubble ? 1 : 0,
+    u_halfSize: [bubbleHalfW * pd, bubbleHalfH * pd],
+    u_cornerRadius: bubbleCornerRadius * pd,
     u_refraction: 0.3,
     u_edgeWidth: 0.1,
     // Low dispersion keeps the rim colorless — high values reintroduce a
@@ -336,26 +382,37 @@ export function ExpoLiquidMetalShader({
   // RENDER
   // ============================================================================
 
+  // The metal fill. Corners are clipped inside the shader (iBorderRadius), so
+  // no view-level clip is needed here.
+  const metalFill = (
+    <Rect x={0} y={0} width={width} height={height}>
+      <Shader source={shader} uniforms={uniforms} />
+    </Rect>
+  );
+
   return (
-    <Canvas style={[styles.canvas, { width, height }]}>
-      {/* DPR scaling trick: outer 1/pd cancels the inner pd, but the inner
-          scale forces the layer's offscreen to device resolution → crisp rim.
-          The metal shader stays in LOGICAL space (Rect + iResolution), the
-          bubble layer filter runs in device pixels (uniforms ×pd). */}
-      <Group transform={[{ scale: 1 / pd }]}>
-        <Group
-          transform={[{ scale: pd }]}
-          layer={
-            <Paint>
-              <RuntimeShader source={BShader} uniforms={shaderUniforms} />
-            </Paint>
-          }
-        >
-          <Rect x={0} y={0} width={width} height={height}>
-            <Shader source={shader} uniforms={uniforms} />
-          </Rect>
+    <Canvas style={[styles.canvas, { width, height, borderRadius }]}>
+      {bubble ? (
+        // DPR scaling trick: outer 1/pd cancels the inner pd, but the inner
+        // scale forces the layer's offscreen to device resolution → crisp rim.
+        // The metal shader stays in LOGICAL space (Rect + iResolution), the
+        // bubble layer filter runs in device pixels (uniforms ×pd).
+        <Group transform={[{ scale: 1 / pd }]}>
+          <Group
+            transform={[{ scale: pd }]}
+            layer={
+              <Paint>
+                <RuntimeShader source={BShader} uniforms={shaderUniforms} />
+              </Paint>
+            }
+          >
+            {metalFill}
+          </Group>
         </Group>
-      </Group>
+      ) : (
+        // No bubble: render the metal directly — no offscreen layer / DPR pass.
+        metalFill
+      )}
     </Canvas>
   );
 }

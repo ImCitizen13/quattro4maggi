@@ -108,7 +108,7 @@ export const METAL_PRESETS: Record<Exclude<MetalPresetName, 'custom'>, MetalColo
    */
   platinum: {
     highlight: [0.90, 0.89, 0.88],
-    shadow: [0.15, 0.15, 0.17],
+    shadow: [0.08, 0.09, 0.12],
   },
 
   /**

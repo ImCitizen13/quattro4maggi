@@ -21,6 +21,10 @@ export const BShader = Skia.RuntimeEffect.Make(`
     uniform half3 u_bubbleColor;   // glass tint color inside the bubble (RGB 0-1)
     uniform float u_bubbleOpacity; // glass tint strength (0 = clear refraction, 1 = solid color)
 
+    uniform float u_shape;         // bubble shape: 0 = circle, 1 = rounded rect
+    uniform float2 u_halfSize;     // rounded-rect half extents in px (used when u_shape = 1)
+    uniform float u_cornerRadius;  // rounded-rect corner radius in px (used when u_shape = 1)
+
     // 6 rainbow color stops around the bubble edge (RGB 0-1)
     uniform half3 u_prismColor0;   // 0°   (right)
     uniform half3 u_prismColor1;   // 60°
@@ -34,6 +38,30 @@ export const BShader = Skia.RuntimeEffect.Make(`
     // ============================================================
     float2 clampCoord(float2 coord) {
         return clamp(coord, float2(0.0), u_resolution);
+    }
+
+    // ============================================================
+    // HELPER — rounded-box SDF + its outward normal (for u_shape = 1)
+    // ============================================================
+    // Signed distance to a rounded rectangle centered at the origin.
+    // p: point relative to center, b: half-size, r: corner radius (px).
+    // Negative inside, 0 on the outline, positive outside.
+    float sdRoundedBox(float2 p, float2 b, float r) {
+        float2 q = abs(p) - b + r;
+        return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0))) - r;
+    }
+
+    // Outward unit normal of the rounded box, via central differences of the
+    // SDF (robust across the flat edges and rounded corners alike).
+    float2 sdRoundedBoxNormal(float2 p, float2 b, float r) {
+        float e = 1.0;
+        float dx = sdRoundedBox(p + float2(e, 0.0), b, r)
+                 - sdRoundedBox(p - float2(e, 0.0), b, r);
+        float dy = sdRoundedBox(p + float2(0.0, e), b, r)
+                 - sdRoundedBox(p - float2(0.0, e), b, r);
+        float2 g = float2(dx, dy);
+        float l = length(g);
+        return (l > 0.0001) ? g / l : float2(0.0);
     }
 
     // ============================================================
@@ -59,16 +87,38 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // DISTANCE FROM BUBBLE CENTER
         // ============================================================
 
+        // Unified bubble field so the circle and rounded-rect paths share the
+        // downstream refraction / edge / shadow math:
+        //   sd           signed distance to the boundary (px, < 0 inside)
+        //   nrm          outward unit normal at this point
+        //   norm         normalized center → edge factor in [0, 1]
+        //   refractScale characteristic size (px) that scales refraction/chroma
         float2 diff = fragCoord - u_center;
-        float dist = length(diff);
-        float normDist = dist / u_radius;
+        float sd;
+        float2 nrm;
+        float norm;
+        float refractScale;
+        if (u_shape < 0.5) {
+            // Circle (original behavior, math-identical).
+            float dist = length(diff);
+            sd = dist - u_radius;
+            norm = dist / u_radius;
+            nrm = (dist > 0.001) ? diff / dist : float2(0.0);
+            refractScale = u_radius;
+        } else {
+            // Rounded rectangle — inherits the pill shape with padding.
+            refractScale = min(u_halfSize.x, u_halfSize.y);
+            sd = sdRoundedBox(diff, u_halfSize, u_cornerRadius);
+            norm = clamp(1.0 + sd / max(refractScale, 0.001), 0.0, 1.0);
+            nrm = sdRoundedBoxNormal(diff, u_halfSize, u_cornerRadius);
+        }
 
         // ============================================================
         // OUTSIDE THE BUBBLE — pass through the source content unchanged
         // ============================================================
 
-        // Anti-aliased edge: 1 inside, 0 outside, smooth over 1.5px
-        float mask = smoothstep(u_radius + 1.5, u_radius - 1.5, dist);
+        // Anti-aliased edge: 1 inside, 0 outside, smooth over ~1.5px
+        float mask = smoothstep(1.5, -1.5, sd);
 
         half4 src = sampleSmooth(fragCoord);
         // Use u_bgColor as base background, blend with any source content on top
@@ -77,8 +127,9 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // ============================================================
         // SHADOW — soft halo around the bubble
         // ============================================================
-        float shadowEdge = u_radius + u_radius * u_shadowSpread;
-        float shadowAlpha = smoothstep(shadowEdge, u_radius, dist) * u_shadowOpacity;
+        // sd is 0 on the boundary and grows outward; the halo fades over a band
+        // of u_shadowSpread × refractScale px just outside the shape.
+        float shadowAlpha = smoothstep(refractScale * u_shadowSpread, 0.0, sd) * u_shadowOpacity;
         half3 shadowed = mix(bg, half3(u_shadowColor), shadowAlpha);
 
         if (mask <= 0.0) {
@@ -98,11 +149,9 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // BARREL DISTORTION — magnify/refract inside the bubble
         // ============================================================
 
-        float2 dir = (dist > 0.001) ? diff / dist : float2(0.0);
-
-        float t = normDist * normDist;
+        float t = norm * norm;
         float distortionAmount = u_refraction * t;
-        float2 distortedCoord = clampCoord(fragCoord - dir * distortionAmount * u_radius);
+        float2 distortedCoord = clampCoord(fragCoord - nrm * distortionAmount * refractScale);
 
         half4 distortedSrc = sampleSmooth(distortedCoord);
 
@@ -111,12 +160,12 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // ============================================================
 
         float edgeStart = 1.0 - u_edgeWidth;
-        float edgeFactor = smoothstep(edgeStart, 1.0, normDist);
+        float edgeFactor = smoothstep(edgeStart, 1.0, norm);
 
-        float chromaOffset = u_dispersion * edgeFactor * u_radius;
+        float chromaOffset = u_dispersion * edgeFactor * refractScale;
 
-        float2 coordR = clampCoord(distortedCoord + dir * chromaOffset);
-        float2 coordB = clampCoord(distortedCoord - dir * chromaOffset);
+        float2 coordR = clampCoord(distortedCoord + nrm * chromaOffset);
+        float2 coordB = clampCoord(distortedCoord - nrm * chromaOffset);
 
         half3 chromaSrc = half3(
             sampleSmooth(coordR).r,
@@ -163,7 +212,7 @@ export const BShader = Skia.RuntimeEffect.Make(`
         // ============================================================
 
         float2 lightDir = float2(-0.4, -0.6);
-        float specDot = max(dot(normalize(diff / u_radius), lightDir), 0.0);
+        float specDot = max(dot(nrm, lightDir), 0.0);
         // Sharp bright glint + softer broad glow
         float specular = (pow(specDot, 32.0) * 0.6 + pow(specDot, 8.0) * 0.15) * u_specular;
 

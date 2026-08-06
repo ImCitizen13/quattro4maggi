@@ -40,6 +40,7 @@ uniform float iDistortion;
 uniform float iContour;
 uniform float iAngle;
 uniform float iShape;
+uniform float iBorderRadius;
 uniform float iRimLight;
 uniform float iBrightness;
 uniform float iIridescence;
@@ -65,6 +66,14 @@ float2 rotate(float2 v, float a) {
   float c = cos(a);
   float s = sin(a);
   return float2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+
+// Signed distance to a rounded box centered at the origin.
+// p: point relative to center, b: half-size, r: corner radius (all in px).
+// Negative inside, 0 on the outline, positive outside.
+float sdRoundedBox(float2 p, float2 b, float r) {
+  float2 q = abs(p) - b + r;
+  return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0))) - r;
 }
 
 // Iridescence - stripe-based rainbow that follows wave motion
@@ -378,6 +387,21 @@ half4 main(float2 fragCoord) {
 
   float dither = (fract(sin(dot(fragCoord, float2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
   color += dither;
+
+  // --- Rounded-rect clip -----------------------------------------------------
+  // Clip the fill to a rounded rectangle so the corners honour iBorderRadius
+  // with anti-aliased edges (a raster/view clip would be hard-edged). The SDF
+  // runs in the shader's local space (iResolution), so the radius is in the
+  // same logical units as the RN borderRadius prop. r is clamped to half the
+  // shorter side (a full pill). color is already premultiplied by opacity, so
+  // scaling both by the coverage keeps premultiplication consistent.
+  float2 halfRes = iResolution * 0.5;
+  float clipR = min(iBorderRadius, min(halfRes.x, halfRes.y));
+  float clipD = sdRoundedBox(fragCoord - halfRes, halfRes, clipR);
+  // ~1px anti-aliased band: full coverage 0.5px inside, zero 0.5px outside.
+  float clipCov = clamp(0.5 - clipD, 0.0, 1.0);
+  color *= clipCov;
+  opacity *= clipCov;
 
   return half4(color, opacity);
 }

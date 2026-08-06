@@ -17,7 +17,7 @@ Clone them. Learn from them. Ship them.
 | [Ripple Effect](./src/components/ripple-effect/) | ![ripple-effect](./src/assets/demos/ripple-effect.gif) | Touch-reactive ripple shader with customizable colors |
 | [Scale Flip Card](/src/components/scale-flip-card/README.md) | ![scale-flip-card](./assets/demos/scale-flip-card.gif) | Card component that expands into a fullscreen portal with 3D flip animation |
 | [Text Flyin](/src/components/text-flyin/README.md) | ![text-flyin](./assets/demos/text-flyin.gif) | Kinetic text animation with staggered character fly-in effect |
-| [Liquid Metal](/src/components/liquid-metal/README.md) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader component with animated liquid metal effects and customizable colors |
+| [Liquid Metal](/src/components/liquid-metal/README.md) | ![liquid-metal](./assets/demos/liquid-metal.gif)<br><video src="./assets/videos/liquid_metal_button.mp4" width="220" controls></video> | Skia shader component with animated liquid metal effects and customizable colors |
 | [Live Border Card](/src/components/live-border-card/README.md) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating color gradients and customizable glow effects |
 
 

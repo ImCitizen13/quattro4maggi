@@ -243,6 +243,9 @@ export default function WabiTimerExperiment() {
     u_transparentBg: 0, // keep the opaque bg fill this screen relies on
     u_bubbleColor: [0, 0, 0],
     u_bubbleOpacity: 0, // no glass tint
+    u_shape: 0, // circle (this screen's bubble is round)
+    u_halfSize: [0, 0], // unused when u_shape = 0
+    u_cornerRadius: 0, // unused when u_shape = 0
     ...DEFAULT_PRISM_COLORS,
   }));
 

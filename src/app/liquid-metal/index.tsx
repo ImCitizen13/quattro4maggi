@@ -4,6 +4,10 @@ import { ThemeView } from "@/components/Theme";
 import { StyleSheet, View } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
 import { LOGOS } from "../../../svgs/svgs";
+import { ExpoLiquidMetalShader } from "@/components/liquid-metal/ExpoLiquidMetalShader";
+import MorphingMetalView from "@/components/liquid-metal/MorphingMetal";
+import LiquidButtonTest from "@/components/liquid-metal/LiquidButtonTest";
+import LiquidPillTest from "@/components/liquid-metal/LiquidPillTest";
 
 const BUTTON_SIZE = 280;
 
@@ -22,29 +26,15 @@ export default function LiquidMetalScreen() {
 
   return (
     <ThemeView style={styles.container}>
-      <MetaballLiquidMetal
-        svgPaths={LOGOS}
-        width={BUTTON_SIZE}
-        height={BUTTON_SIZE}
-        metal="platinum"
-        ballCount={9}
-        ballSmooth={stickiness}
-        spread={spread}
-        ballScale={size}
-        bridge
-        stringiness={stringiness}
-        contour={0.6}
-        distortion={0.1}
-        repetition={0.7}
-        speed={1}
-      />
-
-      <View style={styles.panel}>
+      {/*<MorphingMetalView />*/}
+      {/*<LiquidPillTest/>*/}
+      <LiquidButtonTest/>
+      {/*<View style={styles.panel}>
         <TuningSlider label="Stickiness" value={stickiness} min={0} max={3} decimals={2} />
         <TuningSlider label="Spread" value={spread} min={0.1} max={1.5} decimals={2} />
         <TuningSlider label="Size" value={size} min={0.3} max={2} decimals={2} />
         <TuningSlider label="Stringiness" value={stringiness} min={1.2} max={5} decimals={2} />
-      </View>
+      </View>*/}
     </ThemeView>
   );
 }
@@ -55,6 +45,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 18,
+    backgroundColor: "white"
   },
   panel: {
     paddingHorizontal: 16,
