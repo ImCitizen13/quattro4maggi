@@ -45,6 +45,11 @@ const demos: Demo[] = [
     ],
     lottieLink: "liquid-metal.json",
   },
+  {
+    name: "Pull To Refresh",
+    href: "/pull-to-refresh" as const,
+    tags: [{ name: "reanimated", color: "#6a539a" }],
+  },
 ];
 
 export default function HomeScreen() {
