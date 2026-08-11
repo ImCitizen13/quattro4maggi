@@ -146,10 +146,13 @@ switches the configuration at runtime, so you can compare platform behaviours
 on a single device:
 
 - **Type** — the indicator shape, `ios` bar or `android` circle
-- **Layout** — `inset` vs `overlay`; dimmed while the sticky header is on,
-  because the sticky header forces `overlay` (see
+- **Layout** — `inset` vs `overlay`; dimmed while a sticky header is on,
+  because a sticky header forces `overlay` (see
   [Driving a Sticky Header](#driving-a-sticky-header-from-the-lifecycle))
-- **Sticky** — mounts the lifecycle-driven sticky status header
+- **Sticky** — cycles the sticky-header slot through three modes: `off` (no
+  sticky header), `bar` (the lifecycle-driven status bar), and `threads` (the
+  Threads-glyph header over a feed of post cards — see
+  [The Threads Example](#the-threads-example))
 
 The toggles live in `PullToRefresh`, but the indicator must stay a prop-less
 module-level component so its identity as a `ListHeaderComponent` never
@@ -345,6 +348,69 @@ useAnimatedReaction(
 Note the `current === previous` guard: `useAnimatedReaction` fires on every
 frame the prepare block runs, not only on change.
 
+### The Threads Example
+
+`Sticky = threads` swaps the demo's abstract look for a small Threads clone,
+built entirely on the pieces above. It's the worked example of a sticky header
+_and_ a real feed both hanging off the same lifecycle. It lives in
+[`threads-example/`](./threads-example) and has three parts:
+
+**1. The glyph header — [`ThreadsView.tsx`](./threads-example/ThreadsView.tsx).**
+The sticky header, mounted exactly like `StickyStatusHeader` (prop-less, reads
+`useRefreshLifecycle()`, sits at index 0). Instead of a text label it draws the
+Threads glyph on a Skia canvas via the pure presentational
+[`ThreadsSpotlight`](./threads-example/ThreadsSpotlight.tsx), and maps each phase
+onto the drawing:
+
+- `pulling` → a gradient bead rides the glyph, its position driven by `progress`
+- `refreshing` → the bead ping-pongs tip-to-tip on its own clock
+- `settling` → the bead folds away at the tip it was heading for, then the glyph
+  draws itself in white with an accent sweep (yellow on success, red on error)
+- `idle` → the white fill _holds_ until the next pull, so a refreshed glyph
+  reads as "fresh"
+
+Same rules as any sticky header: fixed height (the pull animates the header's
+_contents_, never its box) and opaque background (rows scroll underneath it).
+
+**2. The post card — [`ThreadItemView.tsx`](./threads-example/ThreadItemView.tsx).**
+A pure presentational row that takes a `ThreadPost` and lays out the six parts of
+a Threads post: avatar, handle + timestamp, body text, an optional image rail,
+the action bar (like / comment / reshare / share, counts formatted `1200 → 1.2K`),
+and an optional inline first reply. The avatar column doubles as the thread line
+that ties a post to its reply. Feed data is fixed mock content in
+[`posts.ts`](./threads-example/posts.ts), cycled with `postForIndex` to fill the
+list.
+
+**3. The refresh illusion — reshuffling on success.** A real pull-to-refresh
+shows new content when it's done; this demo fakes that by **reordering the feed**
+on a successful refresh. The row order is React state, and `onRefresh` reshuffles
+it _after_ the awaited work resolves:
+
+```tsx
+const [feedOrder, setFeedOrder] = useState(ITEMS);
+
+const onRefresh = async (signal) => {
+  await fakeFetch(signal); // a rejection throws here and skips the reshuffle
+  setFeedOrder(reshuffle); // success only → the settle reveals a new order
+};
+
+<Animated.FlatList data={feedOrder} keyExtractor={(item) => `${item}`} />;
+```
+
+Two details make it read right:
+
+- **Reshuffle on success only.** A rejected refresh throws out of the `await`
+  before the `setFeedOrder`, so a failed pull leaves the order untouched — the
+  error exit isn't undercut by the feed changing anyway.
+- **`reshuffle` never returns the input order.** It's a Fisher–Yates retried
+  until the result differs, so every refresh _visibly_ reshuffles instead of
+  occasionally landing on a no-op.
+
+Because it reshuffles _while the indicator is still held open_, the settle
+animation is what reveals the reordered feed. And since rows keep stable keys,
+`FlatList` reorders the existing cells rather than remounting them. This is the
+demo's stand-in for the [real prepend-at-top case](#data-landing-during-stage-3).
+
 ### Hook Only
 
 The hook has no opinion about rendering, so you can drive any visual with it —
@@ -516,8 +582,11 @@ taps on the first row even while fully faded out.
   `StickeyHeader.tsx` (extra `e`).
 - `SkiaLoadingIndicator.tsx` is an unfinished experiment, not wired into the
   demo.
-- `threads-example/` is a placeholder for a Threads-style sticky header demo —
-  `ThreadsView.tsx` is empty and `ThreadsStickeyHeader.tsx` is a stub.
+- The Threads example fakes new content by reshuffling the existing feed (see
+  [The Threads Example](#the-threads-example)); it never fetches or prepends
+  real rows.
+- `threads-example/ThreadsStickeyHeader.tsx` is a leftover stub — the actual
+  Threads header is `ThreadsView.tsx`. It's unused and safe to delete.
 
 ---
 
@@ -532,7 +601,12 @@ src/components/pull-to-refresh/
 ├── SkiaLoadingIndicator.tsx                # WIP, unused
 ├── hooks/
 │   └── useCustomRefreshConrol.tsx          # Gesture, progress, refresh lifecycle
-├── threads-example/                        # WIP Threads-style demo, stubs only
+├── threads-example/                        # Threads clone: glyph header + post feed
+│   ├── ThreadsView.tsx                     #   Lifecycle-driven glyph sticky header
+│   ├── ThreadsSpotlight.tsx                #   Pure Skia glyph (bead + white reveal)
+│   ├── ThreadItemView.tsx                  #   One Threads post card
+│   ├── posts.ts                            #   Mock feed data + reshuffle()
+│   └── ThreadsStickeyHeader.tsx            #   Leftover stub, unused
 └── README.md                               # This file
 ```
 
