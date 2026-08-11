@@ -76,7 +76,7 @@ const styles =
       paddingHorizontal: 20,
       paddingVertical: 12,
       gap: 8,
-      marginBottom: 10.
+      marginBottom: 10
     },
     stickyHeaderText: {
       color: "#fff",

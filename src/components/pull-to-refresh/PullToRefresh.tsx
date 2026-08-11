@@ -40,6 +40,7 @@ import {
   useRefreshLifecycle,
 } from "./RefreshLifecycleContext";
 import { StickyStatusHeader } from "./StickeyHeader";
+import ThreadsView from "./threads-example/ThreadsView";
 
 // ============================================================================
 // Constants
@@ -84,6 +85,14 @@ type RefreshSpinnerProps = {
 };
 
 export type IndicatorType = "ios" | "android";
+
+/**
+ * What occupies the sticky header slot: nothing, the status bar, or the
+ * Threads glyph. Any sticky mode forces the indicator out to `overlay`.
+ */
+export type StickyMode = "off" | "bar" | "threads";
+
+const STICKY_MODES: StickyMode[] = ["off", "bar", "threads"];
 
 type DemoConfig = {
   indicatorType: IndicatorType;
@@ -229,7 +238,8 @@ export function PullToRefresh({}: PullToRefreshProps) {
     useState<RefreshIndicatorLayout>("inset");
 
   /** Pin a status header to the top of the list, driven by the same lifecycle. */
-  const [useStickyHeader, setUseStickyHeader] = useState(false);
+  const [stickyMode, setStickyMode] = useState<StickyMode>("off");
+  const useStickyHeader = stickyMode !== "off";
 
   /**
    * The header slot holds the sticky status bar *or* the inset indicator, never
@@ -295,13 +305,20 @@ export function PullToRefresh({}: PullToRefreshProps) {
               // virtualization. Row indices do not — VirtualizedList inserts
               // spacer views as you scroll, which shifts them out from under you.
               ListHeaderComponent={
-                useStickyHeader
+                stickyMode === "bar"
                   ? StickyStatusHeader
-                  : effectiveLayout === "inset"
-                    ? RefreshIndicator
-                    : null
+                  : stickyMode === "threads"
+                    ? ThreadsView
+                    : effectiveLayout === "inset"
+                      ? RefreshIndicator
+                      : null
               }
               stickyHeaderIndices={useStickyHeader ? [0] : undefined}
+              // Android defaults this to true, and its subview clipping wrongly
+              // culls a stuck `stickyHeaderIndices` header — the header mounts
+              // but never paints. iOS defaults it off, which is why the bug is
+              // Android-only. The list is 10 rows; clipping buys nothing here.
+              removeClippedSubviews={false}
               style={styles.scroll}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.scrollStyle}
@@ -333,8 +350,15 @@ export function PullToRefresh({}: PullToRefreshProps) {
             />
             <ConfigButton
               label="Sticky"
-              value={useStickyHeader ? "on" : "off"}
-              onPress={() => setUseStickyHeader((s) => !s)}
+              value={stickyMode}
+              onPress={() =>
+                setStickyMode(
+                  (m) =>
+                    STICKY_MODES[
+                      (STICKY_MODES.indexOf(m) + 1) % STICKY_MODES.length
+                    ],
+                )
+              }
             />
           </View>
         </View>
@@ -350,8 +374,11 @@ export function PullToRefresh({}: PullToRefreshProps) {
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // Load-bearing: the overlay indicator's `width: "100%"` resolves against
+    // this box, and `alignItems: "center"` would otherwise shrink-wrap it.
     width: "100%",
     height: "100%",
+    backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -360,8 +387,12 @@ export const styles = StyleSheet.create({
     width: "100%",
   },
   scrollStyle: {
+    // Load-bearing: without an explicit width the content container shrinks to
+    // its widest *determinate* child, and every percentage-sized child (rows,
+    // the bar header, the inset indicator) collapses with it.
     width: "100%",
     justifyContent: "flex-start",
+    backgroundColor: "#1a1a1a",
     // No `alignItems: "center"` here. FlatList wraps every row in a cell view,
     // and centering makes those cells width-auto — which leaves the rows' own
     // `width: "80%"` resolving against an undefined parent, i.e. zero. Rows

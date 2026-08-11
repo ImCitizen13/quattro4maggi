@@ -21,5 +21,8 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    // ThemeView's base style pads every screen by 10pt; this demo's headers
+    // and overlay indicator are designed edge-to-edge, so strip it here.
+    padding: 0,
   },
 });
