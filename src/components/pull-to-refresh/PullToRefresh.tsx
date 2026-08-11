@@ -41,7 +41,7 @@ import {
 } from "./RefreshLifecycleContext";
 import { StickyStatusHeader } from "./StickeyHeader";
 import ThreadItemView from "./threads-example/ThreadItemView";
-import { postForIndex } from "./threads-example/posts";
+import { postForIndex, reshuffle } from "./threads-example/posts";
 import ThreadsView from "./threads-example/ThreadsView";
 
 // ============================================================================
@@ -249,6 +249,14 @@ export function PullToRefresh({}: PullToRefreshProps) {
   const useStickyHeader = stickyMode !== "off";
 
   /**
+   * The feed's row order. A successful refresh reshuffles it, so the list
+   * reveals a reordered feed as the indicator settles — the illusion that new
+   * content just arrived. Rows keep stable keys, so FlatList reorders the
+   * existing cells rather than remounting them.
+   */
+  const [feedOrder, setFeedOrder] = useState(ITEMS);
+
+  /**
    * The header slot holds the sticky status bar *or* the inset indicator, never
    * both — so a sticky header forces the indicator out to the overlay mount.
    * Making the `inset` indicator sticky is not an option: its height is the
@@ -281,6 +289,11 @@ export function PullToRefresh({}: PullToRefreshProps) {
         reject(new Error("Aborted"));
       });
     });
+
+    // Success only — a rejected refresh throws above and never reaches here, so
+    // a failed pull leaves the existing order untouched. Reshuffling now (while
+    // the indicator is still held open) means the settle reveals the new feed.
+    setFeedOrder(reshuffle);
   };
 
   const { progress, phase, spin, outcome, gesture, onScrollHandler } =
@@ -303,7 +316,7 @@ export function PullToRefresh({}: PullToRefreshProps) {
 
           <GestureDetector gesture={gesture}>
             <Animated.FlatList
-              data={ITEMS}
+              data={feedOrder}
               keyExtractor={(item) => `${item}`}
               // In Threads mode each row is a real post card; otherwise the
               // demo's placeholder box, so the pull mechanics stay the focus.

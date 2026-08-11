@@ -82,3 +82,22 @@ export const THREAD_POSTS: ThreadPost[] = [
 export function postForIndex(i: number): ThreadPost {
   return THREAD_POSTS[i % THREAD_POSTS.length];
 }
+
+/**
+ * A fresh random ordering of the given slot ids — the "new feed" a refresh
+ * pretends to fetch. Fisher–Yates, retried until it differs from the input so
+ * a refresh always visibly reshuffles (an identity shuffle would read as a
+ * no-op). Single-element lists can't reorder, so they pass through unchanged.
+ */
+export function reshuffle(order: number[]): number[] {
+  if (order.length < 2) return order;
+  let next = order;
+  do {
+    next = [...order];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+  } while (next.every((v, i) => v === order[i]));
+  return next;
+}
