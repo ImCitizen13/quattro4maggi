@@ -52,23 +52,17 @@ driver value for each:
 | 2. Refreshing | `"refreshing"` | `spin` looping `0 → 1`                          | `onRefresh()` settles, or `timeoutMs` hits |
 | 3. Settle     | `"settling"`   | `progress` falling `1 → 0`, tinted by `outcome` | the spring lands → `"idle"`                |
 
-<!--
-  Placeholder images live in ./images/. Replace each one with a screenshot or
-  (better) a short GIF of the demo, keeping the same filename — or update the
-  paths below if you use a different extension. What to capture in each:
-    • stage-1-pull.svg       → the pull: finger dragging down, the indicator
-                               scaling/winding up as `progress` rises 0 → 1
-    • stage-2-refreshing.svg → the held-open refresh: the spinner looping while
-                               the pull sits parked at the threshold
-    • stage-3-settle.svg     → the settle: the indicator springing closed,
-                               tinted by the outcome (green success / red error)
-  A GIF per stage reads best; if you'd rather have one clip, a single GIF of a
-  full pull → refresh → settle can replace all three cells.
--->
+**Stage 1 — pull.** The ring winds up as `progress` rises `0 → 1`.
 
-| 1. Pull | 2. Refreshing | 3. Settle |
-| :-----: | :-----------: | :-------: |
-| ![Stage 1 — pull: finger dragging down, indicator winding up](./images/stage-1-pull.svg) | ![Stage 2 — refreshing: held open, spinner looping](./images/stage-2-refreshing.svg) | ![Stage 3 — settle: springing closed, tinted by outcome](./images/stage-3-settle.svg) |
+![Stage 1 — pull: the ring winding up as the list is dragged down](../../../assets/pull-to-refresh/pull.png)
+
+**Stage 2 — refreshing.** Parked at the threshold, the ring loops at full size.
+
+![Stage 2 — refreshing: the ring looping while held open at the threshold](../../../assets/pull-to-refresh/refreshing.png)
+
+**Stage 3 — settle.** The ring springs closed, tinted by `outcome` — green on success (shown), red on error.
+
+![Stage 3 — settle: the ring springing closed, tinted green for success](../../../assets/pull-to-refresh/settle.png)
 
 **Why stage 3 is its own phase.** `pullY` springing back to `0` happens in two
 completely different situations: the user cancelled a pull below the threshold,
