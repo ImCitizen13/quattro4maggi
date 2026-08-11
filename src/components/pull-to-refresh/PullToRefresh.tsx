@@ -31,15 +31,15 @@ import {
   CustomChildRefreshIndicator,
   RefreshIndicatorLayout,
 } from "./CustomChildRefreshControlIndicator";
-import useCustomRefreshConrol, {
+import useCustomRefreshControl, {
   RefreshOutcome,
   RefreshPhase,
-} from "./hooks/useCustomRefreshConrol";
+} from "./hooks/useCustomRefreshControl";
 import {
   RefreshLifecycleProvider,
   useRefreshLifecycle,
 } from "./RefreshLifecycleContext";
-import { StickyStatusHeader } from "./StickeyHeader";
+import { StickyStatusHeader } from "./StickyHeader";
 import ThreadItemView from "./threads-example/ThreadItemView";
 import { postForIndex, reshuffle } from "./threads-example/posts";
 import ThreadsView from "./threads-example/ThreadsView";
@@ -297,7 +297,7 @@ export function PullToRefresh({}: PullToRefreshProps) {
   };
 
   const { progress, phase, spin, outcome, gesture, onScrollHandler } =
-    useCustomRefreshConrol({ onRefresh });
+    useCustomRefreshControl({ onRefresh });
 
   return (
     <RefreshLifecycleProvider

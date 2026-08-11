@@ -1,5 +1,5 @@
 /**
- * useCustomRefreshConrol
+ * useCustomRefreshControl
  *
  * Owns the pull-to-refresh state machine and every value an indicator needs to
  * animate. Renders nothing and knows nothing about the indicator's visuals.
@@ -89,7 +89,7 @@ export type RefreshPhase = "idle" | "pulling" | "refreshing" | "settling";
  */
 export type RefreshOutcome = "none" | "success" | "error";
 
-export type UseCustomRefreshConrolResult = {
+export type UseCustomRefreshControlResult = {
   /** Normalized pull progress: 0 at rest, 1 fully pulled or refreshing. */
   progress: SharedValue<number>;
   /** Current stage. See {@link RefreshPhase}. */
@@ -110,7 +110,7 @@ export type UseCustomRefreshConrolResult = {
   onScrollHandler: ReturnType<typeof useAnimatedScrollHandler>;
 };
 
-export type UseCustomRefreshConrolParams = {
+export type UseCustomRefreshControlParams = {
   /**
    * The actual work. Awaited — stage 2 lasts exactly as long as it does.
    *
@@ -130,10 +130,10 @@ export type UseCustomRefreshConrolParams = {
 // Hook
 // ============================================================================
 
-export default function useCustomRefreshConrol({
+export default function useCustomRefreshControl({
   onRefresh,
   timeoutMs = REFRESH_TIMEOUT,
-}: UseCustomRefreshConrolParams): UseCustomRefreshConrolResult {
+}: UseCustomRefreshControlParams): UseCustomRefreshControlResult {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 

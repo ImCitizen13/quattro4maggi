@@ -20,7 +20,7 @@
 
 import React, { createContext, ReactNode, useContext, useMemo } from "react";
 import { SharedValue } from "react-native-reanimated";
-import { RefreshOutcome, RefreshPhase } from "./hooks/useCustomRefreshConrol";
+import { RefreshOutcome, RefreshPhase } from "./hooks/useCustomRefreshControl";
 
 // ============================================================================
 // Types

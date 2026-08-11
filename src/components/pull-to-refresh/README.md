@@ -159,9 +159,11 @@ module-level component so its identity as a `ListHeaderComponent` never
 changes — so the config reaches it through a small demo-local context, the same
 trick the lifecycle itself uses.
 
-There's also a `SIMULATE_FAILURE` constant in
-[`PullToRefresh.tsx`](./PullToRefresh.tsx), which makes the fake refresh reject
-so you can watch the error path without unplugging the network.
+The demo's `onRefresh` fakes work with a 2s timeout — replace it with your real
+fetch for actual use; the hook itself is agnostic about what the work is (see
+[Real-World Fetching](#real-world-fetching)). There's also a `SIMULATE_FAILURE`
+constant in [`PullToRefresh.tsx`](./PullToRefresh.tsx), which makes the fake
+refresh reject so you can watch the error path without unplugging the network.
 
 ### With a Custom Indicator Child
 
@@ -171,7 +173,7 @@ stage values itself:
 
 ```tsx
 const { progress, phase, spin, outcome, gesture, onScrollHandler } =
-  useCustomRefreshConrol({ onRefresh: refetch });
+  useCustomRefreshControl({ onRefresh: refetch });
 
 <CustomChildRefreshIndicator
   progress={progress}
@@ -292,7 +294,7 @@ style.
 
 Keeping a sticky header and having it reflect the refresh is a first-class case
 — `RefreshLifecycleContext` exists for it. The demo's implementation lives in
-[`StickeyHeader.tsx`](./StickeyHeader.tsx). Three things make it work:
+[`StickyHeader.tsx`](./StickyHeader.tsx). Three things make it work:
 
 **1. The header takes no props.** `ListHeaderComponent` re-mounts whenever its
 identity changes, and a re-mounting _sticky_ header visibly flickers because it
@@ -419,7 +421,7 @@ stage 2 lasts exactly as long as your work does:
 
 ```tsx
 const { progress, phase, spin, outcome, error, gesture, onScrollHandler } =
-  useCustomRefreshConrol({
+  useCustomRefreshControl({
     onRefresh: async () => {
       await queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
@@ -441,7 +443,7 @@ that promise is a real network call:
 | An **instant** failure (offline, cached 401) | `MIN_REFRESH_DURATION` applies to failures too, so the error state is on screen long enough to read.                                                                                          |
 
 ```tsx
-const { progress, phase, spin, outcome, error } = useCustomRefreshConrol({
+const { progress, phase, spin, outcome, error } = useCustomRefreshControl({
   onRefresh: async (signal) => {
     const res = await fetch("/api/feed", { signal });
     if (!res.ok) throw new Error(`Feed request failed: ${res.status}`); // → "error"
@@ -506,7 +508,7 @@ useFocusEffect(useCallback(() => () => controller.current?.abort(), []));
 | `revealMode`      | `"opacity" \| "translateY"` | `"opacity"`     | Fade in, or slide down from above (clipped) |
 | `backgroundColor` | `string`                    | `"transparent"` | Background of the indicator box             |
 
-### `useCustomRefreshConrol({ onRefresh })`
+### `useCustomRefreshControl({ onRefresh })`
 
 | Param       | Type                                             | Default  | Description                                                                                                 |
 | ----------- | ------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------- |
@@ -571,17 +573,7 @@ taps on the first row even while fully faded out.
 
 ## Known Gaps
 
-- `onRefresh` in the demo fakes work with a 2s timeout. Replace it for real use;
-  the hook itself is agnostic.
-- **Nothing here has been verified on a device.** The riskiest part is
-  `Gesture.Simultaneous(pan, Gesture.Native())` — whether the pan coexists with
-  scrolling or steals it. If they fight, add `.activeOffsetY([0, 999])` to the
-  pan so it only claims downward drags.
 - **No cancel on unmount** — see [Not handled: cancel on unmount](#not-handled-cancel-on-unmount).
-- Two filenames are misspelled: `useCustomRefreshConrol` (missing the `t`) and
-  `StickeyHeader.tsx` (extra `e`).
-- `SkiaLoadingIndicator.tsx` is an unfinished experiment, not wired into the
-  demo.
 - The Threads example fakes new content by reshuffling the existing feed (see
   [The Threads Example](#the-threads-example)); it never fetches or prepends
   real rows.
@@ -595,10 +587,9 @@ src/components/pull-to-refresh/
 ├── PullToRefresh.tsx                       # Demo: runtime config, list wiring, controls
 ├── CustomChildRefreshControlIndicator.tsx  # Presentation: layout + reveal
 ├── RefreshLifecycleContext.tsx             # Publishes the lifecycle to descendants
-├── StickeyHeader.tsx                       # StickyStatusHeader (sticky mode's header)
-├── SkiaLoadingIndicator.tsx                # WIP, unused
+├── StickyHeader.tsx                        # StickyStatusHeader (sticky mode's header)
 ├── hooks/
-│   └── useCustomRefreshConrol.tsx          # Gesture, progress, refresh lifecycle
+│   └── useCustomRefreshControl.tsx         # Gesture, progress, refresh lifecycle
 ├── threads-example/                        # Threads clone: glyph header + post feed
 │   ├── ThreadsView.tsx                     #   Lifecycle-driven glyph sticky header
 │   ├── ThreadsSpotlight.tsx                #   Pure Skia glyph (bead + white reveal)

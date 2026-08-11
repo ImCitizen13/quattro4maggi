@@ -3,7 +3,7 @@ import { useRefreshLifecycle } from "./RefreshLifecycleContext";
 import Animated, { useAnimatedReaction, useAnimatedStyle } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { View, Text, StyleSheet } from "react-native";
-import { RefreshPhase } from "./hooks/useCustomRefreshConrol";
+import { RefreshPhase } from "./hooks/useCustomRefreshControl";
 
 const STATUS_LABEL: Record<RefreshPhase, string> = {
   idle: "Latest",
