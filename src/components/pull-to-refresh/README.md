@@ -585,8 +585,6 @@ taps on the first row even while fully faded out.
 - The Threads example fakes new content by reshuffling the existing feed (see
   [The Threads Example](#the-threads-example)); it never fetches or prepends
   real rows.
-- `threads-example/ThreadsStickeyHeader.tsx` is a leftover stub — the actual
-  Threads header is `ThreadsView.tsx`. It's unused and safe to delete.
 
 ---
 
@@ -605,8 +603,7 @@ src/components/pull-to-refresh/
 │   ├── ThreadsView.tsx                     #   Lifecycle-driven glyph sticky header
 │   ├── ThreadsSpotlight.tsx                #   Pure Skia glyph (bead + white reveal)
 │   ├── ThreadItemView.tsx                  #   One Threads post card
-│   ├── posts.ts                            #   Mock feed data + reshuffle()
-│   └── ThreadsStickeyHeader.tsx            #   Leftover stub, unused
+│   └── posts.ts                            #   Mock feed data + reshuffle()
 └── README.md                               # This file
 ```
 
