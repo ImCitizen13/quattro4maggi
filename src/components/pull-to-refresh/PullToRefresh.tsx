@@ -40,6 +40,8 @@ import {
   useRefreshLifecycle,
 } from "./RefreshLifecycleContext";
 import { StickyStatusHeader } from "./StickeyHeader";
+import ThreadItemView from "./threads-example/ThreadItemView";
+import { postForIndex } from "./threads-example/posts";
 import ThreadsView from "./threads-example/ThreadsView";
 
 // ============================================================================
@@ -57,6 +59,11 @@ export const ITEMS = Array.from({ length: 10 }, (_, i) => i);
  */
 export function ItemSeparator() {
   return <View style={styles.separator} />;
+}
+
+/** Full-bleed hairline between Threads post cards, like the real app's feed. */
+export function ThreadDivider() {
+  return <View style={styles.threadDivider} />;
 }
 
 /** How far the arc winds up over the course of the pull, in degrees. */
@@ -298,8 +305,20 @@ export function PullToRefresh({}: PullToRefreshProps) {
             <Animated.FlatList
               data={ITEMS}
               keyExtractor={(item) => `${item}`}
-              renderItem={() => <View style={styles.itemStyle} />}
-              ItemSeparatorComponent={ItemSeparator}
+              // In Threads mode each row is a real post card; otherwise the
+              // demo's placeholder box, so the pull mechanics stay the focus.
+              renderItem={({ item }) =>
+                stickyMode === "threads" ? (
+                  <ThreadItemView post={postForIndex(item)} />
+                ) : (
+                  <View style={styles.itemStyle} />
+                )
+              }
+              // Threads cards carry their own internal padding and thread line,
+              // so they only need a hairline divider between rows.
+              ItemSeparatorComponent={
+                stickyMode === "threads" ? ThreadDivider : ItemSeparator
+              }
               // With `ListHeaderComponent` present it is child 0 of the underlying
               // ScrollView, so index 0 is the one sticky index that survives
               // virtualization. Row indices do not — VirtualizedList inserts
@@ -401,6 +420,11 @@ export const styles = StyleSheet.create({
   },
   separator: {
     height: 10,
+  },
+  threadDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: "100%",
+    backgroundColor: "#2a2a2a",
   },
   itemStyle: {
     width: "80%",
