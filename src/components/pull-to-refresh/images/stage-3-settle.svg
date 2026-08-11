@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="600" viewBox="0 0 300 600" fill="none">
+  <rect width="300" height="600" rx="24" fill="#1a1a1a"/>
+  <rect x="0.5" y="0.5" width="299" height="599" rx="23.5" stroke="#333" stroke-dasharray="6 8"/>
+  <text x="150" y="70" fill="#666" font-family="sans-serif" font-size="15" font-weight="600" letter-spacing="2" text-anchor="middle">PLACEHOLDER</text>
+  <text x="150" y="285" fill="#fff" font-family="sans-serif" font-size="34" font-weight="700" text-anchor="middle">Stage 3</text>
+  <text x="150" y="325" fill="#4ade80" font-family="sans-serif" font-size="20" font-weight="600" text-anchor="middle">Settle</text>
+  <text x="150" y="365" fill="#888" font-family="sans-serif" font-size="14" text-anchor="middle">springing closed,</text>
+  <text x="150" y="386" fill="#888" font-family="sans-serif" font-size="14" text-anchor="middle">tinted by the outcome</text>
+</svg>
