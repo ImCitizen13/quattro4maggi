@@ -46,11 +46,9 @@ const demos: Demo[] = [
     lottieLink: "liquid-metal.json",
   },
   {
-    name: "Path Mask Shader",
-    href: "/path-mask-shader" as const,
-    tags: [
-      { name: "skia", color: "green" },
-    ],
+    name: "Pull To Refresh",
+    href: "/pull-to-refresh" as const,
+    tags: [{ name: "reanimated", color: "#6a539a" }],
   },
 ];
 
