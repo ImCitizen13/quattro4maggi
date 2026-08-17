@@ -20,7 +20,7 @@ Clone them. Learn from them. Ship them.
 | [Text Flyin](/src/components/text-flyin/README.md)             | ![text-flyin](./assets/demos/text-flyin.gif)                                                                                           | Kinetic text animation with staggered character fly-in effect                                        |
 | [Liquid Metal](/src/components/liquid-metal/README.md)         | ![liquid-metal](./assets/demos/liquid-metal.gif)<br><video src="./assets/videos/liquid_metal_button.mp4" width="220" controls></video> | Skia shader component with animated liquid metal effects and customizable colors                     |
 | [Live Border Card](/src/components/live-border-card/README.md) | ![live-border-card](./assets/demos/live-border-card.gif)                                                                               | Animated glowing borders with rotating color gradients and customizable glow effects                 |
-| [Pull To Refresh](/src/components/pull-to-refresh/README.md)   | _no capture yet_                                                                                                                       | Gesture-driven pull-to-refresh with a three-stage animation and switchable iOS/Android layout models |
+| [Pull To Refresh](/src/components/pull-to-refresh/README.md)   | _no capture yet_                                                                                                                       | Gesture-driven pull-to-refresh with a three-stage animation, switchable iOS/Android layout models, and a sticky Threads-style glyph header driven by the same lifecycle |
 
 ---
 

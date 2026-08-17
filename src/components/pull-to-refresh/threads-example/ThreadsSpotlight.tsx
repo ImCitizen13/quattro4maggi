@@ -492,7 +492,7 @@ export function ThreadsSpotlight({
     typeof strokeWidth === "number" ? strokeWidth : strokeWidth.value,
   );
   const sizeValue = useDerivedValue(() =>
-    typeof size === "number" ? size+ (progress.value * 10) : size.value + (progress.value * 10),
+    typeof size === "number" ? size+ (progress.value * 20) : size.value + (progress.value * 10),
   );
 
   // Parse every path, sample it into positions + normals, and lay the paths out on
