@@ -18,7 +18,13 @@
  */
 
 import { PressableScale } from "pressto";
-import React, { createContext, useContext, useMemo, useState } from "react";
+import React, {
+  createContext,
+  ReactNode,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -43,6 +49,9 @@ import { StickyStatusHeader } from "./StickyHeader";
 import ThreadItemView from "./threads-example/ThreadItemView";
 import { postForIndex, reshuffle } from "./threads-example/posts";
 import ThreadsView from "./threads-example/ThreadsView";
+import { NEON_COLORS } from "./constants";
+import NeonView from "./neon-example/NeonView";
+import NeonItemView from "./neon-example/NeonItemView";
 
 // ============================================================================
 // Constants
@@ -97,9 +106,9 @@ export type IndicatorType = "ios" | "android";
  * What occupies the sticky header slot: nothing, the status bar, or the
  * Threads glyph. Any sticky mode forces the indicator out to `overlay`.
  */
-export type StickyMode = "off" | "bar" | "threads";
+export type StickyMode = "off" | "bar" | "threads" | "neon";
 
-const STICKY_MODES: StickyMode[] = ["off", "bar", "threads"];
+const STICKY_MODES: StickyMode[] = ["off", "bar", "threads", "neon"];
 
 type DemoConfig = {
   indicatorType: IndicatorType;
@@ -187,7 +196,11 @@ function RefreshSpinner({
  * matters for the `inset` mount: `ListHeaderComponent` re-mounts whenever its
  * identity changes, and a module-level component reference never changes.
  */
-export function RefreshIndicator() {
+export function RefreshIndicator({
+  layoutType,
+}: {
+  layoutType: RefreshIndicatorLayout;
+}) {
   const { progress, phase, spin, outcome } = useRefreshLifecycle();
   const { indicatorType, effectiveLayout } = useDemoConfig();
 
@@ -198,16 +211,23 @@ export function RefreshIndicator() {
       layout={effectiveLayout}
       revealMode="translateY"
     >
-      <RefreshSpinner
-        progress={progress}
-        phase={phase}
-        spin={spin}
-        outcome={outcome}
-      />
+      <View
+        style={{
+          backgroundColor: layoutType == "overlay" ? "black" : "transparent",
+          padding: 16,
+          borderRadius: 999,
+        }}
+      >
+        <RefreshSpinner
+          progress={progress}
+          phase={phase}
+          spin={spin}
+          outcome={outcome}
+        />
+      </View>
     </CustomChildRefreshIndicator>
   );
 }
-
 
 // ============================================================================
 // Controls
@@ -222,7 +242,12 @@ type ConfigButtonProps = {
 };
 
 /** One toggle: shows the setting's name and its current value, tap to cycle. */
-export function ConfigButton({ label, value, onPress, disabled }: ConfigButtonProps) {
+export function ConfigButton({
+  label,
+  value,
+  onPress,
+  disabled,
+}: ConfigButtonProps) {
   return (
     <PressableScale
       style={[styles.configButton, disabled && styles.configButtonDisabled]}
@@ -293,11 +318,25 @@ export function PullToRefresh({}: PullToRefreshProps) {
     // Success only — a rejected refresh throws above and never reaches here, so
     // a failed pull leaves the existing order untouched. Reshuffling now (while
     // the indicator is still held open) means the settle reveals the new feed.
-    setFeedOrder(reshuffle);
+    // setFeedOrder(reshuffle);
   };
 
   const { progress, phase, spin, outcome, gesture, onScrollHandler } =
     useCustomRefreshControl({ onRefresh });
+
+  const getListHeader = () => {
+    if (stickyMode === "bar") {
+      return StickyStatusHeader;
+    } else if (stickyMode === "threads") {
+      return ThreadsView;
+    } else if (stickyMode === "neon") {
+      return NeonView;
+    }
+    if (effectiveLayout === "inset") {
+      return RefreshIndicator;
+    }
+    return null;
+  };
 
   return (
     <RefreshLifecycleProvider
@@ -307,11 +346,16 @@ export function PullToRefresh({}: PullToRefreshProps) {
       outcome={outcome}
     >
       <DemoConfigContext.Provider value={demoConfig}>
-        <View style={styles.container}>
+        <View
+          style={[
+            styles.container,
+            { backgroundColor: stickyMode === "neon" ? "black" : "#1a1a1a" },
+          ]}
+        >
           {/* Overlay mounts outside the scroll view so it stays pinned to the
               viewport instead of scrolling away with the content. */}
           {!useStickyHeader && effectiveLayout === "overlay" && (
-            <RefreshIndicator />
+            <RefreshIndicator layoutType="overlay" />
           )}
 
           <GestureDetector gesture={gesture}>
@@ -320,13 +364,19 @@ export function PullToRefresh({}: PullToRefreshProps) {
               keyExtractor={(item) => `${item}`}
               // In Threads mode each row is a real post card; otherwise the
               // demo's placeholder box, so the pull mechanics stay the focus.
-              renderItem={({ item }) =>
-                stickyMode === "threads" ? (
-                  <ThreadItemView post={postForIndex(item)} />
-                ) : (
-                  <View style={styles.itemStyle} />
-                )
-              }
+              renderItem={({ item, index }) => {
+                const borderColor = NEON_COLORS[index % NEON_COLORS.length];
+                if (stickyMode === "threads") {
+                  return <ThreadItemView post={postForIndex(item)} />;
+                } else if (stickyMode === "neon") {
+                  return <NeonItemView index={index} />;
+                } else
+                  return (
+                    <View
+                      style={[styles.itemStyle, { borderColor: borderColor }]}
+                    />
+                  );
+              }}
               // Threads cards carry their own internal padding and thread line,
               // so they only need a hairline divider between rows.
               ItemSeparatorComponent={
@@ -336,24 +386,22 @@ export function PullToRefresh({}: PullToRefreshProps) {
               // ScrollView, so index 0 is the one sticky index that survives
               // virtualization. Row indices do not — VirtualizedList inserts
               // spacer views as you scroll, which shifts them out from under you.
-              ListHeaderComponent={
-                stickyMode === "bar"
-                  ? StickyStatusHeader
-                  : stickyMode === "threads"
-                    ? ThreadsView
-                    : effectiveLayout === "inset"
-                      ? RefreshIndicator
-                      : null
-              }
+              ListHeaderComponent={getListHeader()}
               stickyHeaderIndices={useStickyHeader ? [0] : undefined}
               // Android defaults this to true, and its subview clipping wrongly
               // culls a stuck `stickyHeaderIndices` header — the header mounts
               // but never paints. iOS defaults it off, which is why the bug is
               // Android-only. The list is 10 rows; clipping buys nothing here.
               removeClippedSubviews={false}
-              style={styles.scroll}
+              style={[styles.scroll]}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollStyle}
+              contentContainerStyle={[
+                styles.scrollStyle,
+                {
+                  backgroundColor:
+                    stickyMode === "neon" ? "black" : "transparent",
+                },
+              ]}
               onScroll={onScrollHandler}
               scrollEventThrottle={16}
             />
@@ -410,7 +458,7 @@ export const styles = StyleSheet.create({
     // this box, and `alignItems: "center"` would otherwise shrink-wrap it.
     width: "100%",
     height: "100%",
-    backgroundColor: "#1a1a1a",
+    // backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -440,10 +488,14 @@ export const styles = StyleSheet.create({
     backgroundColor: "#2a2a2a",
   },
   itemStyle: {
-    width: "80%",
+    width: "90%",
+    // borderRadius: 16,
+    backgroundColor: "black",
+    borderWidth: 2,
+
     height: 100,
     alignSelf: "center",
-    backgroundColor: "purple",
+    // backgroundColor: "purple",
   },
 
   controls: {
