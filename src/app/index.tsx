@@ -50,6 +50,12 @@ const demos: Demo[] = [
     href: "/pull-to-refresh" as const,
     tags: [{ name: "reanimated", color: "#6a539a" }],
   },
+
+  {
+    name: "Gargantua",
+    href: "/gargantua-type-gpu" as const,
+    tags: [{ name: "reanimated", color: "#6a539a" }],
+  },
 ];
 
 export default function HomeScreen() {

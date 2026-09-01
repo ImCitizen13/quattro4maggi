@@ -1,6 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "types": ["@webgpu/types", "node"],
     "strict": true,
     "paths": {
       "@/*": [

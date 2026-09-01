@@ -27,7 +27,7 @@ export default function RootLayout() {
   });
 
   const [isAnimationDone, setIsAnimationDone] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
 
   const onAnimationFinish = () => {
     setShowSplash(false);
@@ -85,6 +85,9 @@ export default function RootLayout() {
             />
             <Stack.Screen
               name="wabi-and-more"
+              options={{ headerShown: false }}
+            />            <Stack.Screen
+              name="gargantua-type-gpu"
               options={{ headerShown: false }}
             />
           </Stack>
