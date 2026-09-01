@@ -1,4 +1,4 @@
-# Build the May the Fourth effect, step by step
+# Build the Gargantua effect, step by step
 
 This tutorial builds the feature in six stages. Each stage introduces one
 piece of the rendering system, and the last stage assembles the complete
@@ -12,7 +12,7 @@ procedural galaxy
        └─► centered glass bubble that refracts everything behind it
 ```
 
-This is a React Native/Expo native feature. It uses `react-native-wgpu`,
+This is a React Native/Expo native feature. It uses `react-native-webgpu`,
 TypeGPU, and Skia image decoding, so run it in a native development build
 rather than Expo Go.
 
@@ -37,13 +37,14 @@ The relevant project pieces are:
 
 ```text
 components/
-├── scratch-2d-type-gpu/
-│   └── useWebGPU.tsx
-└── may-the-fourth/
-    ├── hooks/useLoadImages.tsx
+└── gargantua-type-gpu/
+    ├── hooks/
+    │   ├── useWebGPU.tsx
+    │   └── useLoadImages.tsx
     ├── composeLayered.ts
     ├── movingBubbleScene.ts
     ├── movingBubbleMath.ts
+    ├── bubbleScene.ts
     ├── centerBubbleScene.ts
     ├── scene.ts
     ├── shaders.ts
@@ -66,7 +67,7 @@ module.exports = (api) => {
 
 ## 1. Use the WebGPU helper
 
-[`useWebGPU.tsx`](../../scratch-2d-type-gpu/useWebGPU.tsx) keeps WebGPU
+[`useWebGPU.tsx`](../hooks/useWebGPU.tsx) keeps WebGPU
 lifecycle code out of the feature. You do not need to understand its internals
 to build a scene.
 
@@ -76,7 +77,7 @@ Give the hook:
 - a dependency list;
 - the measured layout size of the canvas.
 
-It gives you a ref for `react-native-wgpu`'s `Canvas`:
+It gives you a ref for `react-native-webgpu`'s `Canvas`:
 
 ```tsx
 const canvasRef = useWebGPU(scene, [scene], canvasSize);
@@ -304,7 +305,7 @@ spawn near center at zFar
 Keeping this math outside the shader makes it easy to test:
 
 ```sh
-bun test components/may-the-fourth/movingBubbleMath.test.ts
+bun test components/gargantua-type-gpu/movingBubbleMath.test.ts
 ```
 
 The scene's high-level controls are:
@@ -464,16 +465,16 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { Canvas } from "react-native-wgpu";
+import { Canvas } from "react-native-webgpu";
 
-import { useWebGPU } from "../../components/scratch-2d-type-gpu/useWebGPU";
-import { createCenterBubbleScene } from "../../components/may-the-fourth/centerBubbleScene";
-import { composeLayered } from "../../components/may-the-fourth/composeLayered";
-import { useLoadImages } from "../../components/may-the-fourth/hooks/useLoadImages";
-import { createBubbleScene } from "../../components/may-the-fourth/movingBubbleScene";
-import { createStarfieldScene } from "../../components/may-the-fourth/scene";
+import { useWebGPU } from "@/components/gargantua-type-gpu/hooks/useWebGPU";
+import { createCenterBubbleScene } from "@/components/gargantua-type-gpu/centerBubbleScene";
+import { composeLayered } from "@/components/gargantua-type-gpu/composeLayered";
+import { useLoadImages } from "@/components/gargantua-type-gpu/hooks/useLoadImages";
+import { createBubbleScene } from "@/components/gargantua-type-gpu/movingBubbleScene";
+import { createStarfieldScene } from "@/components/gargantua-type-gpu/scene";
 
-export default function MayTheFourthScreen() {
+export default function GargantuaScreen() {
   const [forwardEnabled, setForwardEnabled] = useState(false);
   const [canvasSize, setCanvasSize] = useState<{
     width: number;
@@ -579,9 +580,7 @@ forward flight.
 
 ## Next steps
 
-- For a copy-oriented integration checklist, continue with the
-  [plug-and-play guide](./PLUG_AND_PLAY.md).
 - For a file-by-file technical reference, see the
   [rendering module README](../README.md).
 - For more detail about the lifecycle helper, see the
-  [`useWebGPU` companion guide](../../scratch-2d-type-gpu/useWebGPU.md).
+  [`useWebGPU` companion guide](../hooks/useWebGPU.md).
