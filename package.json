@@ -18,6 +18,8 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "@shopify/react-native-skia": "2.10.2",
+    "@typegpu/react": "^0.12.0",
+    "@webgpu/types": "^0.1.72",
     "expo": "^55.0.5",
     "expo-constants": "~55.0.7",
     "expo-font": "~55.0.4",
@@ -48,7 +50,10 @@
     "react-native-screens": "~4.23.0",
     "react-native-svg": "15.15.3",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.7.4"
+    "react-native-webgpu": "^0.8.5",
+    "react-native-worklets": "0.7.4",
+    "typegpu": "^0.12.4",
+    "unplugin-typegpu": "^0.12.3"
   },
   "devDependencies": {
     "@types/react": "~19.2.10",
