@@ -21,6 +21,7 @@
     "@typegpu/react": "^0.12.0",
     "@webgpu/types": "^0.1.72",
     "expo": "^55.0.5",
+    "expo-build-properties": "~55.0.18",
     "expo-constants": "~55.0.7",
     "expo-font": "~55.0.4",
     "expo-haptics": "~55.0.8",
