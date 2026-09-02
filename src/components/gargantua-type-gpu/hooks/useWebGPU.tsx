@@ -2,6 +2,8 @@ import { DependencyList, useEffect, useRef } from "react";
 import { PixelRatio } from "react-native";
 import { type NativeCanvas, useCanvasRef, useDevice } from "react-native-webgpu";
 
+import type { FrameSampler } from "../../common/frameSampler";
+
 interface SceneProps {
   context: GPUCanvasContext;
   device: GPUDevice;
@@ -57,12 +59,23 @@ export const useWebGPU = (
    * freeze behavior used by other screens.
    */
   size?: { width: number; height: number } | null,
+  /**
+   * Optional frame sampler ticked once per presented frame, with the duration
+   * of `render + present` as its work value. Hand the same instance to
+   * `<FpsOverlay sources={[sampler]} />` to read this loop's real cadence —
+   * the overlay's built-in row measures the UI-thread display link, which is a
+   * different clock from this JS-thread RAF loop and cannot see it stall.
+   */
+  sampler?: FrameSampler | null,
 ) => {
   const { device } = useDevice();
   const canvasRef = useCanvasRef();
   const animationFrameId = useRef<number | null>(null);
   const sceneRef = useRef(scene);
   const sizeRef = useRef(size);
+  // Held in a ref so swapping samplers never tears down the scene.
+  const samplerRef = useRef(sampler);
+  samplerRef.current = sampler;
   /**
    * Stores the resize routine produced by setup. Null until setup completes
    * and after teardown. The size-watch effect calls this whenever the caller-
@@ -210,40 +223,21 @@ export const useWebGPU = (
       };
 
       if (typeof renderScene === "function") {
-        // Frame-time sampler. Logs an averaged Δ every ~1s so you can tell
-        // whether RAF is firing at 60Hz (~16.6ms) or 120Hz (~8.3ms). On
-        // ProMotion devices, requires `CADisableMinimumFrameDuration: true`
-        // in Info.plist; otherwise iOS caps the display link at 60Hz.
-        // Simulator is always 60Hz regardless.
-        let lastFrameMs = 0;
-        let frameAccum = 0;
-        let frameCount = 0;
-        let lastLogMs = 0;
-
+        // Frame-time reporting is delegated to the caller-supplied sampler.
+        // It sees the interval between presented frames (is this loop hitting
+        // the budget?) and the cost of render + present (how much of the
+        // budget is us). Note `present()` only queues — a GPU-bound stall
+        // surfaces late, via swapchain back-pressure, not in `work`.
+        //
+        // On ProMotion devices RAF only reaches 120Hz with
+        // `CADisableMinimumFrameDuration: true` in Info.plist. Simulator is
+        // always 60Hz regardless.
         const render = () => {
           if (cancelled) {
             return;
           }
           const timestamp = Date.now();
-          // if (__DEV__) {
-          //   if (lastFrameMs) {
-          //     const dt = timestamp - lastFrameMs;
-          //     frameAccum += dt;
-          //     frameCount++;
-          //     if (timestamp - lastLogMs >= 1000) {
-          //       const avg = frameAccum / frameCount;
-          //       console.log(
-          //         `[frame rate] avg=${avg.toFixed(2)}ms  fps=${(1000 / avg).toFixed(1)}  n=${frameCount}`,
-          //       );
-          //       frameAccum = 0;
-          //       frameCount = 0;
-          //       lastLogMs = timestamp;
-          //     }
-          //   } else {
-          //     lastLogMs = timestamp;
-          //   }
-          //   lastFrameMs = timestamp;
-          // }
+          const workStart = performance.now();
           try {
             renderScene(timestamp);
             context.present();
@@ -251,6 +245,7 @@ export const useWebGPU = (
             // Keep RAF alive while still surfacing frame-level failures.
             console.error("[WebGPU render error]", error);
           }
+          samplerRef.current?.tick(performance.now() - workStart);
           animationFrameId.current = requestAnimationFrame(render);
         };
 

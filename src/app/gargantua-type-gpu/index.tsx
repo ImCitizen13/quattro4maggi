@@ -2,7 +2,6 @@ import { LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native";
 import React, { useMemo, useRef, useState } from "react";
 import { Canvas } from "react-native-webgpu";
 
-
 import { createStarfieldScene } from "../../components/gargantua-type-gpu/scene";
 import { createBubbleScene } from "../../components/gargantua-type-gpu/movingBubbleScene";
 import { createCenterBubbleScene } from "../../components/gargantua-type-gpu/centerBubbleScene";
@@ -11,6 +10,8 @@ import { useLoadImages } from "../../components/gargantua-type-gpu/hooks/useLoad
 import { perf } from "../../components/gargantua-type-gpu/perf/perfMarks";
 import { useFrameCallback } from "react-native-reanimated";
 import { useWebGPU } from "@/components/gargantua-type-gpu/hooks/useWebGPU";
+import { FpsOverlay } from "../../components/common/FpsOverlay";
+import { useFrameSampler } from "../../components/common/frameSampler";
 
 // // DeviceMotion.rotation is in radians (gravity-corrected attitude).
 // // Comfortable tilt is ~±30° (±0.52 rad). Scale maps that range to ~±0.4 NDC.
@@ -57,7 +58,7 @@ export default function MayTheFourthScreen() {
 
   const { datas } = useLoadImages();
 
-  useFrameCallback(() => {}).setActive(true);
+  // useFrameCallback(() => {}).setActive(true);
 
   const scene = useMemo(() => {
     const starfield = createStarfieldScene({
@@ -66,7 +67,11 @@ export default function MayTheFourthScreen() {
       cameraOffsetRef,
       hyperspaceEnabledRef,
     });
-    const centerBubble = createCenterBubbleScene({ radiusPx: 200, invertDistortion: false, shapeN: 2.0 });
+    const centerBubble = createCenterBubbleScene({
+      radiusPx: 200,
+      invertDistortion: false,
+      shapeN: 2.0,
+    });
 
     // Layered scene stack: starfield (base), sprite bubbles, center glass
     // bubble (samples backdrop for true lens distortion). The composer owns
@@ -99,7 +104,12 @@ export default function MayTheFourthScreen() {
       };
     };
   }, [datas]);
-  const canvasRef = useWebGPU(scene, [scene], canvasSize);
+  // Ticked once per presented frame by the RAF loop inside `useWebGPU`, and
+  // rendered as the `gpu` row of the overlay. The overlay's own `ui` row reads
+  // the UI-thread display link — a different clock that cannot see this loop
+  // stall, so a gap between the two rows means the JS thread is the problem.
+  const gpuSampler = useFrameSampler("gpu");
+  const canvasRef = useWebGPU(scene, [scene], canvasSize, gpuSampler);
 
   return (
     // <GestureDetector gesture={tap}>
@@ -113,6 +123,7 @@ export default function MayTheFourthScreen() {
     >
       <View style={StyleSheet.absoluteFill} onLayout={onCanvasLayout}>
         <Canvas ref={canvasRef} style={StyleSheet.absoluteFill} />
+        <FpsOverlay dark sources={[gpuSampler]} />
       </View>
     </Pressable>
   );
