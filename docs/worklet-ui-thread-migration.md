@@ -208,7 +208,7 @@ dimensions — is invisible to the already-transferred copy.
 ### 5.6 Forwarded module objects are duplicated, not shared
 
 **Symptom.** `Missing bind groups for layouts: '<name>'` every frame, even though
-a bind group is clearly being passed. **See the footnote — this is open.**
+a bind group is clearly being passed.
 
 **Cause.** Import forwarding *re-imports* a module on the UI runtime, creating a
 **new instance** of everything it exports. A pipeline transferred from the JS
@@ -241,7 +241,7 @@ changes them, and Metro's cache still points at the old ones.
 | **5.3** Silent gate | Grep `node_modules` for all five exports after any bump (command in §3). Do not rely on runtime behaviour to tell you. |
 | **5.4** Missing serializers | Add a side-effect import: `import "@typegpu/react"`. None of its hooks are needed; the `react-native` export condition resolves to the entry that registers. Idempotent, and no-ops without worklets. |
 | **5.5** Stale resize state | In `ui-worklet` mode, resize **rebuilds** the scene rather than mutating in place, re-serializing the closure with fresh resources. Resize is rare (nav bar settling, rotation), and `skDataCache` means assets are re-uploaded but not re-fetched. `js-raf` keeps in-place resize. |
-| **5.6** Duplicated layouts | **Open — see footnote.** |
+| **5.6** Duplicated layouts | Bind the imported layout to a **local const inside the scene factory** and use that in the render closure, so it is *captured* (and routed through TypeGPU's identity cache) rather than re-imported. See the footnote. |
 | **5.7** Host singletons | Gate both to `js-raf`. In `ui-worklet` the overlay's `ui` row already measures this loop, so the `gpu` row is dropped as redundant rather than reported wrong. |
 | **5.8** Metro cache | Re-run the bundle; the second pass always succeeds. Use `--clear` after touching `babel.config.js` or `metro.config.js`. |
 
@@ -252,10 +252,9 @@ to read than `Cannot copy value of type …`.
 
 ---
 
-## Footnote — open issue: duplicated bind group layouts (§5.6)
+## Footnote — duplicated bind group layouts (§5.6)
 
-**Status: unresolved at time of writing.** Everything else works; the scene runs
-on the UI thread and draws. Only the centre-bubble layer fails, once per frame:
+**Status: resolved.** The centre-bubble layer used to fail once per frame:
 
 > `Missing bind groups for layouts: 'centerBubbleBindGroupLayout'. Please provide it using pipeline.with(bindGroup)`
 
@@ -279,23 +278,64 @@ Centre bubble is the only layer combining *per-frame construction* with an
 *imported* layout. Its per-frame construction is legitimate: the backdrop
 alternates between the two ping-pong textures each frame.
 
-**Three solutions, best to quickest:**
+**The fix that shipped — alias the layout to a local const.** In
+`createCenterBubbleScene`, `const layout = centerBubbleBindGroupLayout` before
+the render closure, then `createBindGroup(layout, …)`. That moves the layout out
+of the forwarded-import path and into the closure's captured-by-value set, so it
+*transfers* alongside the pipeline instead of being re-imported.
 
-1. **Pre-build two bind groups at setup**, one per ping-pong view, and select
-   between them each frame. The backdrop only ever has two possible values, so
-   this matches reality, removes a per-frame allocation, and puts the layer on
-   the same footing as every other one. Better code on either thread.
-2. **Move `layouts.ts` outside the forwarded folder.** Layouts do not need
-   forwarding — only shader definitions do — so it would transfer like
-   everything else. Wider blast radius, since other scenes import from it.
-3. **Alias the layout to a local const** before the render closure, so it is
-   captured rather than forwarded — the same accident that makes `blitLayout`
-   work. One line, but it depends on a subtlety rather than stating intent, and
-   is easy to undo by accident later.
+**Why capture preserves identity.** The UI runtime logs, on first transfer:
 
-Recommended: **1**.
+> `WeakRef is not available in this worklet runtime. TypeGPU transferred resources will use a strong identity cache.`
 
-**Generalize before flipping this on for good:** this class of bug appears
-anywhere a TypeGPU object is constructed *per-frame* from a *forwarded import*.
-Audit for other per-frame `createBindGroup` / `createBuffer` calls that reference
-imported layouts or schemas.
+TypeGPU keeps an identity cache of transferred resources. A layout that crosses
+by transfer is looked up in that cache and resolves to *the same instance* the
+already-transferred pipeline holds. Import forwarding never touches the cache —
+it runs a fresh `import` on the UI runtime — which is the entire bug. This is
+also why `blitLayout` always worked: same capture path, same cache.
+
+*Caveat:* that cache is **strong**, not weak, on this runtime. `ui-worklet`
+resize rebuilds the scene (§5.5), so each resize transfers a fresh resource set;
+whether the superseded entries are ever released is unverified. Not a problem at
+current resize frequency, but worth measuring before leaning on rotation.
+
+**Verifying the fix at the compiler, not the device.** Per §2, read the generated
+factory's parameter list — it is exactly the captured set:
+
+```
+export default (function centerBubbleSceneTs1Factory({
+  root, layout, paramsBuffer, sampler, pipeline
+}) {
+```
+
+`layout` as a parameter (not an import) is the proof. Cross-check that no worklet
+forwards the layouts module at all: `grep -ln layouts node_modules/react-native-worklets/.worklets/*.js`
+should return nothing.
+
+**Rejected alternatives.**
+
+- *Pre-build two bind groups at setup*, one per ping-pong view. Cannot be done
+  from the scene factory — it receives only `SceneProps` and has no access to the
+  composer's `viewA`/`viewB`. Would require allocating textures before layer init
+  and widening the layer contract with the composer's ping-pong internals, to fix
+  one layer.
+- *Move `layouts.ts` outside the forwarded folder.* Layout objects are
+  dereferenced **inside shader definitions** (`starfieldBindGroupLayout.$.uniforms`
+  in `shaders.ts`, `bubbleBindGroupLayout.$.rect` in `bubbleScene.ts`). Those
+  modules must stay forwarded, and a forwarded module's own imports still resolve
+  on the UI runtime — so the layouts module would be re-instantiated there
+  regardless. Does not fix anything.
+
+**Generalization — audited, and this was the only site.** The bug class is
+*per-frame construction* combined with a *forwarded import*:
+
+| Site | Per-frame | Layout origin | Status |
+|---|---|---|---|
+| `centerBubbleScene.ts` `createBindGroup` | yes | imported | fixed by the alias |
+| `composeLayered.ts` blit `createBindGroup` | yes | local const | already safe |
+| scene / bubble / movingBubble `createBindGroup` | setup only | imported | safe — transfers with pipeline |
+| all `createBuffer` calls | setup only | — | safe |
+
+Re-run that audit (`grep -rn 'createBindGroup\|createBuffer' src/components/gargantua-type-gpu`)
+when adding a layer: setup-time construction is always safe, per-frame
+construction from an imported layout is always broken.

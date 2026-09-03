@@ -302,7 +302,30 @@ export function createCenterBubbleScene(config: CenterBubbleConfig = {}) {
       )
       .$usage("uniform");
 
-
+    /**
+     * Local alias of the imported layout — **load-bearing, do not inline.**
+     *
+     * `src/components/gargantua-type-gpu` is in the worklets plugin's
+     * `importForwarding.relativePaths`, so a worklet that references
+     * `centerBubbleBindGroupLayout` directly gets it *re-imported* on the UI
+     * runtime — a new object identity. `pipeline` below is built here on the
+     * JS thread against the original, then transferred; a bind group built on
+     * the UI runtime from the re-imported copy is a different layout, and the
+     * pipeline rejects it with:
+     *
+     *   Missing bind groups for layouts: 'centerBubbleBindGroupLayout'
+     *
+     * Binding it to a local const puts it in the render closure's
+     * captured-by-value set instead, so it *transfers* alongside the pipeline
+     * and keeps a single identity across both runtimes. This is the same
+     * mechanism that makes `blitLayout` work in `composeLayered.ts` (declared
+     * module-locally there, so captured rather than forwarded).
+     *
+     * Only needed because this layer builds its bind group *per frame* — the
+     * backdrop ping-pongs between two views. Every other layer builds its bind
+     * group during setup, where it transfers with the pipeline anyway.
+     */
+    const layout = centerBubbleBindGroupLayout;
 
     const pipeline = root.createRenderPipeline({
       primitive: { topology: "triangle-list" },
@@ -327,7 +350,9 @@ export function createCenterBubbleScene(config: CenterBubbleConfig = {}) {
         }
         // Bind group is recreated each frame because `backdrop` ping-pongs
         // between two views; bind-group creation is cheap (descriptor-only).
-        const bindGroup = root.createBindGroup(centerBubbleBindGroupLayout, {
+        // Uses the captured `layout` alias, never the imported binding — see
+        // the comment on that const.
+        const bindGroup = root.createBindGroup(layout, {
           params: paramsBuffer,
           samp: sampler,
           backdrop,
