@@ -316,6 +316,10 @@ export function createCenterBubbleScene(config: CenterBubbleConfig = {}) {
 
     return {
       render: (_t, attachment, backdrop) => {
+        "worklet";
+        // Runs on the Reanimated UI runtime in `ui-worklet` mode. A
+        // `'worklet'`-marked function is still an ordinary callable JS
+        // function, so `js-raf` invokes it directly and unchanged.
         if (!backdrop) {
           // Defensive: this scene must be configured with readsBackdrop=true.
           // Without a backdrop there's nothing to sample → skip.

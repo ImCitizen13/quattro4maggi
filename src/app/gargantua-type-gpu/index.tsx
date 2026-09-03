@@ -1,5 +1,12 @@
-import { LayoutChangeEvent, Pressable, StyleSheet, View } from "react-native";
-import React, { useMemo, useRef, useState } from "react";
+import {
+  LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import React, { useMemo, useState } from "react";
+import { useSharedValue } from "react-native-reanimated";
 import { Canvas } from "react-native-webgpu";
 
 import { createStarfieldScene } from "../../components/gargantua-type-gpu/scene";
@@ -8,8 +15,10 @@ import { createCenterBubbleScene } from "../../components/gargantua-type-gpu/cen
 import { composeLayered } from "../../components/gargantua-type-gpu/composeLayered";
 import { useLoadImages } from "../../components/gargantua-type-gpu/hooks/useLoadImages";
 import { perf } from "../../components/gargantua-type-gpu/perf/perfMarks";
-import { useFrameCallback } from "react-native-reanimated";
-import { useWebGPU } from "@/components/gargantua-type-gpu/hooks/useWebGPU";
+import {
+  type RenderMode,
+  useWebGPU,
+} from "@/components/gargantua-type-gpu/hooks/useWebGPU";
 import { FpsOverlay } from "../../components/common/FpsOverlay";
 import { useFrameSampler } from "../../components/common/frameSampler";
 
@@ -28,17 +37,20 @@ import { useFrameSampler } from "../../components/common/frameSampler";
 // }
 
 export default function MayTheFourthScreen() {
-  const [rotationEnabled, setRotationEnabled] = useState(false);
-  const [forwardEnabled, setForwardEnabled] = useState(false);
+  /**
+   * Which runtime drives the frame loop. Switching tears the scene down and
+   * rebuilds it on the other runtime, so the two modes can be compared back to
+   * back on the same build and device.
+   */
+  const [renderMode, setRenderMode] = useState<RenderMode>("js-raf");
 
-  const rotationEnabledRef = useRef(rotationEnabled);
-  rotationEnabledRef.current = rotationEnabled;
-  const forwardEnabledRef = useRef(forwardEnabled);
-  forwardEnabledRef.current = forwardEnabled;
-  const hyperspaceEnabledRef = useRef(true);
-  hyperspaceEnabledRef.current = true;
-
-  const cameraOffsetRef = useRef({ x: 0, y: 0 });
+  // Per-frame scene inputs. SharedValues rather than refs because `render` runs
+  // on the UI runtime in `ui-worklet` mode, where a React ref is unreadable.
+  // Readable from the JS thread too, so `js-raf` behaves identically.
+  const rotationEnabled = useSharedValue(false);
+  const forwardEnabled = useSharedValue(false);
+  const hyperspaceEnabled = useSharedValue(true);
+  const cameraOffset = useSharedValue({ x: 0, y: 0 });
 
   // Measured layout-point size of the canvas wrapper. Pushed in by `onLayout`
   // and forwarded to `useWebGPU` so the swapchain + scenes resize correctly
@@ -58,14 +70,12 @@ export default function MayTheFourthScreen() {
 
   const { datas } = useLoadImages();
 
-  // useFrameCallback(() => {}).setActive(true);
-
   const scene = useMemo(() => {
     const starfield = createStarfieldScene({
-      rotationEnabledRef,
-      forwardEnabledRef,
-      cameraOffsetRef,
-      hyperspaceEnabledRef,
+      rotationEnabled,
+      forwardEnabled,
+      cameraOffset,
+      hyperspaceEnabled,
     });
     const centerBubble = createCenterBubbleScene({
       radiusPx: 200,
@@ -84,12 +94,20 @@ export default function MayTheFourthScreen() {
       ]);
     }
 
-    const bubbles = createBubbleScene({ datas, forwardEnabledRef });
+    const bubbles = createBubbleScene({ datas, forwardEnabled });
     const composed = composeLayered([
       { scene: starfield },
       { scene: bubbles },
       { scene: centerBubble, readsBackdrop: true },
     ]);
+
+    // `js-raf` only: `perf` is a module-level singleton living on the JS
+    // runtime, so the UI runtime would either see its own empty copy or fail
+    // outright. Skip the wrapper entirely in `ui-worklet` mode rather than
+    // reporting numbers that mean nothing.
+    if (renderMode === "ui-worklet") {
+      return composed;
+    }
 
     // Wrap once to fire perf marks (composer doesn't know about them).
     return async (props: Parameters<typeof composed>[0]) => {
@@ -103,13 +121,18 @@ export default function MayTheFourthScreen() {
         },
       };
     };
-  }, [datas]);
+  }, [datas, renderMode]);
   // Ticked once per presented frame by the RAF loop inside `useWebGPU`, and
   // rendered as the `gpu` row of the overlay. The overlay's own `ui` row reads
-  // the UI-thread display link — a different clock that cannot see this loop
-  // stall, so a gap between the two rows means the JS thread is the problem.
+  // the UI-thread display link — a different clock that cannot see the JS-thread
+  // loop stall, so a gap between the two rows means the JS thread is the
+  // problem. In `ui-worklet` mode both rows would measure the same display
+  // link, so the `gpu` row is dropped as redundant.
   const gpuSampler = useFrameSampler("gpu");
-  const canvasRef = useWebGPU(scene, [scene], canvasSize, gpuSampler);
+  const canvasRef = useWebGPU(scene, [scene], canvasSize, {
+    mode: renderMode,
+    sampler: gpuSampler,
+  });
 
   return (
     // <GestureDetector gesture={tap}>
@@ -118,12 +141,29 @@ export default function MayTheFourthScreen() {
       style={styles.container}
       onPress={() => {
         perf.start("input-to-render-tap");
-        setForwardEnabled((v) => !v);
+        // Written straight to the SharedValue — the scene reads it every frame
+        // on whichever runtime is driving, with no React re-render involved.
+        forwardEnabled.value = !forwardEnabled.value;
       }}
     >
       <View style={StyleSheet.absoluteFill} onLayout={onCanvasLayout}>
         <Canvas ref={canvasRef} style={StyleSheet.absoluteFill} />
-        <FpsOverlay dark sources={[gpuSampler]} />
+        <FpsOverlay
+          dark
+          sources={renderMode === "js-raf" ? [gpuSampler] : []}
+        />
+        <View style={styles.controls} pointerEvents="box-none">
+          <Pressable
+            style={styles.button}
+            onPress={() =>
+              setRenderMode((m) => (m === "js-raf" ? "ui-worklet" : "js-raf"))
+            }
+          >
+            <Text style={styles.buttonText}>
+              {renderMode === "js-raf" ? "JS thread (RAF)" : "UI thread"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </Pressable>
   );

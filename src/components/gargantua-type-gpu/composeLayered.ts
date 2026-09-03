@@ -178,19 +178,28 @@ export function composeLayered(layers: Layer[]) {
       initialized.push(result);
     }
 
+    // Flatten the layer list into plain arrays BEFORE building the render
+    // closure. `initialized` carries `cleanup`/`resize` and `layers` carries the
+    // scene factories — all ordinary functions, not worklets. Capturing either
+    // into a `'worklet'` render would make the serializer try to convert those
+    // functions when the closure crosses to the UI runtime. Only `render` (a
+    // worklet) and a boolean flag are actually needed per frame, so capture
+    // exactly that and nothing else.
+    const renders: LayerRender[] = initialized.map((r) => r.render);
+    const readsBackdropFlags: boolean[] = layers.map(
+      (l) => l.readsBackdrop === true,
+    );
+
     // ── Fast path: no layer reads backdrop. Render straight to swapchain.
     if (!anyReader) {
       const compose: LayerRender = () => {};
       void compose; // placeholder to keep parity with the slow-path shape
       return {
         render: (t: number) => {
-          for (let i = 0; i < initialized.length; i++) {
+          "worklet";
+          for (let i = 0; i < renders.length; i++) {
             const view = context.getCurrentTexture().createView();
-            initialized[i].render(
-              t,
-              { view, loadOp: i === 0 ? "clear" : "load" },
-              null,
-            );
+            renders[i](t, { view, loadOp: i === 0 ? "clear" : "load" }, null);
           }
         },
         cleanup: async () => {
@@ -253,6 +262,7 @@ export function composeLayered(layers: Layer[]) {
 
     return {
       render: (t: number) => {
+        "worklet";
         // Per-frame ping-pong state. `current` is the texture index that
         // holds (or will hold) the cumulative image after the current layer.
         // `written` flags drive `loadOp` so the composer owns first-write
@@ -260,18 +270,17 @@ export function composeLayered(layers: Layer[]) {
         let current: 0 | 1 = 0;
         const written: [boolean, boolean] = [false, false];
 
-        for (let i = 0; i < initialized.length; i++) {
-          const layer = layers[i];
-          const child = initialized[i];
+        for (let i = 0; i < renders.length; i++) {
+          const child = renders[i];
 
-          if (layer.readsBackdrop) {
+          if (readsBackdropFlags[i]) {
             // Reader: render into the OTHER texture, sample current as backdrop.
             const next = (1 - current) as 0 | 1;
             const targetView = next === 0 ? viewA! : viewB!;
             const backdrop = current === 0 ? viewA! : viewB!;
             // Reader passes always clear their destination — the layer's
             // shader is responsible for compositing the backdrop in.
-            child.render(t, { view: targetView, loadOp: "clear" }, backdrop);
+            child(t, { view: targetView, loadOp: "clear" }, backdrop);
             written[next] = true;
             current = next;
           } else {
@@ -279,7 +288,7 @@ export function composeLayered(layers: Layer[]) {
             // target this frame clears; subsequent writes load.
             const targetView = current === 0 ? viewA! : viewB!;
             const loadOp = written[current] ? "load" : "clear";
-            child.render(t, { view: targetView, loadOp }, null);
+            child(t, { view: targetView, loadOp }, null);
             written[current] = true;
           }
         }
