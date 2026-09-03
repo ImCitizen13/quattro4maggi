@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.meltohamy.quattro4maggi",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CADisableMinimumFrameDurationOnPhone": true
       },
       "icon": {
         "light": "./assets/icons/ios-light.png",
