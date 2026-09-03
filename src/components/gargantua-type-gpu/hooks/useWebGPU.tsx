@@ -12,6 +12,17 @@ import {
   type Shareable,
   UIRuntimeId,
 } from "react-native-worklets";
+// Side-effect import. `@typegpu/react`'s React Native entry calls
+// `registerTypegpuReactSerializables()`, which teaches Worklets how to pack and
+// unpack TypeGPU resources (buffers, pipelines, bind groups, roots, samplers)
+// across runtimes. None of its hooks are used here — only that registration.
+//
+// Without it, `ui-worklet` mode dies at transfer with:
+//   [Worklets] Cannot copy value of type `TgpuBufferImpl`
+// because the serializer has no rule for TypeGPU types and falls back to a
+// structural copy it cannot perform. The registration is idempotent and
+// no-ops when react-native-worklets is absent.
+import "@typegpu/react";
 
 import type { FrameSampler } from "../../common/frameSampler";
 
