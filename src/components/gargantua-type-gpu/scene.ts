@@ -1,6 +1,15 @@
-import type { RefObject } from "react";
+import type { SharedValue } from "react-native-reanimated";
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
+// `vec2f`/`vec4f` are imported by NAME as well as through the `d` namespace.
+// The worklets plugin only forwards named and default import specifiers into a
+// worklet — `isImport` in its plugin rejects `ImportNamespaceSpecifier` — so a
+// `d.*` call inside a `'worklet'` render would capture the whole `typegpu/data`
+// namespace BY VALUE and serialize it, which TypeGPU schemas do not survive.
+// Referencing the named binding instead lets `importForwarding` re-import it
+// natively on the UI runtime. `d.*` stays fine everywhere outside worklets
+// (shader definitions, type positions, setup code).
+import { vec2f } from "typegpu/data";
 import { UniformsStruct } from "./gpuTypes";
 import { starfieldBindGroupLayout } from "./layouts";
 import { fragmentFn, vertexFn } from "./shaders";
@@ -14,15 +23,23 @@ interface SceneProps {
   canvasHeight: number;
 }
 
+/**
+ * Per-frame inputs, as SharedValues rather than React refs.
+ *
+ * `render` may run on the Reanimated UI runtime (see `RenderMode` in
+ * `hooks/useWebGPU`), which cannot read a React ref — the ref object belongs to
+ * the JS runtime. SharedValues are readable from both, so the same scene code
+ * serves `js-raf` and `ui-worklet` without forking.
+ */
 interface StarfieldConfig {
   /** Read each frame; rotation accumulates only when true. */
-  rotationEnabledRef: RefObject<boolean>;
+  rotationEnabled: SharedValue<boolean>;
   /** Read each frame; forward motion accumulates only when true. */
-  forwardEnabledRef: RefObject<boolean>;
+  forwardEnabled: SharedValue<boolean>;
   /** Read each frame; tilt-driven look-around offset in NDC units. */
-  cameraOffsetRef: RefObject<{ x: number; y: number }>;
+  cameraOffset: SharedValue<{ x: number; y: number }>;
   /** Read each frame; true = radial streak look, false = disc stars. */
-  hyperspaceEnabledRef: RefObject<boolean>;
+  hyperspaceEnabled: SharedValue<boolean>;
 }
 
 const FORWARD_RATE = 0.6;
@@ -95,12 +112,16 @@ export function createStarfieldScene(config: StarfieldConfig) {
         attachment: { view: GPUTextureView; loadOp: "clear" | "load" },
         _backdrop: GPUTextureView | null,
       ) => {
+        "worklet";
+        // Runs on the Reanimated UI runtime in `ui-worklet` mode. A
+        // `'worklet'`-marked function is still an ordinary callable JS
+        // function, so `js-raf` invokes it directly and unchanged.
         const dt = lastMs === 0 ? 0 : (timestamp - lastMs) / 1000;
         lastMs = timestamp;
-        if (config.rotationEnabledRef.current) {
+        if (config.rotationEnabled.value) {
           rotationTime += dt;
         }
-        if (config.forwardEnabledRef.current) {
+        if (config.forwardEnabled.value) {
           forwardTime += dt * FORWARD_RATE;
         }
 
@@ -109,7 +130,7 @@ export function createStarfieldScene(config: StarfieldConfig) {
         // with the new velocity. More stable at the dt scales we see (~16 ms).
         // This gives a kick on engage and a coast-past-zero on disengage,
         // which is where the springiness comes from.
-        const speedTarget = config.forwardEnabledRef.current ? 1 : 0;
+        const speedTarget = config.forwardEnabled.value ? 1 : 0;
         const speedAccel =
           SPEED_SPRING_K * (speedTarget - forwardSpeed) -
           SPEED_SPRING_D * forwardSpeedVel;
@@ -118,17 +139,17 @@ export function createStarfieldScene(config: StarfieldConfig) {
 
         // Exponential low-pass on the raw accelerometer offset.
         // alpha is dt-derived so smoothing feels the same at any framerate.
-        const target = config.cameraOffsetRef.current;
+        const target = config.cameraOffset.value;
         const alpha = 1 - Math.exp(-dt * TILT_SMOOTH_RATE);
         smoothOffsetX += (target.x - smoothOffsetX) * alpha;
         smoothOffsetY += (target.y - smoothOffsetY) * alpha;
 
         uniformsBuffer.write({
-          iResolution: d.vec2f(resW, resH),
-          cameraOffset: d.vec2f(smoothOffsetX, smoothOffsetY),
+          iResolution: vec2f(resW, resH),
+          cameraOffset: vec2f(smoothOffsetX, smoothOffsetY),
           rotationTime,
           forwardTime,
-          hyperspace: config.hyperspaceEnabledRef.current ? 1 : 0,
+          hyperspace: config.hyperspaceEnabled.value ? 1 : 0,
           forwardSpeed,
         });
 

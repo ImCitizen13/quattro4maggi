@@ -1,7 +1,16 @@
 import { AlphaType, ColorType, SkData, Skia } from "@shopify/react-native-skia";
-import type { RefObject } from "react";
+import type { SharedValue } from "react-native-reanimated";
 import tgpu, { AutoVertexIn } from "typegpu";
 import * as d from "typegpu/data";
+// `vec2f`/`vec4f` are imported by NAME as well as through the `d` namespace.
+// The worklets plugin only forwards named and default import specifiers into a
+// worklet — `isImport` in its plugin rejects `ImportNamespaceSpecifier` — so a
+// `d.*` call inside a `'worklet'` render would capture the whole `typegpu/data`
+// namespace BY VALUE and serialize it, which TypeGPU schemas do not survive.
+// Referencing the named binding instead lets `importForwarding` re-import it
+// natively on the UI runtime. `d.*` stays fine everywhere outside worklets
+// (shader definitions, type positions, setup code).
+import { vec4f } from "typegpu/data";
 import * as std from "typegpu/std";
 import { movingBubbleBindGroupLayout } from "./layouts";
 import {
@@ -62,7 +71,7 @@ interface BubbleConfig {
    * "going forward" toggle the starfield consumes, so bubbles only appear
    * during forward flight.
    */
-  forwardEnabledRef?: RefObject<boolean>;
+  forwardEnabled?: SharedValue<boolean>;
   /**
    * Direction the depth-wipe sweeps in on fade-in.
    * - `"far-to-near"` (default): sprites at the deepest depths emerge first,
@@ -404,7 +413,7 @@ export function createBubbleScene(config: BubbleConfig) {
      * mount with `forwardEnabled = false` starts hidden and fades in only
      * once the user engages forward flight.
      */
-    let globalAlpha = config.forwardEnabledRef?.current ? 1 : 0;
+    let globalAlpha = config.forwardEnabled?.value ? 1 : 0;
 
     return {
       /**
@@ -420,6 +429,10 @@ export function createBubbleScene(config: BubbleConfig) {
         attachment: { view: GPUTextureView; loadOp: "clear" | "load" },
         _backdrop: GPUTextureView | null,
       ) => {
+        "worklet";
+        // Runs on the Reanimated UI runtime in `ui-worklet` mode. A
+        // `'worklet'`-marked function is still an ordinary callable JS
+        // function, so `js-raf` invokes it directly and unchanged.
         const t = timestamp ?? performance.now();
         // Cap dt so a long stall (tab-suspend, JS hitch) doesn't teleport every
         // sprite past the camera in a single frame and blank the screen.
@@ -429,7 +442,7 @@ export function createBubbleScene(config: BubbleConfig) {
         // Track the forward toggle with a framerate-independent exponential
         // lerp so the wipe progresses at the same rate at any cadence.
         const fadeRate = config.fadeRate ?? 2;
-        const target = config.forwardEnabledRef?.current ? 1 : 0;
+        const target = config.forwardEnabled?.value ? 1 : 0;
         const blend = 1 - Math.exp(-dt * fadeRate);
         globalAlpha += (target - globalAlpha) * blend;
 
@@ -470,9 +483,9 @@ export function createBubbleScene(config: BubbleConfig) {
           const smooth = t * t * (3 - 2 * t);
           const visibility = farToNear ? smooth : 1 - smooth;
 
-          items[i].rectBuffer.write(d.vec4f(proj.x, proj.y, proj.w, proj.h));
+          items[i].rectBuffer.write(vec4f(proj.x, proj.y, proj.w, proj.h));
           items[i].paramsBuffer.write(
-            d.vec4f(proj.alpha * visibility, 0, 0, 0),
+            vec4f(proj.alpha * visibility, 0, 0, 0),
           );
         }
 
