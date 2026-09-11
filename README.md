@@ -23,7 +23,7 @@ Clone them. Learn from them. Ship them.
 | [Liquid Metal](./src/components/liquid-metal/README.md) | ![liquid-metal](./assets/demos/liquid-metal.gif) | Skia shader component with animated liquid metal effects and customizable colors |
 | [Live Border Card](./src/components/live-border-card/README.md) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating color gradients and customizable glow effects |
 | [Pull To Refresh](./src/components/pull-to-refresh/README.md) | ![pull-to-refresh](./assets/demos/pull-to-refresh.gif) | Gesture-driven pull-to-refresh with a three-stage animation, switchable iOS/Android layout models, and a sticky Threads-style glyph header driven by the same lifecycle |
-| [Bubble Reveal](./src/components/bubble-reveal/README.md) | ![bubble-reveal](./assets/demos/bubble-reveal.gif) | Glowing bubble mask with speed-controlled reveal |
+| [Gargantua Starfield](./src/components/gargantua-type-gpu/README.md) | ![bubble-reveal](./assets/demos/gargantua-type-gpu.gif) | A full-screen WebGPU experience built with Expo Router, and TypeGPU |
 
 ---
 
