@@ -10,10 +10,11 @@
  *
  * FLOW:
  * 1. `useBubblePanGesture` / `useBubblePinchGesture` own the anchor
- *    (`targetX`, `targetY` — the RAW finger position, not the spring-smoothed
- *    `bubbleX/bubbleY`), `scaledRadius`, `isActive`, and the gesture velocity
- *    (drag speed/angle drive mode 2, the 1→0 edge of `isActive` seeds the mode
- *    3/4 release kick off `velocityX/Y` — see `stepBubbleModes`).
+ *    (`bubbleX`, `bubbleY` — the SPRING-SMOOTHED follow position, so the
+ *    bubble trails a fast drag by design), `scaledRadius`, `isActive`, and the
+ *    gesture velocity (drag speed/angle drive mode 2, the 1→0 edge of
+ *    `isActive` seeds the mode 3/4 release kick off `velocityX/Y` — see
+ *    `stepBubbleModes`).
  * 2. `useBubbleShape` consumes those SharedValues on a `useFrameCallback`
  *    and returns the live `paramBuffer` (12-float `iParams`) plus
  *    `bboxX/Y/W/H` — the bounding rect is computed inside `stepBubbleModes`
@@ -22,12 +23,12 @@
  *    optics scalars, falling back to a zeroed 12-float buffer for the one
  *    frame before `useBubbleShape`'s first `useFrameCallback` tick fires.
  * 4. `imageRect` maps the profile image onto the bubble: centered on the SAME
- *    raw anchor the shape uses (`targetX/targetY` — anchoring the image on the
- *    sprung `bubbleX/Y` would make it lag the bubble by exactly the trailing
- *    distance 7B's follow-up removed) and sized `2·R·IMAGE_RECT_SCALE`.
+ *    anchor the shape uses (`bubbleX/bubbleY`) and sized
+ *    `2·R·IMAGE_RECT_SCALE`. The two must never read different anchors or the
+ *    image slides out from under the rim.
  * 5. A `<Rect>` sized from `bboxX/Y/W/H` is the ONLY thing shaded — never a
- *    full-screen `<Fill>`. `BBOX_PAD` now includes `iRefract` so the rim's
- *    outward refraction sampling has room.
+ *    full-screen `<Fill>`. `BBOX_PAD` is AA feather only (2 pt): refraction
+ *    moves which texel is sampled, not where alpha is non-zero.
  *
  * KEY FEATURES:
  * - The image arrives as a child `<ImageShader>` feeding `uniform shader
@@ -132,13 +133,15 @@ export function LiquidBubbles({
   // Gestures
   // ============================================================================
 
-  // `targetX/targetY` are the RAW finger position, not the spring-smoothed
-  // `bubbleX/bubbleY`. The follow spring trails a moving finger by
-  // `(damping / stiffness) × velocity` = 0.1 s × velocity, which reads as lag
-  // on a fast drag and also makes mode 2 under-read true speed while the
-  // spring is still catching up. Anchoring on the raw target removes both; the
-  // liquid character comes from the harmonic modes instead.
-  const { targetX, targetY, isActive, velocityX, velocityY, panGesture } =
+  // Anchored on the spring-smoothed `bubbleX/bubbleY`, restoring the pre-7B-
+  // follow-up behaviour on request. The follow spring trails a moving finger
+  // by `(damping / stiffness) × velocity` = 0.1 s × velocity, so the bubble
+  // lags behind a fast drag — that trailing IS the effect being asked for
+  // here. Side effect to keep in mind: mode 2 under-reads true speed during a
+  // flick's acceleration phase, because its drive comes from this anchor's
+  // position delta. The raw `targetX/targetY` are still exported by the
+  // gesture hook and unused here.
+  const { bubbleX, bubbleY, isActive, velocityX, velocityY, panGesture } =
     useBubblePanGesture({ centerX, centerY });
   const { scaledRadius, pinchGesture } = useBubblePinchGesture({
     restRadius,
@@ -157,8 +160,8 @@ export function LiquidBubbles({
   // ============================================================================
 
   const { paramBuffer, bboxX, bboxY, bboxW, bboxH } = useBubbleShape({
-    bubbleX: targetX,
-    bubbleY: targetY,
+    bubbleX,
+    bubbleY,
     scaledRadius,
     isActive,
     velocityX,
@@ -187,14 +190,14 @@ export function LiquidBubbles({
 
   const image = useImage(image128Array[0]);
 
-  // Centered on `targetX/targetY` — the SAME raw anchor `useBubbleShape` gets.
-  // Using the sprung `bubbleX/bubbleY` here would re-introduce exactly the
-  // trailing distance the 7B follow-up removed, and the image would visibly
-  // slide out from under the rim on a fast drag.
+  // Centered on `bubbleX/bubbleY` — the SAME anchor `useBubbleShape` gets.
+  // These two must always read the same SharedValue pair: if the image used
+  // the raw target while the shape used the sprung anchor, the image would
+  // lead the rim by the full trailing distance on a fast drag.
   const imageRect = useDerivedValue(() => {
     const half = scaledRadius.value * IMAGE_RECT_SCALE;
     const side = 2 * half;
-    return rect(targetX.value - half, targetY.value - half, side, side);
+    return rect(bubbleX.value - half, bubbleY.value - half, side, side);
   });
 
   return (
