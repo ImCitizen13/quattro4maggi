@@ -56,6 +56,14 @@ const demos: Demo[] = [
     href: "/gargantua-type-gpu" as const,
     tags: [{ name: "reanimated", color: "#6a539a" }],
   },
+  {
+    name: "Liquid Glass Bubble",
+    href: "/liquid-glass-bubble" as const,
+    tags: [
+      { name: "skia", color: "green" },
+      { name: "reanimated", color: "#6a539a" },
+    ],
+  },
 ];
 
 export default function HomeScreen() {
