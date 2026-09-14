@@ -7,6 +7,7 @@ import { SPRING_BOUNCE_ANIMATION, SPRING_CONFIG } from "@/lib/animations/constan
 import { useMemo } from "react";
 import {
   Gesture,
+  GestureStateChangeEvent,
   GestureUpdateEvent,
   PanGesture,
   PanGestureHandlerEventPayload,
@@ -29,6 +30,14 @@ type UseBubblPanGestureParams = {
 type UseBubblPanGestureReturn = {
   bubbleX: SharedValue<number>;
   bubbleY: SharedValue<number>;
+  /** 1 while the pan is active (begin..end/finalize), 0 otherwise. Read by
+   * `bubbleModeMath.ts` to detect the release edge for the mode 3/4 kick. */
+  isActive: SharedValue<number>;
+  /** Raw `e.velocityX`/`e.velocityY` from the gesture, pt/s. Plumbed for
+   * later phases — the mode-2 physics derives its own speed/angle from the
+   * (cx, cy) position delta, not from these. */
+  velocityX: SharedValue<number>;
+  velocityY: SharedValue<number>;
   panGesture: PanGesture;
 };
 
@@ -38,24 +47,56 @@ export function useBubblePanGesture({
 }: UseBubblPanGestureParams): UseBubblPanGestureReturn {
   const bubbleX = useSharedValue<number>(centerX);
   const bubbleY = useSharedValue<number>(centerY);
-  const onBegin = () => {
+  const isActive = useSharedValue<number>(0);
+  const velocityX = useSharedValue<number>(0);
+  const velocityY = useSharedValue<number>(0);
+
+  const onBegin = (e: GestureStateChangeEvent<PanGestureHandlerEventPayload>) => {
     "worklet";
+    isActive.value = 1;
+    velocityX.value = e.velocityX;
+    velocityY.value = e.velocityY;
   };
 
   const onUpdate = (e: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
     "worklet";
     bubbleX.value = withSpring(e.x, SPRING_FOLLOW_PROPS);
     bubbleY.value = withSpring(e.y, SPRING_FOLLOW_PROPS);
+    velocityX.value = e.velocityX;
+    velocityY.value = e.velocityY;
   };
 
-  const onEnd = () => {
+  const onEnd = (
+    e: GestureStateChangeEvent<PanGestureHandlerEventPayload>,
+  ) => {
     "worklet";
+    isActive.value = 0;
+    velocityX.value = e.velocityX;
+    velocityY.value = e.velocityY;
   };
+
+  const onFinalize = (
+    e: GestureStateChangeEvent<PanGestureHandlerEventPayload>,
+  ) => {
+    "worklet";
+    // Covers the cancelled/failed path too — onEnd doesn't always fire, but
+    // onFinalize always does, so this is the reliable place to guarantee
+    // isActive drops back to 0.
+    isActive.value = 0;
+    velocityX.value = e.velocityX;
+    velocityY.value = e.velocityY;
+  };
+
   const panGesture = useMemo(
-    () => Gesture.Pan().onBegin(onBegin).onUpdate(onUpdate).onEnd(onEnd),
+    () =>
+      Gesture.Pan()
+        .onBegin(onBegin)
+        .onUpdate(onUpdate)
+        .onEnd(onEnd)
+        .onFinalize(onFinalize),
     [centerX, centerY],
   );
-  return { bubbleX, bubbleY, panGesture };
+  return { bubbleX, bubbleY, isActive, velocityX, velocityY, panGesture };
 }
 
 type UseBubblPinchGestureParams = {

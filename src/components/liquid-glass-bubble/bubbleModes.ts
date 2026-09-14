@@ -37,21 +37,42 @@ export const SPEED_REF = 1500;
 /** Mode-2 target amplitude cap: `target2 = min(A2_MAX, speed / SPEED_REF)`. */
 export const A2_MAX = 0.12;
 
+/**
+ * Mode-2 rest floor: `target2 = max(A2_REST, min(A2_MAX, speed / SPEED_REF))`.
+ * The bubble never returns to a perfect circle — this is its "memory".
+ */
+export const A2_REST = 0.04;
+
 /** Below this drag speed (pt/s), the phi2 target direction is not updated. */
 export const PHI2_SPEED_THRESHOLD = 40;
 
 /** Shortest-arc blend rate for phi2 → target, in 1/s. */
 export const PHI_RATE = 12;
 
+/** At rest (speed ≤ threshold), phi2 keeps drifting slowly, in rad/s. */
+export const PHI_DRIFT = 0.08;
+
 // ============================================================================
 // Idle drive — modes 3/4 breathe gently even at rest
 // ============================================================================
 
+/** Mode-3 rest floor amplitude: `target3 = A3_REST + A3_IDLE * sin(t * IDLE_FREQ_3)`. */
+export const A3_REST = 0.02;
+
 /** Mode-3 idle target amplitude: `A3_IDLE * sin(t * IDLE_FREQ_3)`. */
-export const A3_IDLE = 0.025;
+export const A3_IDLE = 0.02;
+
+/** Mode-4 rest floor amplitude: `target4 = A4_REST + A4_IDLE * sin(t * IDLE_FREQ_4 + IDLE_PHASE_4)`. */
+export const A4_REST = 0.012;
 
 /** Mode-4 idle target amplitude: `A4_IDLE * sin(t * IDLE_FREQ_4 + IDLE_PHASE_4)`. */
-export const A4_IDLE = 0.015;
+export const A4_IDLE = 0.012;
+
+/** Mode-3 phase, fixed (never sprung) so the rest pose is an irregular blob. */
+export const PHI3_REST = 1.1;
+
+/** Mode-4 phase, fixed (never sprung) so the rest pose is an irregular blob. */
+export const PHI4_REST = 2.6;
 
 /** Angular frequency of the mode-3 idle drive, rad/s. */
 export const IDLE_FREQ_3 = 0.7;
