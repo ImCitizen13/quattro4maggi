@@ -11,7 +11,8 @@
  * imported function captured by a worklet becomes a remote function and
  * throws when called synchronously on the UI thread. A `'worklet'`-marked
  * function is still an ordinary callable on the JS thread, so the tests are
- * unaffected — same pattern as `ballPhysicsMath.ts`.
+ * unaffected — same pattern as the Verlet math module this replaced (phase 3,
+ * commit a724cc6; see `temp/liquid-bubbles-divergence.md`).
  *
  * `stepBubbleModes` is ONE function with the spring integration and the
  * shortest-arc phase lerp written INLINE, and never allocates. Two reasons,

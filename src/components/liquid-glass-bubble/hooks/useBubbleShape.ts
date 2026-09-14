@@ -14,15 +14,16 @@
  *     in place afterwards. The frame callback never calls `new` or `.fill`
  *     on a steady-state frame.
  *   - All mutable state lives on the UI runtime (hung off `globalThis`
- *     there), not in JS module scope — same reasoning as `useBallPhysics.ts`:
- *     a JS module-scope object captured by a worklet is cloned into a frozen
- *     shareable on the UI side, so the state has to be born on the runtime
- *     that mutates it.
+ *     there), not in JS module scope — same reasoning as the phase 3 Verlet
+ *     hook this replaced (commit a724cc6; see
+ *     `temp/liquid-bubbles-divergence.md`): a JS module-scope object
+ *     captured by a worklet is cloned into a frozen shareable on the UI
+ *     side, so the state has to be born on the runtime that mutates it.
  *   - Double-buffered `paramBuffer`: the shader always reads a fully-written
  *     buffer, never one being mutated mid-frame.
  *
- * NOT mounted anywhere yet — LiquidBubbles.tsx keeps using the phase 5B
- * static buffer / ball physics hook until phase 7B rewires it.
+ * Mounted in `LiquidBubbles.tsx` (phase 7B), replacing the phase 3/4 Verlet
+ * ball-physics hook it superseded.
  */
 
 import { useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
