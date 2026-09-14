@@ -159,15 +159,24 @@ export const FILM = 0.8;
 export const AA_PAD = 2;
 
 /**
- * Extra padding added to the harmonic-field bounding box, in points:
- * `PAD = iRefract + 2` per `temp/liquid-bubbles-divergence.md`, so rim
- * refraction sampling has room instead of clipping against the `<Rect>` edge.
+ * Extra padding added to the harmonic-field bounding box, in points.
  *
- * Derived from `REFRACT` (the same constant that feeds the `iRefract` uniform)
- * rather than threaded into `stepBubbleModes` as an argument: `iRefract` has no
- * per-frame variation, and widening the step function's signature would change
- * every call site in `bubbleModeMath.test.ts` for a value that is a module
- * constant. One source of truth, zero per-frame cost, `stepBubbleModes` stays
- * allocation-free and unchanged.
+ * `AA_PAD` only — deliberately NOT `REFRACT + AA_PAD`, which is what the
+ * "Physics contract" in `temp/liquid-bubbles-divergence.md` specifies. That
+ * formula is wrong, and the doc has been corrected to match this.
+ *
+ * The `<Rect>` has to cover every pixel where the shader returns a non-zero
+ * alpha, and `alpha = smoothstep(-0.75, 0.75, r − dist)` depends on `r` and
+ * `dist` ONLY. Refraction changes `uv` — WHICH texel is sampled — not where
+ * alpha is non-zero, and the dark rim line and thin film only scale `col`. So
+ * nothing is ever drawn beyond `r + 0.75`, and `AA_PAD = 2` already covers the
+ * feather with room to spare.
+ *
+ * Padding by `iRefract` instead cost real fill for no pixels: at the rest
+ * radius R=40 the shaded area went from ~8.1k pt² to ~13.9k pt² (×1.7). This
+ * demo's shaders are GPU-fill-bound (see the gooey-border findings in project
+ * memory — the 128-ball cliff was fragment fill, not CPU), so a 1.7× fill
+ * multiplier on the one region we shade is the most expensive kind of mistake
+ * to leave in.
  */
-export const BBOX_PAD = REFRACT + AA_PAD;
+export const BBOX_PAD = AA_PAD;
