@@ -46,7 +46,16 @@ export const A2_REST = 0.04;
 /** Below this drag speed (pt/s), the phi2 target direction is not updated. */
 export const PHI2_SPEED_THRESHOLD = 40;
 
-/** Shortest-arc blend rate for phi2 → target, in 1/s. */
+/**
+ * Shortest-arc blend rate for phi2 → target, in 1/s.
+ *
+ * UNUSED since mode 2 became a sprung VECTOR rather than an angle lerp (see
+ * `ModeState` in `hooks/bubbleModeMath.ts`): the axis is now carried by
+ * (`c2`, `s2`) under the K2/C2 spring, so there is no separate phase-blend
+ * rate. Kept because the "Physics contract" in
+ * `temp/liquid-bubbles-divergence.md` still lists it — that doc needs the
+ * same correction. Delete both together.
+ */
 export const PHI_RATE = 12;
 
 /** At rest (speed ≤ threshold), phi2 keeps drifting slowly, in rad/s. */

@@ -56,20 +56,39 @@ import {
   PHI3_REST,
   PHI4_REST,
   PHI_DRIFT,
-  PHI_RATE,
   SPEED_REF,
 } from '../bubbleModes';
 
-/** Full turn, used to wrap a phase difference onto the shortest arc. */
-const TWO_PI = Math.PI * 2;
+/** Below this magnitude a mode-2 vector has no meaningful direction. */
+const EPS = 1e-9;
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export type ModeState = {
+  /**
+   * Mode 2 is stored as a VECTOR in double-angle space — `c2 = a2·cos(phi2)`,
+   * `s2 = a2·sin(phi2)` — not as an (amplitude, angle) pair. Springing the two
+   * components independently is what keeps a direction change from *rotating*
+   * the bubble: `phi2` is `2 × motionAngle`, so a 90° turn of the drag is a π
+   * jump in `phi2`, which is the exactly-antipodal case where a shortest-arc
+   * angle lerp has no shorter side. It then picks a direction arbitrarily and
+   * sweeps the lobe through every intermediate axis — a visible pivot, with
+   * unstable handedness between attempts. Interpolating the vector instead
+   * passes through low amplitude on the way: the bubble de-stretches and
+   * re-stretches on the new axis, which is also what a real bubble does.
+   */
+  c2: number;
+  s2: number;
+  vc2: number;
+  vs2: number;
+  /**
+   * Derived each step from (`c2`, `s2`) purely for output/observability — the
+   * shader buffer and the tests read these. `a2` is a magnitude, so it is
+   * never negative.
+   */
   a2: number;
-  v2: number;
   phi2: number;
   a3: number;
   v3: number;
@@ -98,8 +117,11 @@ export type Bbox = { x: number; y: number; w: number; h: number };
 export function createModeState(cx: number, cy: number): ModeState {
   'worklet';
   return {
+    c2: A2_REST,
+    s2: 0,
+    vc2: 0,
+    vs2: 0,
     a2: A2_REST,
-    v2: 0,
     phi2: 0,
     a3: A3_REST,
     v3: 0,
@@ -130,8 +152,11 @@ export function createParamBuffer(): number[] {
 /** Reset an existing state in place to the rest pose (no new object). */
 export function resetModeState(state: ModeState, cx: number, cy: number): void {
   'worklet';
+  state.c2 = A2_REST;
+  state.s2 = 0;
+  state.vc2 = 0;
+  state.vs2 = 0;
   state.a2 = A2_REST;
-  state.v2 = 0;
   state.phi2 = 0;
   state.a3 = A3_REST;
   state.v3 = 0;
@@ -154,10 +179,11 @@ export function resetModeState(state: ModeState, cx: number, cy: number): void {
  * `outBuf` must be length `PARAM_FLOATS` (12); `outBbox` is mutated in
  * place. Neither this function nor its helpers allocate.
  *
- * Speed/angle are derived from the (cx − lastCx, cy − lastCy) / dt position
- * delta — NOT from the gesture's velocityX/velocityY SharedValues. Those are
- * plumbed through `useBubblePanGesture` for later phases; this step function
- * only ever sees `cx`/`cy`, exactly as the "Physics contract" specifies.
+ * The mode-2 drive speed/angle are derived from the (cx − lastCx, cy − lastCy)
+ * / dt position delta, per the "Physics contract". `releaseSpeed` is the ONE
+ * value that comes from the gesture's own velocity instead (pt/s): the anchor
+ * now tracks the finger directly, so by the release frame the anchor has
+ * already stopped moving and the position delta is ~0 — see the kick below.
  */
 export function stepBubbleModes(
   state: ModeState,
@@ -165,6 +191,7 @@ export function stepBubbleModes(
   cy: number,
   R: number,
   isActive: number,
+  releaseSpeed: number,
   dtMs: number,
   outBuf: number[],
   outBbox: Bbox,
@@ -185,25 +212,43 @@ export function stepBubbleModes(
   state.t += dt;
 
   // ---- mode 2: drag stretch, with a rest floor so it never fully relaxes ----
+  // Target MAGNITUDE. The A2_REST floor is the bubble's "memory" — it never
+  // returns to a perfect circle.
   const target2 = Math.max(A2_REST, Math.min(A2_MAX, speed / SPEED_REF));
 
+  // Target DIRECTION, as a unit vector in double-angle space. See the ModeState
+  // doc for why this is a vector and not an angle lerp.
+  let tux: number;
+  let tuy: number;
+  const mag = Math.hypot(state.c2, state.s2);
+
   if (speed > PHI2_SPEED_THRESHOLD) {
-    // Shortest-arc lerp of phi2 toward 2 * motion angle.
-    const targetPhi2 = 2 * angle;
-    let diff = targetPhi2 - state.phi2;
-    diff = diff - TWO_PI * Math.floor((diff + Math.PI) / TWO_PI);
-    state.phi2 += diff * Math.min(1, PHI_RATE * dt);
+    // Moving: aim the stretch axis at 2 * motion angle.
+    const dbl = 2 * angle;
+    tux = Math.cos(dbl);
+    tuy = Math.sin(dbl);
+  } else if (mag > EPS) {
+    // At rest: keep the last motion axis and rotate it slowly, so the stretch
+    // axis never freezes. Rotating the TARGET (not the state) means the spring
+    // still governs how the shape gets there.
+    const ca = Math.cos(PHI_DRIFT * dt);
+    const sa = Math.sin(PHI_DRIFT * dt);
+    tux = (state.c2 * ca - state.s2 * sa) / mag;
+    tuy = (state.c2 * sa + state.s2 * ca) / mag;
   } else {
-    // At rest: phi2 keeps the last motion axis and drifts slowly, so the
-    // stretch axis never freezes.
-    state.phi2 += PHI_DRIFT * dt;
+    // Degenerate: no axis to preserve, pick one.
+    tux = 1;
+    tuy = 0;
   }
 
-  // Release kick: isActive 1 → 0 edge seeds modes 3/4 so they ring out,
-  // scaled by this frame's (position-delta-derived) speed.
+  // Release kick: isActive 1 → 0 edge seeds modes 3/4 so they ring out.
+  // Scaled by `releaseSpeed` (the gesture's own fling velocity), NOT by the
+  // position-delta `speed` above: the anchor now tracks the finger directly,
+  // so on the release frame the anchor has already stopped and the
+  // position-delta speed is ~0 — reading it here would silently kill the kick.
   if (state.lastIsActive === 1 && isActive === 0) {
-    state.v3 += KICK * speed;
-    state.v4 -= KICK * speed * KICK_V4_SCALE;
+    state.v3 += KICK * releaseSpeed;
+    state.v4 -= KICK * releaseSpeed * KICK_V4_SCALE;
   }
   state.lastIsActive = isActive;
 
@@ -212,9 +257,23 @@ export function stepBubbleModes(
   const target4 = A4_REST + A4_IDLE * Math.sin(state.t * IDLE_FREQ_4 + IDLE_PHASE_4);
 
   // ---- spring-integrate each amplitude, inline (see module doc) ----
-  state.v2 += (K2 * (target2 - state.a2) - C2 * state.v2) * dt;
-  state.a2 += state.v2 * dt;
-  state.a2 = Math.min(A_MAX, Math.max(-A_MAX, state.a2));
+  // Mode 2: both vector components share one spring (K2/C2), so the pair
+  // behaves isotropically — no axis is stiffer than another.
+  state.vc2 += (K2 * (target2 * tux - state.c2) - C2 * state.vc2) * dt;
+  state.c2 += state.vc2 * dt;
+  state.vs2 += (K2 * (target2 * tuy - state.s2) - C2 * state.vs2) * dt;
+  state.s2 += state.vs2 * dt;
+
+  // Clamp the MAGNITUDE (not each component) so the cap is a disc, not a
+  // square — clamping components independently would bias diagonal axes.
+  state.a2 = Math.hypot(state.c2, state.s2);
+  if (state.a2 > A_MAX) {
+    const k = A_MAX / state.a2;
+    state.c2 *= k;
+    state.s2 *= k;
+    state.a2 = A_MAX;
+  }
+  state.phi2 = state.a2 > EPS ? Math.atan2(state.s2, state.c2) : 0;
 
   state.v3 += (K3 * (target3 - state.a3) - C3 * state.v3) * dt;
   state.a3 += state.v3 * dt;

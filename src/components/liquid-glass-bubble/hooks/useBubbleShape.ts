@@ -65,6 +65,14 @@ export type UseBubbleShapeParams = {
   scaledRadius: SharedValue<number>;
   /** 1 while a pan is active, 0 otherwise — drives the mode 3/4 release kick. */
   isActive: SharedValue<number>;
+  /**
+   * Gesture fling velocity (pt/s). Only the release kick reads this; mode 2's
+   * drive still comes from the anchor's position delta. Needed because the
+   * anchor tracks the finger directly, so on the release frame the position
+   * delta is already ~0 and would give a kick of zero.
+   */
+  velocityX: SharedValue<number>;
+  velocityY: SharedValue<number>;
 };
 
 export type UseBubbleShapeReturn = {
@@ -85,6 +93,8 @@ export function useBubbleShape({
   bubbleY,
   scaledRadius,
   isActive,
+  velocityX,
+  velocityY,
 }: UseBubbleShapeParams): UseBubbleShapeReturn {
   const paramBuffer = useSharedValue<number[]>([]);
   const bboxX = useSharedValue<number>(0);
@@ -125,7 +135,19 @@ export function useBubbleShape({
 
     const dtMs = frameInfo.timeSincePreviousFrame ?? 16.7;
     const outBuf = ui.useA ? ui.bufB : ui.bufA;
-    stepBubbleModes(ui.state, cx, cy, R, isActive.value, dtMs, outBuf, ui.bbox);
+    // Scalar hypot, not an allocation — the release kick wants magnitude only.
+    const releaseSpeed = Math.hypot(velocityX.value, velocityY.value);
+    stepBubbleModes(
+      ui.state,
+      cx,
+      cy,
+      R,
+      isActive.value,
+      releaseSpeed,
+      dtMs,
+      outBuf,
+      ui.bbox,
+    );
     ui.useA = !ui.useA;
 
     paramBuffer.value = outBuf;

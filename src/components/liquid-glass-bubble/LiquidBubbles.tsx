@@ -12,9 +12,10 @@
  *
  * FLOW:
  * 1. `useBubblePanGesture` / `useBubblePinchGesture` own the anchor
- *    (`bubbleX`, `bubbleY`), `scaledRadius`, and `isActive` (drag speed/angle
- *    drive mode 2, the 1→0 edge of `isActive` seeds the mode 3/4 release
- *    kick — see `stepBubbleModes`).
+ *    (`targetX`, `targetY` — the RAW finger position, not the spring-smoothed
+ *    `bubbleX/bubbleY`), `scaledRadius`, `isActive`, and the gesture velocity
+ *    (drag speed/angle drive mode 2, the 1→0 edge of `isActive` seeds the mode
+ *    3/4 release kick off `velocityX/Y` — see `stepBubbleModes`).
  * 2. `useBubbleShape` consumes those SharedValues on a `useFrameCallback`
  *    and returns the live `paramBuffer` (12-float `iParams`) plus
  *    `bboxX/Y/W/H` — the bounding rect is computed inside `stepBubbleModes`
@@ -93,10 +94,14 @@ export function LiquidBubbles({
   // Gestures
   // ============================================================================
 
-  const { bubbleX, bubbleY, isActive, panGesture } = useBubblePanGesture({
-    centerX,
-    centerY,
-  });
+  // `targetX/targetY` are the RAW finger position, not the spring-smoothed
+  // `bubbleX/bubbleY`. The follow spring trails a moving finger by
+  // `(damping / stiffness) × velocity` = 0.1 s × velocity, which reads as lag
+  // on a fast drag and also makes mode 2 under-read true speed while the
+  // spring is still catching up. Anchoring on the raw target removes both; the
+  // liquid character comes from the harmonic modes instead.
+  const { targetX, targetY, isActive, velocityX, velocityY, panGesture } =
+    useBubblePanGesture({ centerX, centerY });
   const { scaledRadius, pinchGesture } = useBubblePinchGesture({
     restRadius,
     maxRadius,
@@ -114,10 +119,12 @@ export function LiquidBubbles({
   // ============================================================================
 
   const { paramBuffer, bboxX, bboxY, bboxW, bboxH } = useBubbleShape({
-    bubbleX,
-    bubbleY,
+    bubbleX: targetX,
+    bubbleY: targetY,
     scaledRadius,
     isActive,
+    velocityX,
+    velocityY,
   });
 
   // Only forwards paramBuffer.value — no array literal, no spread, no math —

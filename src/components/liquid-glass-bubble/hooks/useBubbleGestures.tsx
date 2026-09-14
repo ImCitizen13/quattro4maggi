@@ -28,8 +28,24 @@ type UseBubblPanGestureParams = {
 };
 
 type UseBubblPanGestureReturn = {
+  /**
+   * Spring-smoothed anchor. Kept for the older `LiquidGlassBubble` /
+   * `LiquidGlassSingleBubble` screens, where the drawn circle itself is what
+   * needs to look springy. NOT what drives the harmonic bubble — see
+   * `targetX`/`targetY`.
+   */
   bubbleX: SharedValue<number>;
   bubbleY: SharedValue<number>;
+  /**
+   * Raw, unsmoothed finger position. `SPRING_FOLLOW_PROPS` is
+   * `stiffness 300 / damping 30`, and a spring tracking a constant-velocity
+   * target trails it by `(damping / stiffness) × velocity` = 0.1 s × velocity
+   * — 200 pt behind at a 2000 pt/s drag. `LiquidBubbles` anchors on these
+   * instead so the bubble stays under the finger and ALL of its liquid
+   * character comes from the harmonic modes, not from a lagging center.
+   */
+  targetX: SharedValue<number>;
+  targetY: SharedValue<number>;
   /** 1 while the pan is active (begin..end/finalize), 0 otherwise. Read by
    * `bubbleModeMath.ts` to detect the release edge for the mode 3/4 kick. */
   isActive: SharedValue<number>;
@@ -47,6 +63,8 @@ export function useBubblePanGesture({
 }: UseBubblPanGestureParams): UseBubblPanGestureReturn {
   const bubbleX = useSharedValue<number>(centerX);
   const bubbleY = useSharedValue<number>(centerY);
+  const targetX = useSharedValue<number>(centerX);
+  const targetY = useSharedValue<number>(centerY);
   const isActive = useSharedValue<number>(0);
   const velocityX = useSharedValue<number>(0);
   const velocityY = useSharedValue<number>(0);
@@ -54,6 +72,8 @@ export function useBubblePanGesture({
   const onBegin = (e: GestureStateChangeEvent<PanGestureHandlerEventPayload>) => {
     "worklet";
     isActive.value = 1;
+    targetX.value = e.x;
+    targetY.value = e.y;
     velocityX.value = e.velocityX;
     velocityY.value = e.velocityY;
   };
@@ -62,6 +82,8 @@ export function useBubblePanGesture({
     "worklet";
     bubbleX.value = withSpring(e.x, SPRING_FOLLOW_PROPS);
     bubbleY.value = withSpring(e.y, SPRING_FOLLOW_PROPS);
+    targetX.value = e.x;
+    targetY.value = e.y;
     velocityX.value = e.velocityX;
     velocityY.value = e.velocityY;
   };
@@ -96,7 +118,16 @@ export function useBubblePanGesture({
         .onFinalize(onFinalize),
     [centerX, centerY],
   );
-  return { bubbleX, bubbleY, isActive, velocityX, velocityY, panGesture };
+  return {
+    bubbleX,
+    bubbleY,
+    targetX,
+    targetY,
+    isActive,
+    velocityX,
+    velocityY,
+    panGesture,
+  };
 }
 
 type UseBubblPinchGestureParams = {
