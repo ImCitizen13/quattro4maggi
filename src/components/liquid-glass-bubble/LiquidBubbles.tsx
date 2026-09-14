@@ -1,27 +1,26 @@
 /**
  * LiquidBubbles
  *
- * The Phase 4+ replacement for `LiquidGlassBubble`'s `Circle` + `Image`
- * scaffold: a 12-ball Skia metaball cluster driven entirely by shared-value
- * physics. Pan moves the cluster's anchor, pinch scales its radius, and the
- * Verlet solver in `useBallPhysics` makes the rear balls lag the motion.
+ * Divergence phase 5B (`temp/liquid-bubbles-divergence.md`): the metaball
+ * cluster is replaced by ONE harmonic bubble shape — `bubbleEffect` in
+ * `shaders.ts` evaluates `r(θ)` once per pixel instead of looping 12 balls.
+ * This phase wires the new shader up with a TEMPORARY static param tail
+ * (mode amplitudes/phases fixed) so the shape can be seen on-device before
+ * phase 6B drives it from real spring physics.
  *
  * FLOW:
  * 1. `useBubblePanGesture` / `useBubblePinchGesture` own the anchor
- *    (`bubbleX`, `bubbleY`) and `scaledRadius` shared values.
- * 2. `useBallPhysics` steps a 12-ball Verlet cluster off those shared values
- *    every frame (UI thread), producing a 48-float `ballBuffer` plus a
- *    bounding-box (`bboxX/Y/W/H`) sized to just the cluster + AA padding.
- * 3. A `<Rect>` sized to that bbox is the ONLY thing shaded — never a
- *    full-screen `<Fill>` — so the metaball `<Shader>` evaluates its field
- *    once per pixel over a few hundred points, not the whole screen.
+ *    (`bubbleX`, `bubbleY`) and `scaledRadius` shared values, same as before.
+ * 2. `useBallPhysics` is still mounted (its `useFrameCallback` keeps running)
+ *    but its output is UNUSED — phase 7B replaces it with `useBubbleShape`
+ *    and removes it. Keeping it mounted now avoids touching the physics
+ *    hook wiring twice.
+ * 3. `uniforms` forwards `bubbleX`/`bubbleY`/`scaledRadius` as `cx, cy, R`
+ *    plus a hardcoded mode tail (`STATIC_A2/PHI2/...`) into `iParams[3]`.
+ * 4. A `<Rect>` sized to `R · (1 + |a2| + |a3| + |a4|) + BBOX_PAD` is the
+ *    ONLY thing shaded — never a full-screen `<Fill>`.
  *
  * KEY FEATURES:
- * - Zero per-frame allocation on the JS/React side: `uniforms` is a
- *   `useDerivedValue` that only *forwards* `ballBuffer.value` — all the
- *   math lives in the physics worklet.
- * - `iSmooth = 0` here (Phase 4/2 hard union); Phase 5 raises it to blend
- *   the balls into one gooey blob.
  * - `SHOW_FPS_OVERLAY` mounts `FpsOverlay` for on-device perf sanity checks.
  */
 
@@ -33,31 +32,36 @@ import { useDerivedValue } from "react-native-reanimated";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 
+import { BBOX_PAD } from "./bubbleModes";
 import {
   useBubblePanGesture,
   useBubblePinchGesture,
 } from "./hooks/useBubbleGestures";
 import { useBallPhysics } from "./hooks/useBallPhysics";
-import { BUFFER_LENGTH } from "./ballLayout";
-import { metaballEffect } from "./shaders";
+import { bubbleEffect } from "./shaders";
 
 // ============================================================================
 // Config
 // ============================================================================
-
-// `useBallPhysics` seeds `ballBuffer` as `[]` until the first frame callback
-// runs, but the shader's `iBalls` uniform is a fixed-size float4[12] — Skia
-// throws ("Incorrect uniform size for: iBalls. Expected 48 got 0") if it ever
-// sees the empty initial value. This all-zero buffer (every ball's `active`
-// flag is 0) stands in for that one frame so the field evaluates to nothing
-// instead of crashing.
-const EMPTY_BALL_BUFFER: number[] = new Array(BUFFER_LENGTH).fill(0);
 
 /** Mount the on-screen FPS readout. Real numbers need a release build on device. */
 const SHOW_FPS_OVERLAY = true;
 
 /** Blob color (straight rgba, 0..1) fed to the shader's `iColor` uniform. */
 const BUBBLE_COLOR: [number, number, number, number] = [0.35, 0.62, 1.0, 0.95];
+
+// Phase 5B TEMPORARY static mode tail — replaced by real spring output in
+// phase 6B/7B. `[a2, phi2, a3, phi3, a4, phi4, filmPhase, unused]`; amplitude
+// magnitudes stay well under `A_MAX` (0.15) from `bubbleModes.ts`.
+const STATIC_A2 = 0.08;
+const STATIC_PHI2 = 0.6;
+const STATIC_A3 = 0.04;
+const STATIC_PHI3 = 1.2;
+const STATIC_A4 = 0.03;
+const STATIC_PHI4 = 2.0;
+
+/** `R · (1 + |a2| + |a3| + |a4|)` factor for the static tail above. */
+const STATIC_AMP_SUM = STATIC_A2 + STATIC_A3 + STATIC_A4;
 
 // ============================================================================
 // Types
@@ -106,31 +110,51 @@ export function LiquidBubbles({
   // Physics
   // ============================================================================
 
-  const { ballBuffer, bboxX, bboxY, bboxW, bboxH } = useBallPhysics({
-    bubbleX,
-    bubbleY,
-    scaledRadius,
-  });
+  // Phase 5B: mounted but UNUSED — its `useFrameCallback` still runs, but
+  // nothing below reads its return value. Phase 7B swaps this for
+  // `useBubbleShape` and removes this call entirely.
+  useBallPhysics({ bubbleX, bubbleY, scaledRadius });
 
-  // Only forwards `ballBuffer.value` — no math here, so this never becomes a
-  // second per-frame cost center on top of the physics worklet. The length
-  // check only ever trips on the pre-first-frame value; the physics worklet
-  // always keeps `ballBuffer` at BUFFER_LENGTH afterwards.
+  // Phase 5B TEMPORARY: forwards the live anchor/radius as cx, cy, R and
+  // appends the hardcoded static mode tail from the module scope above —
+  // no per-frame math beyond the shared-value reads.
   const uniforms = useDerivedValue(() => ({
-    iBalls:
-      ballBuffer.value.length === BUFFER_LENGTH
-        ? ballBuffer.value
-        : EMPTY_BALL_BUFFER,
-    iSmooth: 0,
+    iParams: [
+      bubbleX.value,
+      bubbleY.value,
+      scaledRadius.value,
+      0,
+      STATIC_A2,
+      STATIC_PHI2,
+      STATIC_A3,
+      STATIC_PHI3,
+      STATIC_A4,
+      STATIC_PHI4,
+      0,
+      0,
+    ],
     iColor: BUBBLE_COLOR,
   }));
+
+  // Bounding Rect: `R · (1 + |a2| + |a3| + |a4|) + BBOX_PAD`, per the divergence
+  // doc's bbox formula. The amplitude sum is static this phase, so only the
+  // live anchor/radius drive these — a static Rect isn't required.
+  const bboxX = useDerivedValue(
+    () => bubbleX.value - (scaledRadius.value * (1 + STATIC_AMP_SUM) + BBOX_PAD),
+  );
+  const bboxY = useDerivedValue(
+    () => bubbleY.value - (scaledRadius.value * (1 + STATIC_AMP_SUM) + BBOX_PAD),
+  );
+  const bboxSize = useDerivedValue(
+    () => 2 * (scaledRadius.value * (1 + STATIC_AMP_SUM) + BBOX_PAD),
+  );
 
   return (
     <View style={styles.container}>
       <GestureDetector gesture={compositeGesture}>
         <Canvas style={[styles.canvas, { width, height }]}>
-          <Rect x={bboxX} y={bboxY} width={bboxW} height={bboxH}>
-            <Shader source={metaballEffect} uniforms={uniforms} />
+          <Rect x={bboxX} y={bboxY} width={bboxSize} height={bboxSize}>
+            <Shader source={bubbleEffect} uniforms={uniforms} />
           </Rect>
         </Canvas>
       </GestureDetector>
