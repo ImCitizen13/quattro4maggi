@@ -1,4 +1,4 @@
-import { LiquidGlassBubble } from "@/components/liquid-glass-bubble/LiquidGlassBubble";
+import { LiquidBubbles } from "@/components/liquid-glass-bubble/LiquidBubbles";
 import { ThemeHeaderTitle, ThemeView } from "@/components/Theme";
 import { Stack } from "expo-router";
 import React from "react";
@@ -13,7 +13,7 @@ export default function Index() {
           headerTitle: () => <ThemeHeaderTitle text="Liquid Glass Bubble" />,
         }}
       />
-      <LiquidGlassBubble />
+      <LiquidBubbles />
     </ThemeView>
   );
 }

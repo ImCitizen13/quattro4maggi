@@ -158,6 +158,14 @@ export function stepBallPhysics(
   outBbox: Bbox,
 ): void {
   'worklet';
+  // The constraint solver is INLINED below rather than living in a helper.
+  // react-native-worklets 0.10.1 in Bundle Mode fails to resolve a
+  // worklet-marked sibling function captured as a plain value inside another
+  // worklet's closure — the compiled `.worklets/*.js` factory lists it as a
+  // captured parameter, but the reference arrives `undefined` on the UI
+  // runtime ("applyConstraints is not a function"). See the gooey-border /
+  // worklet-ui-thread-migration notes (§5, "plain functions captured through
+  // object graphs") for the failure mode this resembles.
   const clampedMs = Math.min(Math.max(dtMs, MIN_DT_MS), MAX_DT_MS);
   const dt = clampedMs / 1000;
 
@@ -216,9 +224,36 @@ export function stepBallPhysics(
     }
   }
 
+  // Gauss-Seidel constraint relaxation, inlined rather than factored into a
+  // helper. A helper is not an option here for two separate reasons: a sibling
+  // module-scope worklet arrives `undefined` on the UI runtime (see the note at
+  // the top of this function), and a function nested in this one would allocate
+  // a fresh closure on every frame, which the handoff's zero-per-frame-
+  // allocation rule forbids. `pass` 0 is the ring, 1 is the spokes.
   for (let iter = 0; iter < ITER; iter++) {
-    applyConstraints(state, RING_PAIRS, RING_REST * R, RING_STIFF);
-    applyConstraints(state, SPOKE_PAIRS, SPOKE_REST * R, SPOKE_STIFF);
+    for (let pass = 0; pass < 2; pass++) {
+      const pairs: readonly BallPair[] = pass === 0 ? RING_PAIRS : SPOKE_PAIRS;
+      const rest = (pass === 0 ? RING_REST : SPOKE_REST) * R;
+      const stiff = pass === 0 ? RING_STIFF : SPOKE_STIFF;
+
+      for (let p = 0; p < pairs.length; p++) {
+        const a = pairs[p][0];
+        const b = pairs[p][1];
+        const dx = state.posX[b] - state.posX[a];
+        const dy = state.posY[b] - state.posY[a];
+        // Pull both endpoints toward `rest` separation, split evenly and
+        // scaled by `stiff` so the cluster stretches under load instead of
+        // going fully rigid.
+        const dist = Math.hypot(dx, dy) || 1e-6;
+        const correction = ((dist - rest) / dist) * stiff * 0.5;
+        const ox = dx * correction;
+        const oy = dy * correction;
+        state.posX[a] += ox;
+        state.posY[a] += oy;
+        state.posX[b] -= ox;
+        state.posY[b] -= oy;
+      }
+    }
   }
 
   const pad = BBOX_SMOOTH_PAD + BBOX_PAD_EXTRA;
@@ -248,32 +283,4 @@ export function stepBallPhysics(
   outBbox.y = minY;
   outBbox.w = maxX - minX;
   outBbox.h = maxY - minY;
-}
-
-/**
- * One Gauss-Seidel pass of a distance constraint over every pair: pulls both
- * endpoints toward `rest` separation, split evenly and scaled by `stiff` so
- * the cluster can still stretch under load instead of going fully rigid.
- */
-function applyConstraints(
-  state: BallPhysicsState,
-  pairs: readonly BallPair[],
-  rest: number,
-  stiff: number,
-): void {
-  'worklet';
-  for (let p = 0; p < pairs.length; p++) {
-    const a = pairs[p][0];
-    const b = pairs[p][1];
-    const dx = state.posX[b] - state.posX[a];
-    const dy = state.posY[b] - state.posY[a];
-    const dist = Math.hypot(dx, dy) || 1e-6;
-    const correction = ((dist - rest) / dist) * stiff * 0.5;
-    const ox = dx * correction;
-    const oy = dy * correction;
-    state.posX[a] += ox;
-    state.posY[a] += oy;
-    state.posX[b] -= ox;
-    state.posY[b] -= oy;
-  }
 }
