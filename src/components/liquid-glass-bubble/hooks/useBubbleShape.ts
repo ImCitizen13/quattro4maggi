@@ -44,7 +44,7 @@ import {
 /**
  * Mutable per-frame state, owned by the UI runtime. See `bubbleModeMath.ts`
  * / `bubbleModes.ts` for the tuning constants (K2..K4, C2..C4, SPEED_REF,
- * A2_REST..A4_REST, PHI3_REST, PHI4_REST, PHI_DRIFT, etc).
+ * A2_REST..A4_REST, PHI3_REST, PHI4_REST, W_FLOOR_2..4, TAU_W, etc).
  */
 type UiShape = {
   state: ModeState;
@@ -66,10 +66,13 @@ export type UseBubbleShapeParams = {
   /** 1 while a pan is active, 0 otherwise — drives the mode 3/4 release kick. */
   isActive: SharedValue<number>;
   /**
-   * Gesture fling velocity (pt/s). Only the release kick reads this; mode 2's
-   * drive still comes from the anchor's position delta. Needed because the
-   * anchor tracks the finger directly, so on the release frame the position
-   * delta is already ~0 and would give a kick of zero.
+   * Gesture fling velocity (pt/s). Only the release kick reads this — the
+   * amplitude kick (v3/v4) from its magnitude, and since phase 9B also the
+   * traveling-wave kick (w2/w3/w4) from the turn between the last two
+   * non-zero samples. Mode 2's drive still comes from the anchor's position
+   * delta. Needed because the anchor tracks the finger directly, so on the
+   * release frame the position delta is already ~0 and would give a kick of
+   * zero.
    */
   velocityX: SharedValue<number>;
   velocityY: SharedValue<number>;
@@ -135,15 +138,17 @@ export function useBubbleShape({
 
     const dtMs = frameInfo.timeSincePreviousFrame ?? 16.7;
     const outBuf = ui.useA ? ui.bufB : ui.bufA;
-    // Scalar hypot, not an allocation — the release kick wants magnitude only.
-    const releaseSpeed = Math.hypot(velocityX.value, velocityY.value);
+    // Pass the velocity components through directly — the traveling-wave
+    // turn (phase 9B) needs the VECTOR, not just its magnitude, to tell a
+    // clockwise fling from a counter-clockwise one.
     stepBubbleModes(
       ui.state,
       cx,
       cy,
       R,
       isActive.value,
-      releaseSpeed,
+      velocityX.value,
+      velocityY.value,
       dtMs,
       outBuf,
       ui.bbox,

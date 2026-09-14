@@ -51,12 +51,20 @@ import {
   K4,
   KICK,
   KICK_V4_SCALE,
+  KICK_W_2,
+  KICK_W_3,
+  KICK_W_4,
   PARAM_FLOATS,
   PHI2_SPEED_THRESHOLD,
   PHI3_REST,
   PHI4_REST,
-  PHI_DRIFT,
   SPEED_REF,
+  TAU_W,
+  TURN_EPS,
+  W_FLOOR_2,
+  W_FLOOR_3,
+  W_FLOOR_4,
+  W_MAX,
 } from '../bubbleModes';
 
 /** Below this magnitude a mode-2 vector has no meaningful direction. */
@@ -92,8 +100,33 @@ export type ModeState = {
   phi2: number;
   a3: number;
   v3: number;
+  /**
+   * Modes 3/4's phase, mutable since phase 9B: it no longer sits at a fixed
+   * `PHI3_REST`/`PHI4_REST` — it ADVANCES by `w3·dt`/`w4·dt` every frame (the
+   * traveling wave), seeded from those rest constants.
+   */
+  phi3: number;
   a4: number;
   v4: number;
+  phi4: number;
+  /**
+   * Phase angular velocity per mode, rad/s (phase 9B "traveling waves"). Each
+   * relaxes toward its `W_FLOOR_k` (see `bubbleModes.ts`) with time constant
+   * `TAU_W`, and is kicked on a pan release by the fling velocity's turn —
+   * see `stepBubbleModes`. `w2` rotates the mode-2 VECTOR (`c2`, `s2`)
+   * directly; `w3`/`w4` advance `phi3`/`phi4`. W_FLOOR_2 replaces the old
+   * PHI_DRIFT target-rotation at rest.
+   */
+  w2: number;
+  w3: number;
+  w4: number;
+  /**
+   * Previous NON-ZERO gesture velocity sample (pt/s). Only overwritten when
+   * the incoming sample is non-zero, so a zeroed release/finalize frame does
+   * not wipe the history the next release's turn calculation needs.
+   */
+  prevVelX: number;
+  prevVelY: number;
   filmPhase: number;
   /** Anchor center from the previous step, used to derive motion direction. */
   lastCx: number;
@@ -125,8 +158,17 @@ export function createModeState(cx: number, cy: number): ModeState {
     phi2: 0,
     a3: A3_REST,
     v3: 0,
+    phi3: PHI3_REST,
     a4: A4_REST,
     v4: 0,
+    phi4: PHI4_REST,
+    // Seeded at the floor, not 0: the idle "clock tick" is present from the
+    // first frame, same reasoning as the amplitude rest floors above.
+    w2: W_FLOOR_2,
+    w3: W_FLOOR_3,
+    w4: W_FLOOR_4,
+    prevVelX: 0,
+    prevVelY: 0,
     filmPhase: 0,
     lastCx: cx,
     lastCy: cy,
@@ -160,8 +202,15 @@ export function resetModeState(state: ModeState, cx: number, cy: number): void {
   state.phi2 = 0;
   state.a3 = A3_REST;
   state.v3 = 0;
+  state.phi3 = PHI3_REST;
   state.a4 = A4_REST;
   state.v4 = 0;
+  state.phi4 = PHI4_REST;
+  state.w2 = W_FLOOR_2;
+  state.w3 = W_FLOOR_3;
+  state.w4 = W_FLOOR_4;
+  state.prevVelX = 0;
+  state.prevVelY = 0;
   state.filmPhase = 0;
   state.lastCx = cx;
   state.lastCy = cy;
@@ -180,10 +229,11 @@ export function resetModeState(state: ModeState, cx: number, cy: number): void {
  * place. Neither this function nor its helpers allocate.
  *
  * The mode-2 drive speed/angle are derived from the (cx − lastCx, cy − lastCy)
- * / dt position delta, per the "Physics contract". `releaseSpeed` is the ONE
- * value that comes from the gesture's own velocity instead (pt/s): the anchor
- * now tracks the finger directly, so by the release frame the anchor has
- * already stopped moving and the position delta is ~0 — see the kick below.
+ * / dt position delta, per the "Physics contract". `velX`/`velY` are the
+ * gesture's OWN velocity (pt/s), used only for the release kick (amplitude
+ * and, since phase 9B, the traveling-wave turn): the anchor tracks the
+ * finger directly, so by the release frame the anchor has already stopped
+ * moving and the position delta is ~0 — see the kick below.
  */
 export function stepBubbleModes(
   state: ModeState,
@@ -191,7 +241,8 @@ export function stepBubbleModes(
   cy: number,
   R: number,
   isActive: number,
-  releaseSpeed: number,
+  velX: number,
+  velY: number,
   dtMs: number,
   outBuf: number[],
   outBbox: Bbox,
@@ -228,29 +279,53 @@ export function stepBubbleModes(
     tux = Math.cos(dbl);
     tuy = Math.sin(dbl);
   } else if (mag > EPS) {
-    // At rest: keep the last motion axis and rotate it slowly, so the stretch
-    // axis never freezes. Rotating the TARGET (not the state) means the spring
-    // still governs how the shape gets there.
-    const ca = Math.cos(PHI_DRIFT * dt);
-    const sa = Math.sin(PHI_DRIFT * dt);
-    tux = (state.c2 * ca - state.s2 * sa) / mag;
-    tuy = (state.c2 * sa + state.s2 * ca) / mag;
+    // At rest: hold the CURRENT axis — no PHI_DRIFT target-rotation. The
+    // traveling-wave rotation below (w2) is what keeps the axis from
+    // freezing now; W_FLOOR_2 replaces PHI_DRIFT (phase 9B).
+    tux = state.c2 / mag;
+    tuy = state.s2 / mag;
   } else {
     // Degenerate: no axis to preserve, pick one.
     tux = 1;
     tuy = 0;
   }
 
-  // Release kick: isActive 1 → 0 edge seeds modes 3/4 so they ring out.
-  // Scaled by `releaseSpeed` (the gesture's own fling velocity), NOT by the
-  // position-delta `speed` above: the anchor now tracks the finger directly,
-  // so on the release frame the anchor has already stopped and the
-  // position-delta speed is ~0 — reading it here would silently kill the kick.
+  // Release kick: isActive 1 → 0 edge seeds modes 3/4 (amplitude) so they
+  // ring out, and w2/w3/w4 (phase 9B, traveling-wave circulation) from the
+  // handedness of the fling. Scaled by the gesture's own fling velocity
+  // (`velX`/`velY`), NOT by the position-delta `speed` above: the anchor
+  // tracks the finger directly, so on the release frame the anchor has
+  // already stopped and the position-delta speed is ~0 — reading it here
+  // would silently kill the kick.
   if (state.lastIsActive === 1 && isActive === 0) {
-    state.v3 += KICK * releaseSpeed;
-    state.v4 -= KICK * releaseSpeed * KICK_V4_SCALE;
+    const flingSpeed = Math.hypot(velX, velY);
+    state.v3 += KICK * flingSpeed;
+    state.v4 -= KICK * flingSpeed * KICK_V4_SCALE;
+
+    // turn = cross(prevVel, vel) / (|prevVel|·|vel|), −1..1, sign = handedness
+    // of the curve between the last two non-zero gesture velocity samples.
+    // Below TURN_EPS (or if either sample is degenerate) it is forced to 0:
+    // a straight fling kicks no circulation.
+    const prevMag = Math.hypot(state.prevVelX, state.prevVelY);
+    if (prevMag > EPS && flingSpeed > EPS) {
+      let turn = (state.prevVelX * velY - state.prevVelY * velX) / (prevMag * flingSpeed);
+      if (Math.abs(turn) < TURN_EPS) {
+        turn = 0;
+      }
+      state.w2 = Math.min(W_MAX, Math.max(-W_MAX, state.w2 + KICK_W_2 * flingSpeed * turn));
+      state.w3 = Math.min(W_MAX, Math.max(-W_MAX, state.w3 + KICK_W_3 * flingSpeed * turn));
+      state.w4 = Math.min(W_MAX, Math.max(-W_MAX, state.w4 + KICK_W_4 * flingSpeed * turn));
+    }
   }
   state.lastIsActive = isActive;
+
+  // Track the last NON-ZERO gesture velocity sample for the NEXT release's
+  // turn calculation — only when non-zero, so a zeroed release/finalize
+  // frame does not wipe the history a moment before it is needed.
+  if (Math.hypot(velX, velY) > EPS) {
+    state.prevVelX = velX;
+    state.prevVelY = velY;
+  }
 
   // ---- modes 3/4: idle breathing targets around their rest floors ----
   const target3 = A3_REST + A3_IDLE * Math.sin(state.t * IDLE_FREQ_3);
@@ -273,15 +348,36 @@ export function stepBubbleModes(
     state.s2 *= k;
     state.a2 = A_MAX;
   }
+
+  // ---- traveling wave: rotate the mode-2 VECTOR by w2*dt (phase 9B) ----
+  // A 2D rotation, so the magnitude is unchanged — this is layered on top of
+  // the spring pull above, not a replacement for it.
+  const w2dt = state.w2 * dt;
+  const cw2 = Math.cos(w2dt);
+  const sw2 = Math.sin(w2dt);
+  const rc2 = state.c2 * cw2 - state.s2 * sw2;
+  const rs2 = state.c2 * sw2 + state.s2 * cw2;
+  state.c2 = rc2;
+  state.s2 = rs2;
   state.phi2 = state.a2 > EPS ? Math.atan2(state.s2, state.c2) : 0;
 
   state.v3 += (K3 * (target3 - state.a3) - C3 * state.v3) * dt;
   state.a3 += state.v3 * dt;
   state.a3 = Math.min(A_MAX, Math.max(-A_MAX, state.a3));
+  // Traveling wave: phi3 advances by w3*dt every frame (phase 9B).
+  state.phi3 += state.w3 * dt;
 
   state.v4 += (K4 * (target4 - state.a4) - C4 * state.v4) * dt;
   state.a4 += state.v4 * dt;
   state.a4 = Math.min(A_MAX, Math.max(-A_MAX, state.a4));
+  // Traveling wave: phi4 advances by w4*dt every frame (phase 9B).
+  state.phi4 += state.w4 * dt;
+
+  // Relax each phase angular velocity toward its floor — slower than the
+  // amplitude damping on purpose, so circulation outlives the ring-out.
+  state.w2 += (W_FLOOR_2 - state.w2) * (dt / TAU_W);
+  state.w3 += (W_FLOOR_3 - state.w3) * (dt / TAU_W);
+  state.w4 += (W_FLOOR_4 - state.w4) * (dt / TAU_W);
 
   state.filmPhase += dt * FILM_DRIFT;
 
@@ -293,9 +389,9 @@ export function stepBubbleModes(
   outBuf[4] = state.a2;
   outBuf[5] = state.phi2;
   outBuf[6] = state.a3;
-  outBuf[7] = PHI3_REST;
+  outBuf[7] = state.phi3;
   outBuf[8] = state.a4;
-  outBuf[9] = PHI4_REST;
+  outBuf[9] = state.phi4;
   outBuf[10] = state.filmPhase;
   outBuf[11] = 0;
 

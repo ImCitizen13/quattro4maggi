@@ -58,9 +58,6 @@ export const PHI2_SPEED_THRESHOLD = 40;
  */
 export const PHI_RATE = 12;
 
-/** At rest (speed ≤ threshold), phi2 keeps drifting slowly, in rad/s. */
-export const PHI_DRIFT = 0.08;
-
 // ============================================================================
 // Idle drive — modes 3/4 breathe gently even at rest
 // ============================================================================
@@ -117,6 +114,57 @@ export const C3 = 10;
 
 export const K4 = 220;
 export const C4 = 9;
+
+// ============================================================================
+// Traveling waves (phase 9B) — phase circulates, not just rings out
+// ============================================================================
+//
+// See temp/liquid-bubbles-divergence.md → "Traveling waves (phase 9B)" for
+// the derivation. Standing waves (the springs above) ring an amplitude up
+// and down at a fixed angle; these add a phase angular velocity per mode
+// (w2/w3/w4, rad/s) that rotates the pattern around the rim. W_FLOOR_2
+// REPLACES PHI_DRIFT: instead of slowly rotating the mode-2 TARGET at rest,
+// w2 (seeded at its floor, never zero) rotates the (c2, s2) vector directly,
+// every frame, active or not — see `hooks/bubbleModeMath.ts`.
+
+/**
+ * Idle phase angular velocity floor per mode, rad/s — the constant subtle
+ * "clock tick" that keeps the pattern circulating even at rest. The three
+ * values are incommensurate on purpose so the shape never exactly repeats;
+ * W_FLOOR_4's sign is opposite the other two so mode 4 crawls the other way
+ * (dispersion).
+ */
+export const W_FLOOR_2 = 0.08;
+export const W_FLOOR_3 = 0.13;
+export const W_FLOOR_4 = -0.21;
+
+/**
+ * Relaxation time constant for `w_k` → its floor, seconds:
+ * `w_k += (W_FLOOR_k − w_k) · (1 / TAU_W) · dt`. Deliberately slower than the
+ * amplitude springs (`K2..K4` / `C2..C4`) so circulation outlives the
+ * amplitude ring-out.
+ */
+export const TAU_W = 0.9;
+
+/**
+ * Release-kick gain per mode: `w_k += KICK_W_k · flingSpeed · turn`. Mode 2
+ * is kept small on purpose — a spinning mode 2 reads as the whole bubble
+ * spinning — while modes 3/4 carry the visible travel (dispersion: higher
+ * modes run faster).
+ */
+export const KICK_W_2 = 4e-4;
+export const KICK_W_3 = 1.5 * KICK_W_2;
+export const KICK_W_4 = 2.0 * KICK_W_2;
+
+/**
+ * Below this `|turn|` (the cross product of the last two non-zero gesture
+ * velocity samples, normalised to −1..1), a fling is treated as straight —
+ * no circulation is kicked in.
+ */
+export const TURN_EPS = 0.05;
+
+/** Hard cap on every phase angular velocity `|w_k|`, rad/s. */
+export const W_MAX = 6;
 
 // ============================================================================
 // Film drift
