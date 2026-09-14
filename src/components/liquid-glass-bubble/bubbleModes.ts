@@ -134,8 +134,40 @@ export const DT_MIN_MS = 1;
 export const DT_MAX_MS = 33;
 
 // ============================================================================
+// Optics defaults (phase 8B) — see "Shader math" in the divergence doc
+// ============================================================================
+//
+// These are the START values for the two optics uniforms. Phase 9B owns the
+// final feel of `iRefract`/`iFilm`/`iColor`; 8B only needs them to exist and
+// to be the single source of truth for the bbox padding below.
+
+/**
+ * `iRefract`: maximum refraction sample offset at the rim, in points. The
+ * shader offsets the image sample by `iRefract * (1 - nz)` along the analytic
+ * surface normal, so this is 0 at the center and `iRefract` at the rim.
+ */
+export const REFRACT = 14;
+
+/** `iFilm`: thin-film iridescence strength, 0..1. */
+export const FILM = 0.8;
+
+// ============================================================================
 // Bounding box
 // ============================================================================
 
-/** Extra AA/refraction padding added to the harmonic-field bounding box. */
-export const BBOX_PAD = 2;
+/** AA feather padding — the shader's `smoothstep(-0.75, 0.75, d)` band. */
+export const AA_PAD = 2;
+
+/**
+ * Extra padding added to the harmonic-field bounding box, in points:
+ * `PAD = iRefract + 2` per `temp/liquid-bubbles-divergence.md`, so rim
+ * refraction sampling has room instead of clipping against the `<Rect>` edge.
+ *
+ * Derived from `REFRACT` (the same constant that feeds the `iRefract` uniform)
+ * rather than threaded into `stepBubbleModes` as an argument: `iRefract` has no
+ * per-frame variation, and widening the step function's signature would change
+ * every call site in `bubbleModeMath.test.ts` for a value that is a module
+ * constant. One source of truth, zero per-frame cost, `stepBubbleModes` stays
+ * allocation-free and unchanged.
+ */
+export const BBOX_PAD = REFRACT + AA_PAD;
