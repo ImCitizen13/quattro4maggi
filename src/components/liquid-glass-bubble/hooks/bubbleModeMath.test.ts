@@ -3,6 +3,10 @@ import { describe, expect, it } from "bun:test";
 
 import {
   A2_REST,
+  A3_IDLE,
+  A3_REST,
+  A4_IDLE,
+  A4_REST,
   A_MAX,
   PARAM_FLOATS,
   TAU_W,
@@ -141,10 +145,29 @@ describe("stepBubbleModes — release settling", () => {
 
     // Phase 9B: at rest the axis is no longer held by a PHI_DRIFT target
     // rotation — it is rotated directly by w2 (seeded at, and relaxed back
-    // to, W_FLOOR_2). With no kick, w2 stays at the floor the whole time, so
-    // the drift over the rest period is (very close to) exactly
-    // W_FLOOR_2 * 1.5s.
-    expect(state.phi2 - phi2AtRelease).toBeCloseTo(W_FLOOR_2 * 1.5, 2);
+    // to, W_FLOOR_2). With no kick, w2 stays at the floor the whole time.
+    //
+    // Phase 10B split this into two assertions. The mode-2 ring-out is now
+    // underdamped enough (C2 14 -> 7) to undershoot to a2 ~ 0.018 on its way
+    // down, and while the vector is that short the (deliberately un-rotated)
+    // velocity swings its ANGLE by a one-off ~0.19 rad — small tangential
+    // velocity over a small radius is a large angle. That excursion is the
+    // vector formulation doing exactly what it exists to do (route a change
+    // through low amplitude), so it is not something to damp away; it just
+    // means "total drift since the release instant" no longer isolates the
+    // idle crawl. The crawl RATE is what this test is actually about, so
+    // measure it over a window AFTER the ring-out has finished, where it
+    // pins down W_FLOOR_2 harder than the old 2-decimal total did.
+    const phi2AfterRingOut = state.phi2;
+    for (let f = 0; f < restFrames; f++) {
+      stepBubbleModes(state, cx, cy, R, 0, 0, 0, dtMs, buf, bbox);
+    }
+    expect(state.phi2 - phi2AfterRingOut).toBeCloseTo(W_FLOOR_2 * 1.5, 3);
+
+    // And the axis is still KEPT, not swept: the whole post-release excursion
+    // (ring-out wander + crawl) stays far below the quarter turn that a
+    // runaway rotation or an angle-lerp pivot would produce.
+    expect(Math.abs(phi2AfterRingOut - phi2AtRelease)).toBeLessThan(0.3);
   });
 });
 
@@ -242,17 +265,26 @@ describe("stepBubbleModes — release kick (amplitude)", () => {
 });
 
 describe("stepBubbleModes — idle rest pose", () => {
-  it("never collapses to a circle at rest: |a2|+|a3|+|a4| > 0.05 at every sampled frame over 10s", () => {
+  it("never collapses to a circle at rest: |a2|+|a3|+|a4| holds its floor at every sampled frame over 10s", () => {
     const state: ModeState = createModeState(0, 0);
     const buf = makeBuf();
     const bbox = makeBbox();
     const dtMs = 1000 / 60;
     const frames = 600; // 10s
 
+    // Derived from the constants rather than hardcoded: the idle targets sit
+    // at A*_REST ± A*_IDLE, so the least non-circular the rest pose can get is
+    // the sum of each mode's trough. A previous hardcoded 0.05 was calibrated
+    // for A2_REST = 0.04 and silently became wrong when the floor was retuned.
+    // The 0.9 leaves room for the springs lagging their targets; a genuine
+    // collapse (a mode failing to hold its floor at all) falls far below this.
+    const restFloor =
+      A2_REST + (A3_REST - A3_IDLE) + (A4_REST - A4_IDLE);
+
     for (let f = 0; f < frames; f++) {
       stepBubbleModes(state, 0, 0, 40, 0, 0, 0, dtMs, buf, bbox);
       const sum = Math.abs(state.a2) + Math.abs(state.a3) + Math.abs(state.a4);
-      expect(sum).toBeGreaterThan(0.05);
+      expect(sum).toBeGreaterThan(restFloor * 0.9);
     }
   });
 });
@@ -297,12 +329,11 @@ describe("stepBubbleModes — traveling wave release kick", () => {
    * then release with a fling velocity at `releaseAngle` — the angle between
    * the drag direction and the release velocity determines `turn`.
    */
-  const flingThenRelease = (releaseAngle: number): ModeState => {
+  const flingThenRelease = (releaseAngle: number, dragSpeed = 800): ModeState => {
     const state: ModeState = createModeState(0, 0);
     const buf = makeBuf();
     const bbox = makeBbox();
     const dtMs = 1000 / 60;
-    const dragSpeed = 800;
 
     // A few active frames with a steady rightward gesture velocity, so
     // prevVelX/Y holds a settled (800, 0) sample by the time we release.
@@ -347,8 +378,16 @@ describe("stepBubbleModes — traveling wave release kick", () => {
   });
 
   it("a mirrored fling (turning clockwise) flips the sign of the kick", () => {
-    const ccw = flingThenRelease(Math.PI / 2);
-    const cw = flingThenRelease(-Math.PI / 2);
+    // Deliberately a SLOW fling (120 pt/s, not the 800 the other cases use).
+    // This test is about the sign symmetry of the kick itself, and after the
+    // phase-10B KICK_W_k retune an 800 pt/s release with |turn| = 1 saturates
+    // W_MAX. Saturation is not symmetric about a NON-ZERO floor — +W_MAX is
+    // (W_MAX - floor) of excess while -W_MAX is (W_MAX + floor) — so at 800
+    // this would be measuring the clamp, not the kick. 120 pt/s keeps both
+    // signs inside |w_k| < W_MAX, which is what makes the exact 9-digit
+    // comparison below meaningful rather than merely passable.
+    const ccw = flingThenRelease(Math.PI / 2, 120);
+    const cw = flingThenRelease(-Math.PI / 2, 120);
 
     const ccwExcess3 = ccw.w3 - W_FLOOR_3;
     const cwExcess3 = cw.w3 - W_FLOOR_3;
