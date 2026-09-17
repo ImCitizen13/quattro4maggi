@@ -399,6 +399,113 @@ export const REFRACT = 9;
  */
 export const FILM = 0.55;
 
+/**
+ * `iColor.a`: tint WEIGHT of `iColor.rgb` over the refracted body (not
+ * opacity). Was the literal `0.35` in each demo's `BUBBLE_COLOR`; lifted here
+ * so the live tuning panel has one default to start from.
+ *
+ * TUNE: tint. 0 clear glass · 0.6 ceiling (above = colored disk).
+ */
+export const TINT = 0.35;
+
+/**
+ * `iOptics.x`: how much the dark rim line darkens, 0..1. Was the literal
+ * `0.35` in the shader; lifted to a uniform for live tuning, value unchanged.
+ *
+ * TUNE: rim line. 0 none · 0.7 ink outline.
+ */
+export const RIM_DARK = 0.35;
+
+/**
+ * `iOptics.y`: width of the dark rim line, in points (the shader's
+ * `smoothstep(width, 0, d)`). Was the literal `3.0`. Must stay > 0 —
+ * `smoothstep` with equal edges is undefined.
+ *
+ * TUNE: rim width. 1 hairline · 8 soft vignette.
+ */
+export const RIM_WIDTH = 3;
+
+/**
+ * `iOptics.z`: thin-film band count across the rim (`tf = om · this +
+ * filmPhase`). Was the literal `2.5`.
+ *
+ * TUNE: film bands. 1 one soft hue shift · 6 tight rainbow rings.
+ */
+export const FILM_SCALE = 2.5;
+
+/**
+ * `iOptics.w`: exponent on the optics weight, `om = (1 − nz)^this`. Controls
+ * how deep refraction and film reach in from the rim. 1 reproduces the
+ * pre-lever shader exactly. Must stay > 0 (`pow(0, ≤0)` is undefined).
+ *
+ * TUNE: lens depth. 0.5 thick lens (bends deep) · 3 thin shell (edge only).
+ */
+export const OPTICS_FALLOFF = 1;
+
+// ----------------------------------------------------------------------------
+// Gargantua-derived levers (Live shader only, for now)
+// ----------------------------------------------------------------------------
+//
+// Ported from `gargantua-type-gpu/centerBubbleScene.ts`. All default to OFF so
+// the bubble's look is unchanged until tuned; the Gargantua values are in each
+// TUNE note and in `GARGANTUA_PRESET` (`hooks/useBubbleOptics.ts`).
+
+/**
+ * `iLens.x`: radial lens warp, as a fraction of R, scaled by `(dist/r)²`.
+ * + pulls samples toward the center (magnify), − pushes out (pincushion).
+ * Negative values reach OUTSIDE the rim, so the Live clip pads by `R·max(0,−lens)`.
+ *
+ * TUNE: lens. Gargantua 0.5 · −0.3 fisheye-in.
+ */
+export const LENS = 0;
+
+/**
+ * `iLens.y`: chromatic aberration at the rim, fraction of R. R/B channels are
+ * re-sampled ±`R·this·edge` along the radial — 2 extra texture taps, skipped
+ * when 0.
+ *
+ * TUNE: dispersion. Gargantua 0.9 · 0.2 subtle fringe.
+ */
+export const DISPERSION = 0;
+
+/**
+ * `iLens.z`: width of the rim band (`edge = smoothstep(1 − this, 1, dist/r)`)
+ * used by dispersion and the rainbow. Must stay > 0.
+ *
+ * TUNE: edge band. Gargantua 0.1 · 0.3 wide.
+ */
+export const EDGE_WIDTH = 0.1;
+
+/**
+ * `iLens.w`: specular highlight strength, light from `(-0.4, -0.6)` (up-left)
+ * against the analytic normal, so the highlight follows the wobble.
+ *
+ * TUNE: specular. Gargantua 1.0.
+ */
+export const SPECULAR = 0;
+
+/** `iPrism.x`: angular rainbow mixed into the rim band. TUNE: Gargantua 0.15. */
+export const RAINBOW_MIX = 0;
+
+/** `iPrism.y`: additive rainbow glow on the rim band. TUNE: Gargantua 0.05. */
+export const RAINBOW_GLOW = 0;
+
+/**
+ * `iPrism.z`: halo reach outside the rim, fraction of R. Must stay > 0. The
+ * Live clip pads by `R·this` because the halo draws there.
+ *
+ * TUNE: halo spread. Gargantua 0.2.
+ */
+export const HALO_SPREAD = 0.2;
+
+/**
+ * `iPrism.w`: halo opacity, SIGNED: + light halo, − dark halo. Gargantua uses
+ * +0.15 (white on a dark scene); on this demo's white backdrop only − shows.
+ *
+ * TUNE: halo. Gargantua 0.15 · −0.15 soft shadow on white.
+ */
+export const HALO_OPACITY = 0;
+
 // ============================================================================
 // Bounding box
 // ============================================================================

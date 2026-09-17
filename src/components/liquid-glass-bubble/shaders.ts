@@ -30,10 +30,14 @@
  * 6. `uv = p + n·iRefract·om` samples the child `iImage` (an `<ImageShader>`
  *    mapped onto the bubble): zero offset at the center, `iRefract` pt of
  *    outward displacement at the rim. ONE texture tap.
- * 7. Thin film: `cos` of a thickness proxy (`om·2.5 + filmPhase`) per
+ * 7. Thin film: `cos` of a thickness proxy (`om·filmScale + filmPhase`) per
  *    channel, mixed in with a fresnel weight `om³` → rainbow on the rim only.
- * 8. A `smoothstep(3, 0, d)` multiply darkens the outermost ~3pt into the
- *    bubble's dark rim line.
+ * 8. A `smoothstep(rimWidth, 0, d)` multiply darkens the outermost rimWidth pt
+ *    into the bubble's dark rim line.
+ *
+ * `iOptics` = (rimDark, rimWidth, filmScale, falloff) are live look levers
+ * (defaults in `bubbleModes.ts`, sliders in `BubbleTuningPanel`). `falloff`
+ * is the exponent in `om = (1 − nz)^falloff`; 1 is the original shader.
  *
  * COST: one `atan2`, six trig (3 cos + 3 sin), two `sqrt` (`length`,
  * `normalize`) plus the tilt `sqrt`, three `cos` for the film, one texture
@@ -53,6 +57,7 @@ uniform float4 iParams[3];   // [0] cx,cy,R,_  [1] a2,phi2,a3,phi3  [2] a4,phi4,
 uniform float4 iColor;       // base tint rgb + tint WEIGHT in .a (not opacity)
 uniform float  iRefract;     // max refraction sample offset at the rim, pt
 uniform float  iFilm;        // iridescence strength, 0..1
+uniform float4 iOptics;      // rimDark, rimWidth (pt), filmScale, falloff exponent
 uniform shader iImage;       // child ImageShader mapped onto the bubble
 
 half4 main(float2 p) {
@@ -88,7 +93,7 @@ half4 main(float2 p) {
   float rSafe = max(r, 1e-3);
   float u     = dist / rSafe;
   float nz    = sqrt(max(0.0, 1.0 - u * u));
-  float om    = 1.0 - nz;                   // optics weight
+  float  om    = pow(1.0 - nz, iOptics.w);   // optics weight, falloff > 0
 
   // ---- analytic normal from (r, dr): no finite differences ----
   float2 radial = q / max(dist, 1e-3);
@@ -101,15 +106,15 @@ half4 main(float2 p) {
 
   // ---- thin film, weighted by a fresnel-ish rim falloff ----
   float  f    = om * om * om;
-  float  tf   = om * 2.5 + filmPhase;
+  float  tf   = om * iOptics.z + filmPhase;
   float3 film = 0.5 + 0.5 * cos(6.2831853 * tf + float3(0.0, 2.1, 4.2));
 
   float3 base = float3(img.rgb);
   float3 col  = mix(base, base * iColor.rgb, iColor.a);
   col = mix(col, film, f * iFilm);
 
-  // ---- dark rim line: darken the outermost ~3pt ----
-  col *= 1.0 - 0.35 * smoothstep(3.0, 0.0, d);
+  // ---- dark rim line: darken the outermost iOptics.y pt ----
+  col *= 1.0 - iOptics.x * smoothstep(iOptics.y, 0.0, d);
 
   return half4(col * alpha, alpha);
 }
@@ -135,4 +140,4 @@ export const bubbleEffect = effect;
  * `iImage` is NOT listed: it is a child shader, supplied as the `<Shader>`
  * element's `<ImageShader>` child, not through the `uniforms` prop.
  */
-export const UNIFORM_NAMES = ['iParams', 'iColor', 'iRefract', 'iFilm'] as const;
+export const UNIFORM_NAMES = ['iParams', 'iColor', 'iRefract', 'iFilm', 'iOptics'] as const;

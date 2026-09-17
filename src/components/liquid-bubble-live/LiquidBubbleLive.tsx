@@ -52,40 +52,46 @@
  * - Outside the bubble the filter returns alpha 0, and the layer composites
  *   src-over, so the clip rect never reads as a visible box over the
  *   background.
- * - `LIVE_REFRACT` (18 pt) is a demo-local override, not the still-image
- *   demo's `REFRACT` (9). That 9 exists to stop the rim sampling past the edge
- *   of a small `<ImageShader>` rect; the backdrop is the whole canvas, so the
- *   bend can be twice as strong without smearing.
+ * - `LIVE_REFRACT` (18 pt) is a demo-local starting `iRefract`, not the
+ *   still-image demo's `REFRACT` (9); it is now live-tunable via
+ *   `BubbleTuningPanel`, so the clip pads by the current slider value, not the
+ *   constant. That 9 exists to stop the rim sampling past the edge of a small
+ *   `<ImageShader>` rect; the backdrop is the whole canvas, so the bend can be
+ *   twice as strong without smearing.
  * - `SHOW_FPS_OVERLAY` mounts `FpsOverlay`. Note the simulator caps at 60 Hz,
  *   which pins `j120` at 100% and makes it carry no signal — real numbers need
  *   a release build on a 120 Hz device.
+ * - `SHOW_TUNING_PANEL` mounts `BubbleTuningPanel` (Wobble + the 7 optics
+ *   levers), all `SharedValue`s written on the UI thread with no React
+ *   re-render per tick.
  */
 
 import {
   BackdropFilter,
   Canvas,
   Fill,
-  ImageShader,
   Image,
   RuntimeShader,
-  Shader,
   rect,
   useImage,
-  Circle,
+  Text as SKText,
+  useFont,
+  Skia,
 } from "@shopify/react-native-skia";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
-import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 
-import { FILM, PARAM_FLOATS, WOBBLE_DEFAULT } from "../liquid-glass-bubble/bubbleModes";
+import { WOBBLE_DEFAULT } from "../liquid-glass-bubble/bubbleModes";
+import { BubbleTuningPanel } from "../liquid-glass-bubble/BubbleTuningPanel";
 import {
   useBubblePanGesture,
   useBubblePinchGesture,
 } from "../liquid-glass-bubble/hooks/useBubbleGestures";
+import { useBubbleOptics } from "../liquid-glass-bubble/hooks/useBubbleOptics";
 import { useBubbleShape } from "../liquid-glass-bubble/hooks/useBubbleShape";
 
 import { backgroundEffect } from "./backgroundShaders";
@@ -102,6 +108,7 @@ import {
   LIVE_REFRACT,
 } from "./liveConfig";
 import { liveBubbleEffect } from "./shaders";
+import { BoldonseRegular } from "@/assets/fonts/getFonts";
 
 // ============================================================================
 // Config
@@ -110,23 +117,23 @@ import { liveBubbleEffect } from "./shaders";
 /** Mount the on-screen FPS readout. Real numbers need a release build on device. */
 const SHOW_FPS_OVERLAY = true;
 
-/** Mount the live "Wobble" tuning slider over the mode 3/4 wobble master knob. */
+/** Mount `BubbleTuningPanel` (Wobble + the 7 live optics levers). */
 const SHOW_TUNING_PANEL = true;
 
 /**
- * `iColor`: rgb = tint hue, **a = tint WEIGHT, not opacity**. Same semantics
- * and same value as the still-image demo, so the two can be compared directly:
- * the only intended visual difference is what is being refracted.
+ * `iColor` tint hue, rgb 0..1. The tint WEIGHT (`iColor.a`) is no longer a
+ * constant here — it comes from the live `tint` lever in `useBubbleOptics`,
+ * seeded from `bubbleModes.ts`'s `TINT` default.
  */
-const BUBBLE_COLOR: [number, number, number, number] = [0.85, 0.93, 1.0, 0.35];
+const BUBBLE_TINT: [number, number, number] = [0.85, 0.93, 1.0];
 
 /**
- * Pre-first-frame uniform fallback. `useBubbleShape`'s `paramBuffer` starts as
- * an empty `SharedValue<number[]>` and is only filled once `useFrameCallback`
- * ticks; without a correctly-sized stand-in for that one frame Skia throws
- * "Incorrect uniform size for: iParams".
+ * Upper bound of the tuning panel's Refract slider, pt. The backdrop is the
+ * whole canvas (not a small `<ImageShader>` rect), so a higher cap is cheap
+ * in sampling correctness — but `clipRect` pads by the live refract value, so
+ * a higher slider still means a larger snapshot to fill.
  */
-const EMPTY_PARAM_BUFFER: number[] = new Array(PARAM_FLOATS).fill(0);
+const LIVE_REFRACT_SLIDER_MAX = 40;
 
 // ============================================================================
 // Types
@@ -191,19 +198,15 @@ export function LiquidBubbleLive({
     wobble,
   });
 
-  // Only forwards `paramBuffer.value` and constants — no spread, no math, no
-  // allocation. The buffer is in POINTS and the filter runs in points, so
-  // there is nothing to rescale (see the coordinate-space note in
-  // `shaders.ts`, which is a measurement, not an assumption).
-  const uniforms = useDerivedValue(() => ({
-    iParams:
-      paramBuffer.value.length === PARAM_FLOATS
-        ? paramBuffer.value
-        : EMPTY_PARAM_BUFFER,
-    iColor: BUBBLE_COLOR,
-    iRefract: LIVE_REFRACT,
-    iFilm: FILM,
-  }));
+  // `paramBuffer` is in POINTS and the filter runs in points, so there is
+  // nothing to rescale (see the coordinate-space note in `shaders.ts`, which
+  // is a measurement, not an assumption). The optics levers (refract, film,
+  // tint, rim, falloff) are live `SharedValue`s written by `BubbleTuningPanel`.
+  const { optics, defaults, uniforms } = useBubbleOptics({
+    paramBuffer,
+    tintColor: BUBBLE_TINT,
+    refract: LIVE_REFRACT,
+  });
 
   // ==========================================================================
   // Live background
@@ -222,12 +225,28 @@ export function LiquidBubbleLive({
   // Backdrop clip
   // ==========================================================================
 
-  // The shape bbox (AA-padded only) grown by the refraction reach. Padding the
-  // DRAW region by the refraction offset would be the mistake the 8B follow-up
-  // corrected; padding the READ region by it is mandatory, because the
-  // backdrop snapshot stops at this rect and returns transparent past it.
+  // The shape bbox (AA-padded only) grown by every outward sample plus the
+  // halo draw. Padding the DRAW region by the refraction offset would be the
+  // mistake the 8B follow-up corrected; padding the READ region by it is
+  // mandatory, because the backdrop snapshot stops at this rect and returns
+  // transparent past it. Lens only pushes the read outward when negative
+  // (pincushion — positive/magnify samples inward); dispersion samples up to
+  // ±R·dispersion along the radial on either side of the base sample; and the
+  // halo draws up to R·haloSpread outside the rim — the clip has to bound
+  // both what the shader reads and what it draws.
   const clipRect = useDerivedValue(() => {
-    const pad = LIVE_REFRACT + CLIP_SLACK;
+    // Refract is live (tunable via BubbleTuningPanel), not the constant
+    // `LIVE_REFRACT` — padding by the stale constant would under-pad the
+    // moment the slider is raised, biting a transparent ring around the rim.
+    const R = Math.max(bboxW.value, bboxH.value) / 2;
+    const pad =
+      optics.refract.value +
+      R *
+        (Math.max(0, -optics.lens.value) +
+          optics.dispersion.value +
+          // Halo off (opacity 0) draws nothing, so don't pay its fill.
+          (optics.haloOpacity.value !== 0 ? optics.haloSpread.value : 0)) +
+      CLIP_SLACK;
     return rect(
       bboxX.value - pad,
       bboxY.value - pad,
@@ -235,13 +254,24 @@ export function LiquidBubbleLive({
       bboxH.value + 2 * pad,
     );
   });
+  const fontSize = 64;
+  const font = useFont(BoldonseRegular.font, fontSize);
+  const label = "Hello World";
+  // Skia text `y` is the baseline, not the top — `measureText` bounds are
+  // baseline-relative (bounds.y is negative), so centering has to subtract
+  // the bounds origin, not just half the width/height.
+  const textBounds = font ? font.measureText(label) : null;
+  const textX = textBounds ? centerX - textBounds.x - textBounds.width / 2 : 0;
+  const textY = textBounds
+    ? centerY - textBounds.y - textBounds.height / 2
+    : 0;
 
-  const imagePath = require("../../../assets/liquid-glass-bubble/refract-image.png")
-  const image = useImage(imagePath)
+  const imagePath = require("../../../assets/liquid-glass-bubble/refract-image.png");
+  const image = useImage(imagePath);
   // 1. Wait for the image to resolve
-   if (!image) return null;
+  if (!image) return null;
   // 2. Read the image's raw dimensions
-  const imageSize = width * 0.9//image.width();
+  const imageSize = width * 0.9; //image.width();
 
   // 3. Center it on the same point the bubble rests at
   const imageX = centerX - imageSize / 2;
@@ -254,19 +284,27 @@ export function LiquidBubbleLive({
           {/* Drawn first — this IS the backdrop the bubble samples. */}
 
           <Fill color="#ffffff" />
-          {image &&
+          {/*{font && <SKText
+            x={textX}
+            y={textY}
+            text={label}
+            font={font}
+            color={"black"}
+          />}*/}
+          {image && (
             // <Circle r={imgWidth} cx={x}cy={y} color={"red"} />}
-          <Image
-            image={image}
-            fit="cover"
-            // rect={imageRect}
-            width={imageSize}
-            height={imageSize}
-            x={imageX}
-            y={imageY}
-            // tx="clamp"
-            // ty="clamp"
-          /> }
+            <Image
+              image={image}
+              fit="cover"
+              // rect={imageRect}
+              width={imageSize}
+              height={imageSize}
+              x={imageX}
+              y={imageY}
+              // tx="clamp"
+              // ty="clamp"
+            />
+          )}
 
           <BackdropFilter
             clip={clipRect}
@@ -279,9 +317,13 @@ export function LiquidBubbleLive({
       {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
       {/* After the GestureDetector, not inside it, so the bubble's pan can't steal the slider's touches. */}
       {SHOW_TUNING_PANEL && (
-        <View style={styles.panel} pointerEvents="box-none">
-          <TuningSlider label="Wobble" value={wobble} min={0} max={3} decimals={2} />
-        </View>
+        <BubbleTuningPanel
+          wobble={wobble}
+          wobbleDefault={WOBBLE_DEFAULT}
+          optics={optics}
+          defaults={defaults}
+          refractMax={LIVE_REFRACT_SLIDER_MAX}
+        />
       )}
     </View>
   );
@@ -300,17 +342,5 @@ const styles = StyleSheet.create({
   },
   canvas: {
     backgroundColor: "#ffffff",
-  },
-  panel: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    bottom: 40,
-    alignItems: "center",
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 12,
   },
 });

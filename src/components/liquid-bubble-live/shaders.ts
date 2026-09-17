@@ -66,6 +66,15 @@
  *    TRANSPARENT outside it.
  * 7. Thin film weighted by `om³`, then the dark rim line.
  *
+ * DELIBERATE DIVERGENCE from `../liquid-glass-bubble/shaders.ts`: this shader
+ * alone carries the Gargantua-derived levers (`iLens`, `iPrism`, ported from
+ * `gargantua-type-gpu/centerBubbleScene.ts`) — radial lens warp, rim
+ * chromatic aberration (+2 taps when on), angular rainbow, specular, and a
+ * signed halo drawn OUTSIDE the rim. Superellipse `shapeN` was not ported:
+ * it would fight the harmonic shape. All default off (see `bubbleModes.ts`).
+ * The halo and the pincushion/dispersion reads go past the rim, so the
+ * `BackdropFilter` clip pads for them in `LiquidBubbleLive`.
+ *
  * The filter's output is composited over the untouched background with
  * src-over (`saveLayer(undefined, null, filter)` then `restore()`), so the
  * `alpha = 0` region outside the bubble leaves the live background showing
@@ -83,7 +92,10 @@ uniform float4 iParams[3];   // POINTS: [0] cx,cy,R,_  [1] a2,phi2,a3,phi3  [2] 
 uniform float4 iColor;       // base tint rgb + tint WEIGHT in .a (not opacity)
 uniform float  iRefract;     // max refraction sample offset at the rim, POINTS
 uniform float  iFilm;        // iridescence strength, 0..1
-uniform shader iImage;       // THE BACKDROP — exactly one child shader, bound by Skia
+uniform float4 iOptics;      // rimDark, rimWidth (pt), filmScale, falloff exponent
+uniform float4 iLens;        // lens (×R, + magnify / − pincushion), dispersion (×R), edgeWidth, specular
+uniform float4 iPrism;       // rainbowMix, rainbowGlow, haloSpread (×R), haloOpacity (signed: − dark, + light)
+uniform shader iImage;      // THE BACKDROP — exactly one child shader, bound by Skia
 
 // p arrives in absolute canvas POINTS — measured, see the module doc.
 half4 main(float2 p) {
@@ -119,7 +131,7 @@ half4 main(float2 p) {
   float rSafe = max(r, 1e-3);
   float u     = dist / rSafe;
   float nz    = sqrt(max(0.0, 1.0 - u * u));
-  float om    = 1.0 - nz;                   // optics weight
+  float  om    = pow(1.0 - nz, iOptics.w);   // optics weight, falloff > 0
 
   // ---- analytic normal from (r, dr): no finite differences ----
   float2 radial = q / max(dist, 1e-3);
@@ -127,22 +139,47 @@ half4 main(float2 p) {
   float2 nxy    = normalize(radial - tang * (dr / rSafe));
 
   // ---- refraction: ONE tap of the LIVE backdrop, offset only near the rim ----
-  float2 uv  = p + nxy * (iRefract * om);
+  // Normal offset (iRefract) + Gargantua's radial lens: (dist/r)² · lens · R,
+  // + pulls toward the center (magnify), − pushes out (pincushion).
+  float2 uv  = p + nxy * (iRefract * om) - radial * (iLens.x * u * u * R);
   half4  img = iImage.eval(uv);
+  float3 base = float3(img.rgb);
+
+  // ---- rim band shared by dispersion + rainbow (Gargantua edgeFactor) ----
+  float edge = smoothstep(1.0 - iLens.z, 1.0, u);
+
+  // ---- chromatic aberration: 2 extra taps, skipped when dispersion is 0 ----
+  if (iLens.y > 0.0) {
+    float2 chroma = radial * (iLens.y * edge * R);
+    float3 split  = float3(iImage.eval(uv + chroma).r, base.g, iImage.eval(uv - chroma).b);
+    base = mix(base, split, edge);
+  }
 
   // ---- thin film, weighted by a fresnel-ish rim falloff ----
   float  f    = om * om * om;
-  float  tf   = om * 2.5 + filmPhase;
+  float  tf   = om * iOptics.z + filmPhase;
   float3 film = 0.5 + 0.5 * cos(6.2831853 * tf + float3(0.0, 2.1, 4.2));
 
-  float3 base = float3(img.rgb);
   float3 col  = mix(base, base * iColor.rgb, iColor.a);
   col = mix(col, film, f * iFilm);
 
-  // ---- dark rim line: darken the outermost ~3pt ----
-  col *= 1.0 - 0.35 * smoothstep(3.0, 0.0, d);
+  // ---- prismatic rim: hue by angle, same 6-stop rainbow, branchless ----
+  float  hue     = fract(th / 6.2831853 + 0.5);
+  float3 rainbow = clamp(abs(mod(hue * 6.0 + float3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+  col = mix(col, rainbow, edge * iPrism.x) + rainbow * (edge * iPrism.y);
 
-  return half4(col * alpha, alpha);
+  // ---- specular: Gargantua's up-left light against the WOBBLING normal ----
+  float sd = max(dot(nxy, float2(-0.4, -0.6)), 0.0);
+  col += (pow(sd, 32.0) * 0.6 + pow(sd, 8.0) * 0.15) * iLens.w;
+
+  // ---- dark rim line: darken the outermost iOptics.y pt ----
+  col *= 1.0 - iOptics.x * smoothstep(iOptics.y, 0.0, d);
+
+  // ---- halo outside the rim (premultiplied); sign picks light vs dark ----
+  float haloA = smoothstep(R * iPrism.z, 0.0, -d) * abs(iPrism.w) * (1.0 - alpha);
+  float haloL = step(0.0, iPrism.w);
+
+  return half4(col * alpha + haloL * haloA, alpha + haloA);
 }
 `;
 
@@ -171,4 +208,4 @@ export const liveBubbleEffect = effect;
  * binds the backdrop snapshot to it, so it never appears in the `uniforms`
  * prop.
  */
-export const UNIFORM_NAMES = ['iParams', 'iColor', 'iRefract', 'iFilm'] as const;
+export const UNIFORM_NAMES = ['iParams', 'iColor', 'iRefract', 'iFilm', 'iOptics', 'iLens', 'iPrism'] as const;
