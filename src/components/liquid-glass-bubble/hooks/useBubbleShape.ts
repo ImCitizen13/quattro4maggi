@@ -76,6 +76,13 @@ export type UseBubbleShapeParams = {
    */
   velocityX: SharedValue<number>;
   velocityY: SharedValue<number>;
+  /**
+   * Master wobble visibility multiplier for mode 3/4 (see `bubbleModes.ts` →
+   * "Wobble visibility"): 0 suppresses the wobble entirely, 1 is the tuned
+   * default, 2 doubles it. Owned by the caller (`LiquidBubbles.tsx`) so a
+   * live slider can drive it without a React re-render.
+   */
+  wobble: SharedValue<number>;
 };
 
 export type UseBubbleShapeReturn = {
@@ -98,6 +105,7 @@ export function useBubbleShape({
   isActive,
   velocityX,
   velocityY,
+  wobble,
 }: UseBubbleShapeParams): UseBubbleShapeReturn {
   const paramBuffer = useSharedValue<number[]>([]);
   const bboxX = useSharedValue<number>(0);
@@ -146,6 +154,7 @@ export function useBubbleShape({
       cx,
       cy,
       R,
+      wobble.value,
       isActive.value,
       velocityX.value,
       velocityY.value,

@@ -8,6 +8,7 @@ import {
   A4_IDLE,
   A4_REST,
   A_MAX,
+  IDLE_FREQ_3,
   PARAM_FLOATS,
   TAU_W,
   W_FLOOR_2,
@@ -61,7 +62,7 @@ describe("stepBubbleModes — amplitude clamp", () => {
     const spikeDx = 1e5 * dt;
     let cx = spikeDx;
     const cy = 0;
-    stepBubbleModes(state, cx, cy, 40, 1, 0, 0, dtMs, buf, bbox);
+    stepBubbleModes(state, cx, cy, 40, 1, 1, 0, 0, dtMs, buf, bbox);
     expect(Math.abs(state.a2)).toBeLessThanOrEqual(A_MAX + 1e-9);
     expect(Math.abs(state.a3)).toBeLessThanOrEqual(A_MAX + 1e-9);
     expect(Math.abs(state.a4)).toBeLessThanOrEqual(A_MAX + 1e-9);
@@ -70,7 +71,7 @@ describe("stepBubbleModes — amplitude clamp", () => {
     // hold every frame, not just the first.
     for (let f = 0; f < 5; f++) {
       cx += spikeDx;
-      stepBubbleModes(state, cx, cy, 40, 1, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, cy, 40, 1, 1, 0, 0, dtMs, buf, bbox);
       expect(Math.abs(state.a2)).toBeLessThanOrEqual(A_MAX + 1e-9);
       expect(Math.abs(state.a3)).toBeLessThanOrEqual(A_MAX + 1e-9);
       expect(Math.abs(state.a4)).toBeLessThanOrEqual(A_MAX + 1e-9);
@@ -92,7 +93,7 @@ describe("stepBubbleModes — amplitude clamp", () => {
     for (let f = 0; f < 8; f++) {
       cx += step;
       cy += step;
-      stepBubbleModes(state, cx, cy, 40, 1, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, cy, 40, 1, 1, 0, 0, dtMs, buf, bbox);
       expect(Math.hypot(state.c2, state.s2)).toBeLessThanOrEqual(A_MAX + 1e-9);
     }
   });
@@ -120,7 +121,7 @@ describe("stepBubbleModes — release settling", () => {
     for (let f = 0; f < dragFrames; f++) {
       cx += vx * dt;
       cy += vy * dt;
-      stepBubbleModes(state, cx, cy, R, 1, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, cy, R, 1, 1, 0, 0, dtMs, buf, bbox);
     }
 
     const phi2AtRelease = state.phi2;
@@ -137,7 +138,7 @@ describe("stepBubbleModes — release settling", () => {
     // genuinely "at rest".
     const restFrames = 100; // 100 * 15ms = 1.5s
     for (let f = 0; f < restFrames; f++) {
-      stepBubbleModes(state, cx, cy, R, 0, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, cy, R, 1, 0, 0, 0, dtMs, buf, bbox);
     }
 
     expect(Math.abs(state.a2 - A2_REST)).toBeLessThanOrEqual(0.005);
@@ -160,7 +161,7 @@ describe("stepBubbleModes — release settling", () => {
     // pins down W_FLOOR_2 harder than the old 2-decimal total did.
     const phi2AfterRingOut = state.phi2;
     for (let f = 0; f < restFrames; f++) {
-      stepBubbleModes(state, cx, cy, R, 0, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, cy, R, 1, 0, 0, 0, dtMs, buf, bbox);
     }
     expect(state.phi2 - phi2AfterRingOut).toBeCloseTo(W_FLOOR_2 * 1.5, 3);
 
@@ -187,7 +188,7 @@ describe("stepBubbleModes — mode 2 direction changes", () => {
     for (let f = 0; f < frames; f++) {
       from.cx += Math.cos(angle) * speed * dt;
       from.cy += Math.sin(angle) * speed * dt;
-      stepBubbleModes(state, from.cx, from.cy, 40, 1, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, from.cx, from.cy, 40, 1, 1, 0, 0, dtMs, buf, bbox);
     }
   };
 
@@ -229,7 +230,7 @@ describe("stepBubbleModes — mode 2 direction changes", () => {
     let minA2 = Infinity;
     for (let f = 0; f < 20; f++) {
       pos.cy += 900 * dt;
-      stepBubbleModes(state, pos.cx, pos.cy, 40, 1, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, pos.cx, pos.cy, 40, 1, 1, 0, 0, dtMs, buf, bbox);
       minA2 = Math.min(minA2, state.a2);
     }
 
@@ -250,12 +251,12 @@ describe("stepBubbleModes — release kick (amplitude)", () => {
     const dtMs = 1000 / 60;
 
     const withFling: ModeState = createModeState(0, 0);
-    stepBubbleModes(withFling, 0, 0, 40, 1, 0, 0, dtMs, buf, bbox); // active
-    stepBubbleModes(withFling, 0, 0, 40, 0, 2500, 0, dtMs, buf, bbox); // release, fling (2500, 0)
+    stepBubbleModes(withFling, 0, 0, 40, 1, 1, 0, 0, dtMs, buf, bbox); // active
+    stepBubbleModes(withFling, 0, 0, 40, 1, 0, 2500, 0, dtMs, buf, bbox); // release, fling (2500, 0)
 
     const noFling: ModeState = createModeState(0, 0);
-    stepBubbleModes(noFling, 0, 0, 40, 1, 0, 0, dtMs, buf, bbox);
-    stepBubbleModes(noFling, 0, 0, 40, 0, 0, 0, dtMs, buf, bbox);
+    stepBubbleModes(noFling, 0, 0, 40, 1, 1, 0, 0, dtMs, buf, bbox);
+    stepBubbleModes(noFling, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox);
 
     // A fling must impart strictly more mode-3 velocity than a dead release.
     expect(withFling.v3).toBeGreaterThan(noFling.v3);
@@ -282,7 +283,7 @@ describe("stepBubbleModes — idle rest pose", () => {
       A2_REST + (A3_REST - A3_IDLE) + (A4_REST - A4_IDLE);
 
     for (let f = 0; f < frames; f++) {
-      stepBubbleModes(state, 0, 0, 40, 0, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox);
       const sum = Math.abs(state.a2) + Math.abs(state.a3) + Math.abs(state.a4);
       expect(sum).toBeGreaterThan(restFloor * 0.9);
     }
@@ -307,7 +308,7 @@ describe("stepBubbleModes — traveling waves at rest", () => {
     const axisStart = Math.atan2(state.s2, state.c2);
 
     for (let f = 0; f < frames; f++) {
-      stepBubbleModes(state, 0, 0, 40, 0, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox);
     }
 
     const elapsed = frames * dt;
@@ -340,14 +341,14 @@ describe("stepBubbleModes — traveling wave release kick", () => {
     let cx = 0;
     for (let f = 0; f < 5; f++) {
       cx += dragSpeed * (dtMs / 1000);
-      stepBubbleModes(state, cx, 0, 40, 1, dragSpeed, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, 0, 40, 1, 1, dragSpeed, 0, dtMs, buf, bbox);
     }
 
     // Release with a fling velocity turned by `releaseAngle` from the drag
     // direction — same magnitude, so |turn| = |sin(releaseAngle)|.
     const relVx = dragSpeed * Math.cos(releaseAngle);
     const relVy = dragSpeed * Math.sin(releaseAngle);
-    stepBubbleModes(state, cx, 0, 40, 0, relVx, relVy, dtMs, buf, bbox);
+    stepBubbleModes(state, cx, 0, 40, 1, 0, relVx, relVy, dtMs, buf, bbox);
 
     return state;
   };
@@ -364,7 +365,7 @@ describe("stepBubbleModes — traveling wave release kick", () => {
     const dt = dtMs / 1000;
     const frames = Math.round((TAU_W * 3) / dt);
     for (let f = 0; f < frames; f++) {
-      stepBubbleModes(state, 0, 0, 40, 0, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox);
     }
     const excessNow = state.w3 - W_FLOOR_3;
     expect(Math.abs(excessNow)).toBeLessThan(Math.abs(excess0) * 0.05);
@@ -418,17 +419,104 @@ describe("stepBubbleModes — traveling wave release kick", () => {
 
     for (let f = 0; f < 5; f++) {
       cx += dragSpeed * dt;
-      stepBubbleModes(state, cx, 0, 40, 1, dragSpeed, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, 0, 40, 1, 1, dragSpeed, 0, dtMs, buf, bbox);
       check();
     }
     // Release with a 90 degree turn — the largest kick this scenario applies.
-    stepBubbleModes(state, cx, 0, 40, 0, 0, dragSpeed, dtMs, buf, bbox);
+    stepBubbleModes(state, cx, 0, 40, 1, 0, 0, dragSpeed, dtMs, buf, bbox);
     check();
 
     const decayFrames = Math.round((TAU_W * 3) / dt);
     for (let f = 0; f < decayFrames; f++) {
-      stepBubbleModes(state, cx, 0, 40, 0, 0, 0, dtMs, buf, bbox);
+      stepBubbleModes(state, cx, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox);
       check();
     }
+  });
+});
+
+// ============================================================================
+// Wobble visibility master knob
+// ============================================================================
+
+describe("stepBubbleModes — wobble visibility", () => {
+  /** The radius the mode 3/4 amplitudes were tuned at — `LiquidBubbles`' `restRadius`. */
+  const REST_R = 40;
+
+  /**
+   * Settle the mode-3 amplitude at rest (no drag, no kicks — isolates the
+   * idle-breathing target) for a fixed number of frames at a fixed dt, so
+   * `state.t` (and therefore `sin(state.t * IDLE_FREQ_3)`) lands on the exact
+   * same value across calls with different `wobble`/`R` — only the spring's
+   * settled AMPLITUDE differs, not the phase being compared.
+   */
+  const settledA3 = (wobble: number, R: number, frames = 300): number => {
+    const state = createModeState(0, 0);
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    for (let f = 0; f < frames; f++) {
+      stepBubbleModes(state, 0, 0, R, wobble, 0, 0, 0, dtMs, buf, bbox);
+    }
+    return state.a3;
+  };
+
+  it("wobble = 1 at R = REST_R is a no-op: matches the un-scaled idle target", () => {
+    const state = createModeState(0, 0);
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    const dt = dtMs / 1000;
+    const frames = 300;
+    for (let f = 0; f < frames; f++) {
+      stepBubbleModes(state, 0, 0, REST_R, 1, 0, 0, 0, dtMs, buf, bbox);
+    }
+    const t = frames * dt;
+    const expectedTarget = A3_REST + A3_IDLE * Math.sin(t * IDLE_FREQ_3);
+    // The spring lags its target by a small steady-state phase error, same as
+    // every other settling test in this file — not an exact match.
+    expect(state.a3).toBeCloseTo(expectedTarget, 1);
+  });
+
+  it("wobble = 0 drives a3/a4 to ~0 after settling", () => {
+    const state = createModeState(0, 0);
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    for (let f = 0; f < 300; f++) {
+      stepBubbleModes(state, 0, 0, REST_R, 0, 0, 0, 0, dtMs, buf, bbox);
+    }
+    expect(Math.abs(state.a3)).toBeLessThan(1e-3);
+    expect(Math.abs(state.a4)).toBeLessThan(1e-3);
+  });
+
+  it("doubling wobble roughly doubles the settled a3 amplitude", () => {
+    const a3AtOne = settledA3(1, REST_R);
+    const a3AtTwo = settledA3(2, REST_R);
+    expect(a3AtTwo).toBeCloseTo(2 * a3AtOne, 2);
+  });
+
+  it("is proportional, not radius-compensated: the settled a3 FRACTION is the same at every R", () => {
+    // `a3` is a fraction of R, and `vis` is applied flat — so the fraction is
+    // radius-independent and the wobble in POINTS (a3 * R) grows with the
+    // bubble. This is the deliberate choice: see `bubbleModes.ts` → "Wobble
+    // visibility" for why the radius-compensated variant was dropped.
+    const a3AtRest = settledA3(1, REST_R);
+    const a3AtDoubleR = settledA3(1, 2 * REST_R);
+    const a3AtMaxR = settledA3(1, 140);
+
+    expect(a3AtDoubleR).toBeCloseTo(a3AtRest, 6);
+    expect(a3AtMaxR).toBeCloseTo(a3AtRest, 6);
+
+    // The visible excursion in POINTS therefore scales with R: 140/40 = 3.5x
+    // at the max pinch radius.
+    expect(a3AtMaxR * 140).toBeCloseTo((a3AtRest * REST_R * 140) / REST_R, 6);
+  });
+
+  it("stays inside A_MAX at the top of the slider range", () => {
+    // The slider goes to 3 and `A_MAX` is the only ceiling left now that the
+    // compensation clamp is gone — check the top of the range is still clear
+    // of it rather than clipping the idle breathing into a flat hold.
+    const a3AtMax = settledA3(3, REST_R);
+    expect(Math.abs(a3AtMax)).toBeLessThan(A_MAX);
   });
 });

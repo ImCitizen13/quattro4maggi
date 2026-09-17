@@ -234,12 +234,18 @@ export function resetModeState(state: ModeState, cx: number, cy: number): void {
  * and, since phase 9B, the traveling-wave turn): the anchor tracks the
  * finger directly, so by the release frame the anchor has already stopped
  * moving and the position delta is ~0 — see the kick below.
+ *
+ * `wobble` is the live master visibility knob over the mode 3/4 wobble (see
+ * `bubbleModes.ts` → "Wobble visibility"): 0 suppresses it, 1 reproduces the
+ * tuning above exactly, 2 doubles it. It is applied FLAT — the amplitudes stay
+ * fractions of `R`, so the wobble grows with the bubble.
  */
 export function stepBubbleModes(
   state: ModeState,
   cx: number,
   cy: number,
   R: number,
+  wobble: number,
   isActive: number,
   velX: number,
   velY: number,
@@ -250,6 +256,13 @@ export function stepBubbleModes(
   'worklet';
   const clampedMs = Math.min(Math.max(dtMs, DT_MIN_MS), DT_MAX_MS);
   const dt = clampedMs / 1000;
+
+  // Wobble visibility, applied flat (see `bubbleModes.ts` → "Wobble
+  // visibility" for why this is NOT divided by R). The amplitudes stay
+  // fractions of R, so a bigger bubble wobbles proportionally more — which is
+  // the end of the range where the lobes have room to read at all. `A_MAX`
+  // remains the only ceiling.
+  const vis = wobble;
 
   // Motion direction + speed of the anchor center, from the previous step's
   // center. Direction is dt-independent (atan2 of the raw delta), only the
@@ -299,8 +312,10 @@ export function stepBubbleModes(
   // would silently kill the kick.
   if (state.lastIsActive === 1 && isActive === 0) {
     const flingSpeed = Math.hypot(velX, velY);
-    state.v3 += KICK * flingSpeed;
-    state.v4 -= KICK * flingSpeed * KICK_V4_SCALE;
+    // Scaled by `vis` too: without it, a bigger rest wobble (wobble > 1)
+    // would leave the release kick looking comparatively flat next to it.
+    state.v3 += KICK * flingSpeed * vis;
+    state.v4 -= KICK * flingSpeed * KICK_V4_SCALE * vis;
 
     // turn = cross(prevVel, vel) / (|prevVel|·|vel|), −1..1, sign = handedness
     // of the curve between the last two non-zero gesture velocity samples.
@@ -328,8 +343,14 @@ export function stepBubbleModes(
   }
 
   // ---- modes 3/4: idle breathing targets around their rest floors ----
-  const target3 = A3_REST + A3_IDLE * Math.sin(state.t * IDLE_FREQ_3);
-  const target4 = A4_REST + A4_IDLE * Math.sin(state.t * IDLE_FREQ_4 + IDLE_PHASE_4);
+  // Scaling the spring TARGET (not the spring output) is intentional and is
+  // what keeps the tuned character intact: the spring is linear, so scaling
+  // its target scales the settled amplitude by the same factor while leaving
+  // overshoot percentage, ring frequency and settle time all UNCHANGED — only
+  // the size of the wobble changes, not its feel.
+  const target3 = (A3_REST + A3_IDLE * Math.sin(state.t * IDLE_FREQ_3)) * vis;
+  const target4 =
+    (A4_REST + A4_IDLE * Math.sin(state.t * IDLE_FREQ_4 + IDLE_PHASE_4)) * vis;
 
   // ---- spring-integrate each amplitude, inline (see module doc) ----
   // Mode 2: both vector components share one spring (K2/C2), so the pair

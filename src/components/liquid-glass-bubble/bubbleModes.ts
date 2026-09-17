@@ -310,6 +310,38 @@ export const TURN_EPS = 0.05;
 export const W_MAX = 3;
 
 // ============================================================================
+// Wobble visibility — a live master knob over the mode 3/4 wobble
+// ============================================================================
+//
+// Every mode-3/4 amplitude above is a FRACTION of R (`a3`/`a4` multiply the
+// radius in the shader), so the wobble is PROPORTIONAL: `a3 = A3_REST = 0.022`
+// is ±0.9 pt at the rest radius (R=40) and ±3.1 pt at the max pinch radius
+// (R=140). The knob below is a bare multiplier over that — it does NOT
+// compensate for R.
+//
+// A radius-compensated variant (`vis = wobble * WOBBLE_REF_R / R`) was tried
+// first, on the theory that a real droplet's surface ripples do not grow just
+// because the droplet does. It was wrong for this look: it divided the wobble
+// by 3.4x at the max radius, and a big bubble is exactly where there is room
+// for the lobes to read at all. Proportional means one number is tuned for one
+// radius and accepted at the others — a real tradeoff, but the large-radius
+// end is the one worth having.
+
+/**
+ * Master wobble visibility multiplier: 0 = perfectly smooth sphere (mode 3/4
+ * contribution fully suppressed), 1 = the current tuning as authored above,
+ * 2 = double. Applied as `vis = wobble`, flat — see `stepBubbleModes`.
+ *
+ * The only ceiling is `A_MAX` (0.15), which the amplitudes hit at roughly
+ * `wobble = 4` on mode 3; past that the clamp flattens the idle breathing
+ * into a hold.
+ *
+ * TUNE: overall wobble presence. 0 still glass · 2 ceiling before it fights
+ * the "clear sharp center" look.
+ */
+export const WOBBLE_DEFAULT = 1;
+
+// ============================================================================
 // Film drift
 // ============================================================================
 

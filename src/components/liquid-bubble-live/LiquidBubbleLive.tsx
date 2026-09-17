@@ -65,18 +65,23 @@ import {
   BackdropFilter,
   Canvas,
   Fill,
+  ImageShader,
+  Image,
   RuntimeShader,
   Shader,
   rect,
+  useImage,
+  Circle,
 } from "@shopify/react-native-skia";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useDerivedValue } from "react-native-reanimated";
+import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 
-import { FILM, PARAM_FLOATS } from "../liquid-glass-bubble/bubbleModes";
+import { FILM, PARAM_FLOATS, WOBBLE_DEFAULT } from "../liquid-glass-bubble/bubbleModes";
 import {
   useBubblePanGesture,
   useBubblePinchGesture,
@@ -104,6 +109,9 @@ import { liveBubbleEffect } from "./shaders";
 
 /** Mount the on-screen FPS readout. Real numbers need a release build on device. */
 const SHOW_FPS_OVERLAY = true;
+
+/** Mount the live "Wobble" tuning slider over the mode 3/4 wobble master knob. */
+const SHOW_TUNING_PANEL = true;
 
 /**
  * `iColor`: rgb = tint hue, **a = tint WEIGHT, not opacity**. Same semantics
@@ -169,6 +177,10 @@ export function LiquidBubbleLive({
   // Physics (imported wholesale — the mode state is renderer-independent)
   // ==========================================================================
 
+  // Master wobble visibility knob (see `bubbleModes.ts` → "Wobble
+  // visibility"), live-tunable from the slider below with no React re-render.
+  const wobble = useSharedValue(WOBBLE_DEFAULT);
+
   const { paramBuffer, bboxX, bboxY, bboxW, bboxH } = useBubbleShape({
     bubbleX,
     bubbleY,
@@ -176,6 +188,7 @@ export function LiquidBubbleLive({
     isActive,
     velocityX,
     velocityY,
+    wobble,
   });
 
   // Only forwards `paramBuffer.value` and constants — no spread, no math, no
@@ -223,14 +236,37 @@ export function LiquidBubbleLive({
     );
   });
 
+  const imagePath = require("../../../assets/liquid-glass-bubble/refract-image.png")
+  const image = useImage(imagePath)
+  // 1. Wait for the image to resolve
+   if (!image) return null;
+  // 2. Read the image's raw dimensions
+  const imageSize = width * 0.9//image.width();
+
+  // 3. Center it on the same point the bubble rests at
+  const imageX = centerX - imageSize / 2;
+  const imageY = centerY - imageSize / 2;
+
   return (
     <View style={styles.container}>
       <GestureDetector gesture={compositeGesture}>
         <Canvas style={[styles.canvas, { width, height }]}>
           {/* Drawn first — this IS the backdrop the bubble samples. */}
-          <Fill>
-            <Shader source={backgroundEffect} uniforms={backgroundUniforms} />
-          </Fill>
+
+          <Fill color="#ffffff" />
+          {image &&
+            // <Circle r={imgWidth} cx={x}cy={y} color={"red"} />}
+          <Image
+            image={image}
+            fit="cover"
+            // rect={imageRect}
+            width={imageSize}
+            height={imageSize}
+            x={imageX}
+            y={imageY}
+            // tx="clamp"
+            // ty="clamp"
+          /> }
 
           <BackdropFilter
             clip={clipRect}
@@ -241,6 +277,12 @@ export function LiquidBubbleLive({
         </Canvas>
       </GestureDetector>
       {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
+      {/* After the GestureDetector, not inside it, so the bubble's pan can't steal the slider's touches. */}
+      {SHOW_TUNING_PANEL && (
+        <View style={styles.panel} pointerEvents="box-none">
+          <TuningSlider label="Wobble" value={wobble} min={0} max={3} decimals={2} />
+        </View>
+      )}
     </View>
   );
 }
@@ -254,9 +296,21 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#ffffff",
   },
   canvas: {
+    backgroundColor: "#ffffff",
+  },
+  panel: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: 40,
+    alignItems: "center",
     backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
   },
 });

@@ -29,6 +29,13 @@
  * 5. A `<Rect>` sized from `bboxX/Y/W/H` is the ONLY thing shaded — never a
  *    full-screen `<Fill>`. `BBOX_PAD` is AA feather only (2 pt): refraction
  *    moves which texel is sampled, not where alpha is non-zero.
+ * 6. `wobble` (a `SharedValue<number>`, `useSharedValue(WOBBLE_DEFAULT)`) is
+ *    passed straight into `useBubbleShape`, which forwards it into
+ *    `stepBubbleModes` every frame — a master multiplier over the mode 3/4
+ *    wobble (0 = smooth sphere, 1 = tuned default, 2 = double; see
+ *    `bubbleModes.ts` → "Wobble visibility"). `SHOW_TUNING_PANEL` mounts a
+ *    `TuningSlider` (reused from `liquid-metal`, not forked) that writes to
+ *    it directly on the UI thread, so dragging it never re-renders React.
  *
  * KEY FEATURES:
  * - The image arrives as a child `<ImageShader>` feeding `uniform shader
@@ -40,6 +47,10 @@
  *   `iRefract` pt OUTSIDE the image rect, and decal would return transparent
  *   there and punch a hole in the rim.
  * - `SHOW_FPS_OVERLAY` mounts `FpsOverlay` for on-device perf sanity checks.
+ * - The tuning panel is rendered AFTER (i.e. above, in z-order) the bubble's
+ *   `GestureDetector`, not inside it — a Pan gesture inside a sibling that
+ *   sits under another Pan gesture in the same tree would have its touches
+ *   stolen by the bubble's own pan.
  */
 
 import {
@@ -53,13 +64,14 @@ import {
 import React, { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useDerivedValue } from "react-native-reanimated";
+import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 
 import { image128Array } from "../../../assets/profile-images/images.generated";
 
-import { FILM, PARAM_FLOATS, REFRACT } from "./bubbleModes";
+import { FILM, PARAM_FLOATS, REFRACT, WOBBLE_DEFAULT } from "./bubbleModes";
 import {
   useBubblePanGesture,
   useBubblePinchGesture,
@@ -73,6 +85,9 @@ import { bubbleEffect } from "./shaders";
 
 /** Mount the on-screen FPS readout. Real numbers need a release build on device. */
 const SHOW_FPS_OVERLAY = true;
+
+/** Mount the live "Wobble" tuning slider over the mode 3/4 wobble master knob. */
+const SHOW_TUNING_PANEL = true;
 
 /**
  * `iColor`: rgb = tint hue, **a = tint WEIGHT, not opacity**.
@@ -159,6 +174,10 @@ export function LiquidBubbles({
   // Physics
   // ============================================================================
 
+  // Master wobble visibility knob (see `bubbleModes.ts` → "Wobble
+  // visibility"), live-tunable from the slider below with no React re-render.
+  const wobble = useSharedValue(WOBBLE_DEFAULT);
+
   const { paramBuffer, bboxX, bboxY, bboxW, bboxH } = useBubbleShape({
     bubbleX,
     bubbleY,
@@ -166,6 +185,7 @@ export function LiquidBubbles({
     isActive,
     velocityX,
     velocityY,
+    wobble,
   });
 
   // Only forwards paramBuffer.value and the two constant optics scalars — no
@@ -225,6 +245,11 @@ export function LiquidBubbles({
         </Canvas>
       </GestureDetector>
       {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
+      {SHOW_TUNING_PANEL && (
+        <View style={styles.panel} pointerEvents="box-none">
+          <TuningSlider label="Wobble" value={wobble} min={0} max={3} decimals={2} />
+        </View>
+      )}
     </View>
   );
 }
@@ -242,5 +267,17 @@ const styles = StyleSheet.create({
   },
   canvas: {
     backgroundColor: "#fff",
+  },
+  panel: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: 40,
+    alignItems: "center",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
   },
 });

@@ -24,6 +24,7 @@ export default function RootLayout() {
     "LobsterTwo-Regular": require("@/assets/fonts/LobsterTwo-Regular.ttf"),
     LexendDeca: require("@/assets/fonts/LexendDeca-VariableFont_wght.ttf"),
     Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
+    BoldonseRegular: require("@/assets/fonts/Boldonse-Regular.ttf"),
   });
 
   const [isAnimationDone, setIsAnimationDone] = useState(false);
