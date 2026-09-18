@@ -5,6 +5,7 @@
 import { SPRING_FOLLOW_PROPS } from "@/components/wabi-and-more/constants";
 import { SPRING_BOUNCE_ANIMATION, SPRING_CONFIG } from "@/lib/animations/constants";
 import { useMemo } from "react";
+import { MULT_MIN } from "../bubbleModes";
 import {
   Gesture,
   GestureStateChangeEvent,
@@ -25,6 +26,13 @@ import {
 type UseBubblPanGestureParams = {
   centerX: number;
   centerY: number;
+  /**
+   * Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble
+   * inertia and strength"), scaling the follow spring's `mass` — a heavier
+   * bubble lags the finger more. Optional so existing callers keep today's
+   * mass unchanged.
+   */
+  inertia?: SharedValue<number>;
 };
 
 type UseBubblPanGestureReturn = {
@@ -60,6 +68,7 @@ type UseBubblPanGestureReturn = {
 export function useBubblePanGesture({
   centerX,
   centerY,
+  inertia,
 }: UseBubblPanGestureParams): UseBubblPanGestureReturn {
   const bubbleX = useSharedValue<number>(centerX);
   const bubbleY = useSharedValue<number>(centerY);
@@ -80,8 +89,17 @@ export function useBubblePanGesture({
 
   const onUpdate = (e: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
     "worklet";
-    bubbleX.value = withSpring(e.x, SPRING_FOLLOW_PROPS);
-    bubbleY.value = withSpring(e.y, SPRING_FOLLOW_PROPS);
+    // One config object per gesture event (not per physics frame), reused for
+    // both X and Y — a heavier bubble (inertia > 1) gets a heavier follow
+    // spring, so it lags the finger more. This allocates a small object per
+    // event, off the per-frame physics path; `withSpring` itself allocates
+    // per call anyway.
+    const cfg = {
+      ...SPRING_FOLLOW_PROPS,
+      mass: SPRING_FOLLOW_PROPS.mass * (inertia ? Math.max(inertia.value, MULT_MIN) : 1),
+    };
+    bubbleX.value = withSpring(e.x, cfg);
+    bubbleY.value = withSpring(e.y, cfg);
     targetX.value = e.x;
     targetY.value = e.y;
     velocityX.value = e.velocityX;

@@ -22,6 +22,8 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 | Tab | Slider | What it does |
 |---|---|---|
 | Shape | Wobble | How much the edge wobbles |
+| | Inertia | How heavy the bubble feels — lags more, rings longer, bigger release kick, stretches further |
+| | Strength | How stiff the surface is — higher snaps back faster, lower wobbles longer |
 | Refraction | Refract | How far the rim bends the background |
 | | Lens falloff | How deep the bending reaches from the rim |
 | | Lens | + magnify, − pincushion |
@@ -319,6 +321,15 @@ both learned the hard way in phase 3/4 (see
 Callers own `state`, `outBuf`, and `outBbox`; this function only writes
 into them. The `create*`/`reset*` helpers allocate (or mutate in place)
 once at init/remount, never per frame.
+
+Per-bubble inertia and strength (see `bubbleModes.ts` → "Per-bubble inertia
+and strength") are two TRAILING optional params, `inertia = 1, strength = 1`,
+appended after `outBbox` so every pre-existing call site (all 21 in
+`bubbleModeMath.test.ts`) keeps working untouched. Inside, both are guarded by
+`MULT_MIN` and combined into one `springScale = strength / inertia` computed
+once per step, which multiplies every mode spring's K and C (K2/C2, K3/C3,
+K4/C4); `inertia` alone additionally scales the release/traveling-wave kicks
+and the mode-2 stretch cap (`A2_MAX`, capped at `A2_MAX_CEIL`).
 
 ### hooks/useBubbleShape.ts
 

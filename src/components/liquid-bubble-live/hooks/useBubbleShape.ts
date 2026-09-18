@@ -60,6 +60,18 @@ export type UseBubbleShapeParams = {
    * live slider can drive it without a React re-render.
    */
   wobble: SharedValue<number>;
+  /**
+   * Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble
+   * inertia and strength"): 1 is today's feel, > 1 is heavier (rings out
+   * longer, bigger release kick, stretches further), < 1 is lighter.
+   */
+  inertia: SharedValue<number>;
+  /**
+   * Per-bubble strength multiplier (see `bubbleModes.ts` → "Per-bubble
+   * inertia and strength"): 1 is today's feel, > 1 is stiffer (snaps back
+   * faster), < 1 wobbles longer.
+   */
+  strength: SharedValue<number>;
 };
 
 export type UseBubbleShapeReturn = {
@@ -83,6 +95,8 @@ export function useBubbleShape({
   velocityX,
   velocityY,
   wobble,
+  inertia,
+  strength,
 }: UseBubbleShapeParams): UseBubbleShapeReturn {
   const paramBuffer = useSharedValue<number[]>([]);
   const bboxX = useSharedValue<number>(0);
@@ -138,6 +152,8 @@ export function useBubbleShape({
       dtMs,
       outBuf,
       ui.bbox,
+      inertia.value,
+      strength.value,
     );
     ui.useA = !ui.useA;
 

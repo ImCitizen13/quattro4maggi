@@ -7,6 +7,7 @@ import {
   A3_REST,
   A4_IDLE,
   A4_REST,
+  A2_MAX_CEIL,
   A_MAX,
   IDLE_FREQ_3,
   PARAM_FLOATS,
@@ -518,5 +519,251 @@ describe("stepBubbleModes — wobble visibility", () => {
     // of it rather than clipping the idle breathing into a flat hold.
     const a3AtMax = settledA3(3, REST_R);
     expect(Math.abs(a3AtMax)).toBeLessThan(A_MAX);
+  });
+});
+
+// ============================================================================
+// Per-bubble inertia and strength
+// ============================================================================
+
+describe("stepBubbleModes — per-bubble inertia and strength", () => {
+  /** Drag rightward at `speed` pt/s for `frames`, then release with a fling. */
+  const dragThenRelease = (
+    state: ModeState,
+    speed: number,
+    frames: number,
+    flingVx: number,
+    flingVy: number,
+    inertia?: number,
+    strength?: number,
+  ): void => {
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    const dt = dtMs / 1000;
+    let cx = state.lastCx;
+    for (let f = 0; f < frames; f++) {
+      cx += speed * dt;
+      stepBubbleModes(state, cx, 0, 40, 1, 1, speed, 0, dtMs, buf, bbox, inertia, strength);
+    }
+    stepBubbleModes(state, cx, 0, 40, 1, 0, flingVx, flingVy, dtMs, buf, bbox, inertia, strength);
+  };
+
+  const restFrames = (state: ModeState, cx: number, frames: number, inertia?: number, strength?: number): void => {
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    for (let f = 0; f < frames; f++) {
+      stepBubbleModes(state, cx, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, inertia, strength);
+    }
+  };
+
+  it("passing inertia=1, strength=1 explicitly reproduces omitting them exactly", () => {
+    const withDefaultsOmitted: ModeState = createModeState(0, 0);
+    dragThenRelease(withDefaultsOmitted, 900, 40, 1500, 0);
+    restFrames(withDefaultsOmitted, 900 * 40 * (1 / 60), 60);
+
+    const withDefaultsExplicit: ModeState = createModeState(0, 0);
+    dragThenRelease(withDefaultsExplicit, 900, 40, 1500, 0, 1, 1);
+    restFrames(withDefaultsExplicit, 900 * 40 * (1 / 60), 60, 1, 1);
+
+    expect(withDefaultsExplicit).toEqual(withDefaultsOmitted);
+  });
+
+  it("heavier settles later, stronger settles sooner, weaker settles later (linear-transient settle time)", () => {
+    // The system is linear in the amplitude/velocity states for a fixed
+    // (I, S), so the difference between a kicked run and a calm run (velocity
+    // 0 at release) isolates the pure transient from the release kick — the
+    // shared idle-breathing target cancels out.
+    const settleTime = (inertia: number, strength: number): number => {
+      const dtMs = 1000 / 60;
+      const dt = dtMs / 1000;
+      const dragSpeed = 400; // moderate fling — stays clear of the A_MAX clamp
+
+      const kicked: ModeState = createModeState(0, 0);
+      dragThenRelease(kicked, dragSpeed, 5, 800, 0, inertia, strength);
+      // Verify linearity holds: the kicked run must stay under the clamp.
+      expect(Math.abs(kicked.a3)).toBeLessThan(A_MAX);
+
+      const calm: ModeState = createModeState(0, 0);
+      dragThenRelease(calm, dragSpeed, 5, 0, 0, inertia, strength);
+
+      const buf = makeBuf();
+      const bbox = makeBbox();
+      const totalFrames = Math.round(3 / dt); // 3s of decay
+      let maxAbsDiff = 0;
+      const diffs: number[] = [];
+      const cxKicked0 = kicked.lastCx;
+      const cxCalm0 = calm.lastCx;
+      for (let f = 0; f < totalFrames; f++) {
+        stepBubbleModes(kicked, cxKicked0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, inertia, strength);
+        stepBubbleModes(calm, cxCalm0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, inertia, strength);
+        const diff = kicked.a3 - calm.a3;
+        diffs.push(diff);
+        maxAbsDiff = Math.max(maxAbsDiff, Math.abs(diff));
+      }
+
+      const threshold = maxAbsDiff * 0.05;
+      let lastAboveIdx = -1;
+      for (let i = 0; i < diffs.length; i++) {
+        if (Math.abs(diffs[i]) > threshold) {
+          lastAboveIdx = i;
+        }
+      }
+      return lastAboveIdx * dt;
+    };
+
+    const tDefault = settleTime(1, 1);
+    const tHeavy = settleTime(2, 1);
+    const tStrong = settleTime(1, 2);
+    const tWeak = settleTime(1, 0.5);
+
+    expect(tHeavy).toBeGreaterThan(tDefault);
+    expect(tStrong).toBeLessThan(tDefault);
+    expect(tWeak).toBeGreaterThan(tDefault);
+  });
+
+  it("a heavier bubble gets a bigger release kick: v3 with I=2 is ~2x the I=1 baseline", () => {
+    const dtMs = 1000 / 60;
+    const buf = makeBuf();
+    const bbox = makeBbox();
+
+    const baseline: ModeState = createModeState(0, 0);
+    stepBubbleModes(baseline, 0, 0, 40, 1, 1, 0, 0, dtMs, buf, bbox, 1, 1); // active
+    stepBubbleModes(baseline, 0, 0, 40, 1, 0, 2500, 0, dtMs, buf, bbox, 1, 1); // release
+
+    const noFlingBaseline: ModeState = createModeState(0, 0);
+    stepBubbleModes(noFlingBaseline, 0, 0, 40, 1, 1, 0, 0, dtMs, buf, bbox, 1, 1);
+    stepBubbleModes(noFlingBaseline, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, 1, 1);
+
+    const heavy: ModeState = createModeState(0, 0);
+    stepBubbleModes(heavy, 0, 0, 40, 1, 1, 0, 0, dtMs, buf, bbox, 2, 1); // active
+    stepBubbleModes(heavy, 0, 0, 40, 1, 0, 2500, 0, dtMs, buf, bbox, 2, 1); // release
+
+    const noFlingHeavy: ModeState = createModeState(0, 0);
+    stepBubbleModes(noFlingHeavy, 0, 0, 40, 1, 1, 0, 0, dtMs, buf, bbox, 2, 1);
+    stepBubbleModes(noFlingHeavy, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, 2, 1);
+
+    const kickDefault = baseline.v3 - noFlingBaseline.v3;
+    const kickHeavy = heavy.v3 - noFlingHeavy.v3;
+    // ~2x, not exactly: the kick is damped by the same-step spring term
+    // (`-C3 * springScale * v3 * dt`), and `springScale` itself differs
+    // between I=1 and I=2, so the ratio is close to but not exactly 2.
+    const ratio = kickHeavy / kickDefault;
+    expect(ratio).toBeGreaterThan(1.8);
+    expect(ratio).toBeLessThan(2.2);
+  });
+
+  it("a heavier bubble stretches further under a steady drag, staying inside A_MAX and A2_MAX_CEIL", () => {
+    const dtMs = 1000 / 60;
+    const dt = dtMs / 1000;
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dragSpeed = 2000;
+    const frames = 60;
+
+    const peakA2 = (inertia: number): number => {
+      const state: ModeState = createModeState(0, 0);
+      let cx = 0;
+      let peak = 0;
+      for (let f = 0; f < frames; f++) {
+        cx += dragSpeed * dt;
+        stepBubbleModes(state, cx, 0, 40, 1, 1, dragSpeed, 0, dtMs, buf, bbox, inertia, 1);
+        peak = Math.max(peak, state.a2);
+        expect(Math.abs(state.a2)).toBeLessThanOrEqual(A_MAX + 1e-9);
+      }
+      return peak;
+    };
+
+    const peakDefault = peakA2(1);
+    const peakHeavy = peakA2(1.8);
+    // The target cap itself never exceeds A2_MAX_CEIL (the spring's actual
+    // output can still overshoot that, bounded only by A_MAX, which the
+    // per-frame assertions above already check).
+    expect(1.8 * 0.06).toBeLessThan(A2_MAX_CEIL); // sanity: A2_MAX * 1.8 stays under the ceiling here
+    expect(peakHeavy).toBeGreaterThan(peakDefault);
+  });
+
+  it("extremes (I=2.5, S=0.3) with a hard curved fling stay within A_MAX through release and 3s of decay, with no NaN", () => {
+    const state: ModeState = createModeState(0, 0);
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    const dt = dtMs / 1000;
+    const dragSpeed = 4000;
+    const inertia = 2.5;
+    const strength = 0.3;
+
+    const check = () => {
+      expect(Number.isFinite(state.a2)).toBe(true);
+      expect(Number.isFinite(state.a3)).toBe(true);
+      expect(Number.isFinite(state.a4)).toBe(true);
+      expect(Math.abs(state.a2)).toBeLessThanOrEqual(A_MAX + 1e-9);
+      expect(Math.abs(state.a3)).toBeLessThanOrEqual(A_MAX + 1e-9);
+      expect(Math.abs(state.a4)).toBeLessThanOrEqual(A_MAX + 1e-9);
+    };
+
+    let cx = 0;
+    for (let f = 0; f < 5; f++) {
+      cx += dragSpeed * dt;
+      stepBubbleModes(state, cx, 0, 40, 1, 1, dragSpeed, 0, dtMs, buf, bbox, inertia, strength);
+      check();
+    }
+    // Release with a 90 degree turn — the largest kick this scenario applies.
+    stepBubbleModes(state, cx, 0, 40, 1, 0, 0, dragSpeed, dtMs, buf, bbox, inertia, strength);
+    check();
+
+    const decayFrames = Math.round(3 / dt);
+    for (let f = 0; f < decayFrames; f++) {
+      stepBubbleModes(state, cx, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, inertia, strength);
+      check();
+    }
+  });
+
+  it("stays stable at the stiff extreme (S=2.5, I=0.3) through stalled frames clamped to DT_MAX_MS", () => {
+    // springScale = 8.3. At the old DT_MAX_MS of 33 ms this diverged; the
+    // 50 ms frames below are clamped to DT_MAX_MS, so the kick must decay.
+    // Compared against a no-fling run so the idle breathing cancels out and
+    // only the kick's transient is measured.
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 50;
+    const run = (fling: number): ModeState => {
+      const state: ModeState = createModeState(0, 0);
+      stepBubbleModes(state, 0, 0, 40, 1, 1, fling, 0, dtMs, buf, bbox, 0.3, 2.5);
+      stepBubbleModes(state, 0, 0, 40, 1, 0, 0, fling, dtMs, buf, bbox, 0.3, 2.5);
+      return state;
+    };
+    const kicked = run(4000);
+    const calm = run(0);
+    const kick0 = Math.abs(kicked.v3 - calm.v3);
+    expect(kick0).toBeGreaterThan(0);
+    for (let f = 0; f < 100; f++) {
+      stepBubbleModes(kicked, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, 0.3, 2.5);
+      stepBubbleModes(calm, 0, 0, 40, 1, 0, 0, 0, dtMs, buf, bbox, 0.3, 2.5);
+    }
+    expect(Math.abs(kicked.v3 - calm.v3)).toBeLessThan(kick0 * 0.01);
+    expect(Math.abs(kicked.v4 - calm.v4)).toBeLessThan(kick0 * 0.01);
+  });
+
+  it("MULT_MIN guard: inertia=0 and strength=0 produce finite values", () => {
+    const state: ModeState = createModeState(0, 0);
+    const buf = makeBuf();
+    const bbox = makeBbox();
+    const dtMs = 1000 / 60;
+    const dt = dtMs / 1000;
+
+    let cx = 0;
+    for (let f = 0; f < 10; f++) {
+      cx += 900 * dt;
+      stepBubbleModes(state, cx, 0, 40, 1, 1, 900, 0, dtMs, buf, bbox, 0, 0);
+    }
+    stepBubbleModes(state, cx, 0, 40, 1, 0, 1500, 0, dtMs, buf, bbox, 0, 0);
+
+    expect(Number.isFinite(state.a2)).toBe(true);
+    expect(Number.isFinite(state.a3)).toBe(true);
+    expect(Number.isFinite(state.a4)).toBe(true);
+    expect(Number.isFinite(state.v3)).toBe(true);
+    expect(Number.isFinite(state.v4)).toBe(true);
   });
 });

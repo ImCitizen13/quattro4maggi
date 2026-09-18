@@ -32,6 +32,14 @@ export type BubbleTuningPanelProps = {
   wobble: SharedValue<number>;
   /** Default wobble value, used by "Reset all". */
   wobbleDefault: number;
+  /** Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble inertia and strength"). */
+  inertia: SharedValue<number>;
+  /** Default inertia value, used by "Reset all". */
+  inertiaDefault: number;
+  /** Per-bubble strength multiplier (see `bubbleModes.ts` → "Per-bubble inertia and strength"). */
+  strength: SharedValue<number>;
+  /** Default strength value, used by "Reset all". */
+  strengthDefault: number;
   /** Optics levers from `useBubbleOptics`. */
   optics: BubbleOptics;
   /** Default optics values, used by per-slider reset and "Reset all". */
@@ -94,6 +102,10 @@ function ResettableSlider({ defaultValue, ...sliderProps }: ResettableSliderProp
 export function BubbleTuningPanel({
   wobble,
   wobbleDefault,
+  inertia,
+  inertiaDefault,
+  strength,
+  strengthDefault,
   optics,
   defaults,
   refractMax,
@@ -106,6 +118,8 @@ export function BubbleTuningPanel({
       optics[key].value = defaults[key];
     });
     wobble.value = wobbleDefault;
+    inertia.value = inertiaDefault;
+    strength.value = strengthDefault;
   };
 
   const applyGargantua = () => {
@@ -145,14 +159,32 @@ export function BubbleTuningPanel({
       )}
 
       {tab === "shape" && (
-        <ResettableSlider
-          label="Wobble"
-          value={wobble}
-          min={0}
-          max={3}
-          decimals={2}
-          defaultValue={wobbleDefault}
-        />
+        <>
+          <ResettableSlider
+            label="Wobble"
+            value={wobble}
+            min={0}
+            max={3}
+            decimals={2}
+            defaultValue={wobbleDefault}
+          />
+          <ResettableSlider
+            label="Inertia"
+            value={inertia}
+            min={0.3}
+            max={2.5}
+            decimals={2}
+            defaultValue={inertiaDefault}
+          />
+          <ResettableSlider
+            label="Strength"
+            value={strength}
+            min={0.3}
+            max={2.5}
+            decimals={2}
+            defaultValue={strengthDefault}
+          />
+        </>
       )}
 
       {tab === "refraction" && (

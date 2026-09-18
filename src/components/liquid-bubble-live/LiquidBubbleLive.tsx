@@ -23,7 +23,7 @@ import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 
 import { backgroundEffect } from "./backgroundShaders";
-import { WOBBLE_DEFAULT } from "./bubbleModes";
+import { INERTIA_DEFAULT, STRENGTH_DEFAULT, WOBBLE_DEFAULT } from "./bubbleModes";
 import { BubbleTuningPanel } from "./BubbleTuningPanel";
 import {
   useBubblePanGesture,
@@ -102,8 +102,13 @@ export function LiquidBubbleLive({
   // still-image demo: the follow spring trails a moving finger by
   // `(damping / stiffness) × velocity` = 0.1 s × velocity, and that trailing is
   // wanted (see the ANCHOR note in `temp/liquid-bubbles-divergence.md`).
+  // Per-bubble inertia/strength (see `bubbleModes.ts` → "Per-bubble inertia
+  // and strength"), live-tunable from the panel with no React re-render.
+  const inertia = useSharedValue(INERTIA_DEFAULT);
+  const strength = useSharedValue(STRENGTH_DEFAULT);
+
   const { bubbleX, bubbleY, isActive, velocityX, velocityY, panGesture } =
-    useBubblePanGesture({ centerX, centerY });
+    useBubblePanGesture({ centerX, centerY, inertia });
   const { scaledRadius, pinchGesture } = useBubblePinchGesture({
     restRadius,
     maxRadius,
@@ -132,6 +137,8 @@ export function LiquidBubbleLive({
     velocityX,
     velocityY,
     wobble,
+    inertia,
+    strength,
   });
 
   // `paramBuffer` is in POINTS and the filter runs in points, so there is
@@ -256,6 +263,10 @@ export function LiquidBubbleLive({
         <BubbleTuningPanel
           wobble={wobble}
           wobbleDefault={WOBBLE_DEFAULT}
+          inertia={inertia}
+          inertiaDefault={INERTIA_DEFAULT}
+          strength={strength}
+          strengthDefault={STRENGTH_DEFAULT}
           optics={optics}
           defaults={defaults}
           refractMax={LIVE_REFRACT_SLIDER_MAX}

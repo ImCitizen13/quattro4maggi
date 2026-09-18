@@ -5,6 +5,7 @@
 
 import {
   A2_MAX,
+  A2_MAX_CEIL,
   A2_REST,
   A3_IDLE,
   A3_REST,
@@ -29,6 +30,7 @@ import {
   KICK_W_2,
   KICK_W_3,
   KICK_W_4,
+  MULT_MIN,
   PARAM_FLOATS,
   PHI2_SPEED_THRESHOLD,
   PHI3_REST,
@@ -214,6 +216,15 @@ export function resetModeState(state: ModeState, cx: number, cy: number): void {
  * `bubbleModes.ts` → "Wobble visibility"): 0 suppresses it, 1 reproduces the
  * tuning above exactly, 2 doubles it. It is applied FLAT — the amplitudes stay
  * fractions of `R`, so the wobble grows with the bubble.
+ *
+ * `inertia`/`strength` (see `bubbleModes.ts` → "Per-bubble inertia and
+ * strength") are per-bubble multipliers, both defaulting to 1 so every
+ * existing call site (and every existing test) reproduces today's behaviour
+ * exactly. Guarded by `MULT_MIN` before use. `springScale = strength /
+ * inertia` scales every mode spring's K and C (K2/C2, K3/C3, K4/C4) by the
+ * same factor, so `omega0` and `zeta` both scale by `sqrt(springScale)` and
+ * the decay rate by `springScale`. `inertia` alone also scales the release/traveling-wave kicks and
+ * the mode-2 stretch cap (`A2_MAX`, up to `A2_MAX_CEIL`); `strength` does not.
  */
 export function stepBubbleModes(
   state: ModeState,
@@ -227,10 +238,21 @@ export function stepBubbleModes(
   dtMs: number,
   outBuf: number[],
   outBbox: Bbox,
+  inertia = 1,
+  strength = 1,
 ): void {
   'worklet';
   const clampedMs = Math.min(Math.max(dtMs, DT_MIN_MS), DT_MAX_MS);
   const dt = clampedMs / 1000;
+
+  // Per-bubble inertia/strength multipliers, guarded against zero/negative
+  // sliders. `springScale` is the single reciprocal factor applied to every
+  // mode spring's K and C below (see `bubbleModes.ts` → "Per-bubble inertia
+  // and strength"); `I` alone additionally scales the kicks and the mode-2
+  // stretch cap further down.
+  const I = Math.max(inertia, MULT_MIN);
+  const S = Math.max(strength, MULT_MIN);
+  const springScale = S / I;
 
   // Wobble visibility, applied flat (see `bubbleModes.ts` → "Wobble
   // visibility" for why this is NOT divided by R). The amplitudes stay
@@ -252,8 +274,11 @@ export function stepBubbleModes(
 
   // ---- mode 2: drag stretch, with a rest floor so it never fully relaxes ----
   // Target MAGNITUDE. The A2_REST floor is the bubble's "memory" — it never
-  // returns to a perfect circle.
-  const target2 = Math.max(A2_REST, Math.min(A2_MAX, speed / SPEED_REF));
+  // returns to a perfect circle. The stretch cap grows with `inertia` (a
+  // heavier bubble stretches further under the same drag), capped at
+  // `A2_MAX_CEIL` — above that the overshoot clips against `A_MAX` anyway.
+  const a2Max = Math.min(A2_MAX_CEIL, A2_MAX * I);
+  const target2 = Math.max(A2_REST, Math.min(a2Max, speed / SPEED_REF));
 
   // Target DIRECTION, as a unit vector in double-angle space. See the ModeState
   // doc for why this is a vector and not an angle lerp.
@@ -289,8 +314,9 @@ export function stepBubbleModes(
     const flingSpeed = Math.hypot(velX, velY);
     // Scaled by `vis` too: without it, a bigger rest wobble (wobble > 1)
     // would leave the release kick looking comparatively flat next to it.
-    state.v3 += KICK * flingSpeed * vis;
-    state.v4 -= KICK * flingSpeed * KICK_V4_SCALE * vis;
+    // Scaled by `I` too: a heavier bubble gets a bigger release kick.
+    state.v3 += KICK * flingSpeed * vis * I;
+    state.v4 -= KICK * flingSpeed * KICK_V4_SCALE * vis * I;
 
     // turn = cross(prevVel, vel) / (|prevVel|·|vel|), −1..1, sign = handedness
     // of the curve between the last two non-zero gesture velocity samples.
@@ -302,9 +328,11 @@ export function stepBubbleModes(
       if (Math.abs(turn) < TURN_EPS) {
         turn = 0;
       }
-      state.w2 = Math.min(W_MAX, Math.max(-W_MAX, state.w2 + KICK_W_2 * flingSpeed * turn));
-      state.w3 = Math.min(W_MAX, Math.max(-W_MAX, state.w3 + KICK_W_3 * flingSpeed * turn));
-      state.w4 = Math.min(W_MAX, Math.max(-W_MAX, state.w4 + KICK_W_4 * flingSpeed * turn));
+      // Traveling-wave kick scaled by `I` too, same reasoning as the
+      // amplitude kick above — still clamped by W_MAX.
+      state.w2 = Math.min(W_MAX, Math.max(-W_MAX, state.w2 + KICK_W_2 * flingSpeed * turn * I));
+      state.w3 = Math.min(W_MAX, Math.max(-W_MAX, state.w3 + KICK_W_3 * flingSpeed * turn * I));
+      state.w4 = Math.min(W_MAX, Math.max(-W_MAX, state.w4 + KICK_W_4 * flingSpeed * turn * I));
     }
   }
   state.lastIsActive = isActive;
@@ -329,10 +357,13 @@ export function stepBubbleModes(
 
   // ---- spring-integrate each amplitude, inline (see module doc) ----
   // Mode 2: both vector components share one spring (K2/C2), so the pair
-  // behaves isotropically — no axis is stiffer than another.
-  state.vc2 += (K2 * (target2 * tux - state.c2) - C2 * state.vc2) * dt;
+  // behaves isotropically — no axis is stiffer than another. Every K/C below
+  // is scaled by `springScale = strength/inertia` (see `bubbleModes.ts` →
+  // "Per-bubble inertia and strength"): omega0 and zeta both scale by
+  // sqrt(springScale), the decay rate by springScale.
+  state.vc2 += (K2 * springScale * (target2 * tux - state.c2) - C2 * springScale * state.vc2) * dt;
   state.c2 += state.vc2 * dt;
-  state.vs2 += (K2 * (target2 * tuy - state.s2) - C2 * state.vs2) * dt;
+  state.vs2 += (K2 * springScale * (target2 * tuy - state.s2) - C2 * springScale * state.vs2) * dt;
   state.s2 += state.vs2 * dt;
 
   // Clamp the MAGNITUDE (not each component) so the cap is a disc, not a
@@ -357,13 +388,13 @@ export function stepBubbleModes(
   state.s2 = rs2;
   state.phi2 = state.a2 > EPS ? Math.atan2(state.s2, state.c2) : 0;
 
-  state.v3 += (K3 * (target3 - state.a3) - C3 * state.v3) * dt;
+  state.v3 += (K3 * springScale * (target3 - state.a3) - C3 * springScale * state.v3) * dt;
   state.a3 += state.v3 * dt;
   state.a3 = Math.min(A_MAX, Math.max(-A_MAX, state.a3));
   // Traveling wave: phi3 advances by w3*dt every frame (phase 9B).
   state.phi3 += state.w3 * dt;
 
-  state.v4 += (K4 * (target4 - state.a4) - C4 * state.v4) * dt;
+  state.v4 += (K4 * springScale * (target4 - state.a4) - C4 * springScale * state.v4) * dt;
   state.a4 += state.v4 * dt;
   state.a4 = Math.min(A_MAX, Math.max(-A_MAX, state.a4));
   // Traveling wave: phi4 advances by w4*dt every frame (phase 9B).

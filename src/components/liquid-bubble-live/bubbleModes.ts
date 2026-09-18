@@ -333,6 +333,48 @@ export const W_MAX = 3;
 export const WOBBLE_DEFAULT = 1;
 
 // ============================================================================
+// Per-bubble inertia and strength
+// ============================================================================
+//
+// Two more per-bubble multipliers, both default 1, layered on top of the
+// K2..K4/C2..C4 springs above. `inertia` (I) is how heavy the bubble feels;
+// `strength` (S) is how stiff its surface is. `stepBubbleModes` computes one
+// `springScale = S / I` per step and multiplies every mode's K and C by it:
+// `K_eff = K * springScale`, `C_eff = C * springScale`. Since `omega0 =
+// sqrt(K)` and `zeta = C / (2*sqrt(K))`, scaling K and C by the SAME factor
+// scales BOTH `omega0` and `zeta` by `sqrt(S/I)`, and the envelope's decay
+// rate `zeta*omega0 = C/2` by `S/I`. So a heavy bubble (I > 1, S/I < 1) is
+// slower, overshoots more and rings longer; a strong one (S > 1, S/I > 1) is
+// faster, overshoots less and snaps back; a weak one (S < 1, S/I < 1) wobbles
+// longer — the same as heavy, because on the springs inertia and strength
+// are reciprocal. `inertia` alone additionally scales the release kicks
+// (`KICK`/`KICK_W_*`), the mode-2 stretch cap (`A2_MAX`, up to `A2_MAX_CEIL`)
+// and the follow-spring mass in `useBubbleGestures.tsx` — none of those are
+// spring stiffness/damping, so `strength` does not touch them.
+
+/** Default per-bubble inertia multiplier — 1 reproduces today's feel exactly. */
+export const INERTIA_DEFAULT = 1;
+
+/** Default per-bubble strength multiplier — 1 reproduces today's feel exactly. */
+export const STRENGTH_DEFAULT = 1;
+
+/**
+ * Floor on both `inertia` and `strength` — guards `springScale = S/I` (and
+ * the standalone `I` uses) against divide-by-zero / zero-stiffness at the
+ * slider's low end.
+ *
+ * TUNE: how weightless/floppy the extremes can go. 0.1 is already very light.
+ */
+export const MULT_MIN = 0.1;
+
+/**
+ * Absolute ceiling on the inertia-scaled mode-2 stretch cap
+ * (`Math.min(A2_MAX_CEIL, A2_MAX * inertia)`), same value as `A2_MAX`'s own
+ * TUNE ceiling note — above this the overshoot clips against `A_MAX`.
+ */
+export const A2_MAX_CEIL = 0.11;
+
+// ============================================================================
 // Film drift
 // ============================================================================
 
@@ -343,9 +385,18 @@ export const FILM_DRIFT = 0.15;
 // Frame timing
 // ============================================================================
 
-/** `dt` (ms) is clamped to this range before every physics step. */
+/**
+ * `dt` (ms) is clamped to this range before every physics step.
+ *
+ * `DT_MAX_MS` was 33. The target frames are 8.4 ms (120 Hz) and 16.7 ms
+ * (60 Hz); the cap only bites on a dropped frame. At the slider extremes
+ * (strength 2.5, inertia 0.3 → `springScale` 8.3) a 33 ms step made the
+ * semi-implicit Euler springs unstable (growth ×2.3 per step on mode 4).
+ * At 20 ms the same case decays (spectral radius ≤ 0.63), and a stall
+ * advances the physics by at most 20 ms instead of jumping.
+ */
 export const DT_MIN_MS = 1;
-export const DT_MAX_MS = 33;
+export const DT_MAX_MS = 20;
 
 // ============================================================================
 // Optics defaults (phase 8B) — see "Shader math" in the divergence doc
