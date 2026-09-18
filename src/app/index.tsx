@@ -56,6 +56,11 @@ const demos: Demo[] = [
     href: "/gargantua-type-gpu" as const,
     tags: [{ name: "reanimated", color: "#6a539a" }],
   },
+  {
+    name: "Soap Film",
+    href: "/soap-film" as const,
+    tags: [{ name: "reanimated", color: "#6a539a" }],
+  },
 ];
 
 export default function HomeScreen() {
