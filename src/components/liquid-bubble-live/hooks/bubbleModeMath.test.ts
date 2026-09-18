@@ -746,6 +746,20 @@ describe("stepBubbleModes — per-bubble inertia and strength", () => {
     expect(Math.abs(kicked.v4 - calm.v4)).toBeLessThan(kick0 * 0.01);
   });
 
+  it("rest wobble scales by 1/strength and ignores inertia", () => {
+    const settledA3 = (inertia: number, strength: number): number => {
+      const state: ModeState = createModeState(0, 0);
+      restFrames(state, 0, 300, inertia, strength);
+      return state.a3;
+    };
+    const a3Default = settledA3(1, 1);
+    // Tolerance covers the spring's small phase lag against the slow idle
+    // sine, which differs slightly with springScale.
+    expect(settledA3(1, 0.5) / a3Default).toBeCloseTo(2, 1);
+    expect(settledA3(1, 2) / a3Default).toBeCloseTo(0.5, 1);
+    expect(settledA3(2, 1) / a3Default).toBeCloseTo(1, 1);
+  });
+
   it("MULT_MIN guard: inertia=0 and strength=0 produce finite values", () => {
     const state: ModeState = createModeState(0, 0);
     const buf = makeBuf();

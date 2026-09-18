@@ -351,9 +351,12 @@ export function stepBubbleModes(
   // its target scales the settled amplitude by the same factor while leaving
   // overshoot percentage, ring frequency and settle time all UNCHANGED — only
   // the size of the wobble changes, not its feel.
-  const target3 = (A3_REST + A3_IDLE * Math.sin(state.t * IDLE_FREQ_3)) * vis;
+  // Divided by `S` too: a weak surface (S < 1) sits more deformed at rest, a
+  // strong one (S > 1) nearer round. Inertia does not change the rest pose.
+  const idleVis = vis / S;
+  const target3 = (A3_REST + A3_IDLE * Math.sin(state.t * IDLE_FREQ_3)) * idleVis;
   const target4 =
-    (A4_REST + A4_IDLE * Math.sin(state.t * IDLE_FREQ_4 + IDLE_PHASE_4)) * vis;
+    (A4_REST + A4_IDLE * Math.sin(state.t * IDLE_FREQ_4 + IDLE_PHASE_4)) * idleVis;
 
   // ---- spring-integrate each amplitude, inline (see module doc) ----
   // Mode 2: both vector components share one spring (K2/C2), so the pair

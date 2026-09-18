@@ -23,7 +23,7 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 |---|---|---|
 | Shape | Wobble | How much the edge wobbles |
 | | Inertia | How heavy the bubble feels — lags more, rings longer, bigger release kick, stretches further |
-| | Strength | How stiff the surface is — higher snaps back faster, lower wobbles longer |
+| | Strength | How stiff the surface is — higher snaps back faster and rests rounder, lower wobbles longer and more at rest |
 | Refraction | Refract | How far the rim bends the background |
 | | Lens falloff | How deep the bending reaches from the rim |
 | | Lens | + magnify, − pincushion |

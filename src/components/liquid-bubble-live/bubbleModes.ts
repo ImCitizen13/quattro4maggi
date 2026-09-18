@@ -347,7 +347,8 @@ export const WOBBLE_DEFAULT = 1;
 // slower, overshoots more and rings longer; a strong one (S > 1, S/I > 1) is
 // faster, overshoots less and snaps back; a weak one (S < 1, S/I < 1) wobbles
 // longer — the same as heavy, because on the springs inertia and strength
-// are reciprocal. `inertia` alone additionally scales the release kicks
+// are reciprocal. `strength` alone also divides the mode 3/4 idle targets
+// (rest wobble ∝ 1/S): a weak surface sits more deformed at rest. `inertia` alone additionally scales the release kicks
 // (`KICK`/`KICK_W_*`), the mode-2 stretch cap (`A2_MAX`, up to `A2_MAX_CEIL`)
 // and the follow-spring mass in `useBubbleGestures.tsx` — none of those are
 // spring stiffness/damping, so `strength` does not touch them.
