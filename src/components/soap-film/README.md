@@ -102,7 +102,7 @@ Every slider has a ↺ reset. **Reset all** restores every default.
 |       | Sine freq / speed A / speed B           | Domain-warp params (sine generator only)         |
 | Color | Curl / Sine                             | Which thickness generator drives the film        |
 |       | Ramp / Physical                         | Color mapping mode                               |
-|       | Drainage                                | Gravity thinning near the top                    |
+|       | Drainage                                | Noise film → horizontal gravity bands            |
 |       | Thickness scale                         | Ramp wrap count, or nm in physical mode          |
 |       | Cos theta                               | View-angle cosine (physical mode)                |
 |       | Intensity                               | Overall brightness                               |

@@ -98,11 +98,14 @@ uniform float4 uLayer1;
 uniform float4 uLayer2;
 uniform float uSwirl;
 uniform float uSeed;
-uniform float uDrainage;
+uniform float uDrainage;   // 0 noise film .. 1 pure gravity bands
+uniform float uBandShape;  // 0 horizontal bands, 1 rings around the apex
+uniform float uGrain;      // base pattern frequency — higher = finer marbling
 uniform float4 uTouch[8];   // (x, y, vx, vy) in points
 uniform float uTouchAge[8]; // seconds since the impulse; large = inactive
 uniform float uTouchTau;    // decay time constant, seconds
 uniform float uTouchRadius; // gaussian falloff radius, normalized units
+uniform float4 uVortex;    // (count 0..3, spin rad/s, radius normalized, cycle s)
 
 ${NOISE_LIB}
 
@@ -123,7 +126,11 @@ float2 layerVelocity(float2 p, float4 layer, float t, float seed) {
   rp += float2(t * speed, t * speed * 0.72);
 
   float3 n = noised(rp);
-  float2 curl = float2(n.z, -n.y);
+  // Chain rule back to p-space: grad_p = freq * R^T * grad_rp. Without the
+  // freq factor high-frequency layers barely move; without the inverse
+  // rotation the field is no longer divergence-free in p.
+  float2 grad = rotate2(n.yz, -angle) * freq;
+  float2 curl = float2(grad.y, -grad.x);
   return curl * weight;
 }
 
@@ -161,7 +168,7 @@ float2 touchVelocity(float2 p, float minDim) {
 // STATELESS ADVECTION — semi-Lagrangian backtrace, no feedback buffer
 // ============================================================================
 
-float thicknessField(float2 uv, float t, float minDim) {
+float2 advect(float2 uv, float t, float minDim) {
   const int STEPS = 5;
   const float STEP_DT = 0.09;
 
@@ -171,25 +178,80 @@ float thicknessField(float2 uv, float t, float minDim) {
     float2 v = velocityField(p, ti) + touchVelocity(p, minDim);
     p -= v * STEP_DT;
   }
+  return p;
+}
 
+// ============================================================================
+// VORTICES — differential rotation that winds up over a cycle
+// ============================================================================
+
+// Center of vortex k: slow Lissajous drift around the canvas center.
+float2 vortexCenter(int k, float t, float2 extent) {
+  float fk = float(k);
+  float2 wobble = float2(
+    sin(t * 0.07 * (fk + 1.0) + uSeed * (fk + 1.0) * 1.7),
+    cos(t * 0.05 * (fk + 2.0) + uSeed * (fk + 1.0) * 2.3)
+  );
+  return 0.5 * extent + 0.3 * wobble;
+}
+
+// Backward-maps p through every vortex: rotation angle = spin * tau *
+// gaussian(r), so the core turns faster than the rim and the pattern winds
+// into spiral arms as tau grows. Alternate vortices spin opposite ways.
+float2 twist(float2 p, float tau, float t, float2 extent) {
+  float radius = uVortex.z;
+  for (int k = 0; k < 3; k++) {
+    if (float(k) < uVortex.x) {
+      float2 c = vortexCenter(k, t, extent);
+      float2 d = p - c;
+      float dir = 1.0 - 2.0 * mod(float(k), 2.0);
+      float angle = -dir * uVortex.y * tau * exp(-dot(d, d) / (radius * radius));
+      p = c + rotate2(d, angle);
+    }
+  }
+  return p;
+}
+
+float thicknessAt(float2 p, float t, float minDim) {
   // Slow drift keeps the base field from looking pinned even where the
   // advected velocity is near zero.
-  float2 driftP = p * 3.1 + float2(t * 0.02, -t * 0.015) + uSeed * 2.0;
+  float2 driftP = p * uGrain + float2(t * 0.02, -t * 0.015) + uSeed * 2.0;
   float3 n0 = noised(driftP);
   float3 n1 = noised(driftP * 2.13 + 7.0);
   float base = (0.5 + 0.5 * n0.x) + 0.25 * (0.5 + 0.5 * n1.x);
   base /= 1.25;
 
-  // Drainage: gravity thins the film near the top (small uv.y).
-  base -= uDrainage * (1.0 - uv.y);
+  // Drainage: gravity stratifies the film into thickness bands. Measured from
+  // the ADVECTED position p, so the flow bends band edges into plumes; the
+  // base noise roughens them further. Color wrapping turns the gradient into
+  // bands. Horizontal = height (thin top, thick bottom). Rings = distance
+  // from the apex — a bubble's latitude bands seen from above its thin top.
+  float height = p.y * minDim / iSize.y; // 0 top .. 1 bottom
+  float2 apex = 0.5 * (iSize / minDim) + float2(0.0, -0.1);
+  float ring = length(p - apex) * 2.0;  // 0 apex .. 1 at half the min dim
+  float profile = mix(height, ring, uBandShape);
+  float bands = clamp(profile + 0.35 * (base - 0.5), 0.0, 1.0);
 
-  return clamp(base, 0.0, 1.0);
+  return clamp(mix(base, bands, uDrainage), 0.0, 1.0);
 }
 
 half4 main(float2 fragCoord) {
   float minDim = min(iSize.x, iSize.y);
   float2 uv = fragCoord / minDim;
-  float t = thicknessField(uv, iTime, minDim);
+  float2 extent = iSize / minDim;
+  float2 p = advect(uv, iTime, minDim);
+
+  // Flow-map trick: two copies of the twist, half a cycle apart. Each one's
+  // tau restarts every cycle, and its weight is 0 exactly at its restart, so
+  // the winding keeps growing on screen without ever running to infinity.
+  float cycle = max(uVortex.w, 0.5);
+  float phase = fract(iTime / cycle);
+  float phaseB = fract(phase + 0.5);
+  float wA = 1.0 - abs(2.0 * phase - 1.0);
+
+  float tA = thicknessAt(twist(p, phase * cycle, iTime, extent), iTime, minDim);
+  float tB = thicknessAt(twist(p, phaseB * cycle, iTime, extent), iTime, minDim);
+  float t = mix(tB, tA, wA);
   return half4(t, t, t, 1.0);
 }
 `;
@@ -239,10 +301,11 @@ half4 main(float2 fragCoord) {
 export const SOAP_COLOR = `
 uniform shader thickness;
 uniform shader ramp;
-uniform float uMode;          // 0 = ramp LUT, 1 = physical thin-film
+uniform float uMode;          // 0 = ramp LUT, 1 = physical thin-film, 2 = bubble palette
 uniform float uThicknessScale;
 uniform float uCosTheta;
 uniform float uIntensity;
+uniform float uOpacity;       // film alpha, 0..1 (output is premultiplied)
 
 const float PI = 3.14159265359;
 
@@ -257,6 +320,10 @@ half4 main(float2 fragCoord) {
     float u = fract(t * uThicknessScale);
     half4 rampCol = ramp.eval(float2(u * 20.0, 0.5));
     color = pow(rampCol.rgb, float3(0.8));
+  } else if (uMode > 1.5) {
+    // Bubble palette: the exact cosine film used by liquid-bubble-live
+    // (shaders.ts), so the film matches the bubble when composited there.
+    color = 0.5 + 0.5 * cos(2.0 * PI * t * uThicknessScale + float3(0.0, 2.1, 4.2));
   } else {
     // Physically-approximated thin-film interference: reflectance per
     // channel at lambda = (650, 532, 450) nm, film index n ~= 1.33.
@@ -272,7 +339,9 @@ half4 main(float2 fragCoord) {
   }
 
   color *= uIntensity;
-  return half4(clamp(color, 0.0, 1.0), 1.0);
+  // Premultiplied: Skia shaders output premul alpha, so scale rgb too.
+  float a = clamp(uOpacity, 0.0, 1.0);
+  return half4(clamp(color, 0.0, 1.0) * a, a);
 }
 `;
 

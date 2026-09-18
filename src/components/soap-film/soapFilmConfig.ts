@@ -19,7 +19,14 @@ export type FilmLayer = [
 ];
 
 export type FilmGenerator = "curl" | "sine";
-export type FilmColorMode = "ramp" | "physical";
+export type FilmColorMode = "ramp" | "physical" | "bubble";
+
+/** `uMode` value in `SOAP_COLOR` for each color mode. */
+export const FILM_MODE_UNIFORM: Record<FilmColorMode, 0 | 1 | 2> = {
+  ramp: 0,
+  physical: 1,
+  bubble: 2,
+};
 
 // ============================================================================
 // Flow — curl-noise layers
@@ -46,10 +53,41 @@ export const FILM_SWIRL_MAX = 3;
 /** Domain offset so re-mounts don't all look identical. TUNE: any float. */
 export const FILM_SEED_DEFAULT = 3.7;
 
-/** Gravity: thins the film near the top. TUNE: 0 flat, 0.5 heavy drainage. */
-export const FILM_DRAINAGE_DEFAULT = 0.12;
+/**
+ * Gravity stratification: blends the noise film toward horizontal thickness
+ * bands (thin top, thick bottom) whose edges the flow bends into plumes.
+ * TUNE: 0 pure noise film · 0.6 banded with turbulent edges · 1 pure bands.
+ */
+export const FILM_DRAINAGE_DEFAULT = 0.6;
 export const FILM_DRAINAGE_MIN = 0;
-export const FILM_DRAINAGE_MAX = 0.5;
+export const FILM_DRAINAGE_MAX = 1;
+
+/** Band geometry: 0 horizontal stripes, 1 rings around the apex (bubble top). */
+export const FILM_BAND_SHAPE_DEFAULT = 1;
+
+/**
+ * Base pattern frequency — the size of the marbling itself (eddy size is the
+ * layer frequencies). TUNE: 3 broad blobs · 8 photo-like · 15 fine speckle.
+ */
+export const FILM_GRAIN_DEFAULT = 6;
+export const FILM_GRAIN_MIN = 1;
+export const FILM_GRAIN_MAX = 15;
+
+// ============================================================================
+// Flow — vortices (curl generator only)
+// ============================================================================
+
+/** `(count, spin, radius, cycle)` — same tuple shape as `FilmLayer`. */
+export type FilmVortex = FilmLayer;
+
+/**
+ * Drifting vortices that wind the film into spiral arms over one `cycle`,
+ * crossfaded between two half-cycle-offset copies so winding never runs away.
+ * count 0..3 · spin rad/s at the core · radius normalized (gaussian) · cycle s.
+ * TUNE: peak twist at the core is `spin * cycle` rad — 1.2 * 6 ≈ 1.1 turns.
+ * Longer cycle = deeper spirals but more visible ghosting at the crossfade.
+ */
+export const FILM_VORTEX_DEFAULT: FilmVortex = [2, 1.2, 0.25, 6];
 
 // ============================================================================
 // Flow — sine-warp generator (alternative to curl)
@@ -79,16 +117,20 @@ export const FILM_TOUCH_AGE_INACTIVE = 30;
 
 /** Clamp applied to raw gesture velocity before it reaches the shader, pt/s. */
 export const FILM_TOUCH_VELOCITY_CLAMP = 2400;
-
 // ============================================================================
 // Color
 // ============================================================================
 
-export const FILM_MODE_DEFAULT: FilmColorMode = "ramp";
+/**
+ * "bubble" = the cosine film palette from liquid-bubble-live's shaders.ts,
+ * so this film matches that bubble once composited into it.
+ */
+export const FILM_MODE_DEFAULT: FilmColorMode = "bubble";
 export const FILM_GENERATOR_DEFAULT: FilmGenerator = "curl";
 
 /**
- * Maps thickness [0,1] to nm (physical mode) or ramp wraps (ramp mode).
+ * Maps thickness [0,1] to nm (physical mode) or palette wraps (ramp and
+ * bubble modes).
  * TUNE: ramp mode reads well around 2-6 (a few full wraps across the shape);
  * physical mode reads well around 300-1200 (nm), where interference bands
  * become visible.
@@ -101,6 +143,9 @@ export const FILM_THICKNESS_SCALE_MAX = 12;
 export const FILM_COS_THETA_DEFAULT = 1.0;
 export const FILM_COS_THETA_MIN = 0.2;
 export const FILM_COS_THETA_MAX = 1;
+
+/** Film alpha — lets whatever is underneath show through. TUNE: 0.3 tint · 1 opaque. */
+export const FILM_OPACITY_DEFAULT = 1.0;
 
 export const FILM_INTENSITY_DEFAULT = 1.0;
 export const FILM_INTENSITY_MIN = 0.2;

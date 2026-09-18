@@ -30,8 +30,11 @@ import {
   FILM_THICKNESS_SCALE_MIN,
   FILM_COS_THETA_MAX,
   FILM_COS_THETA_MIN,
+  FILM_GRAIN_MAX,
+  FILM_GRAIN_MIN,
   FILM_INTENSITY_MAX,
   FILM_INTENSITY_MIN,
+  FILM_MODE_UNIFORM,
   FILM_TOUCH_TAU_MAX,
   FILM_TOUCH_TAU_MIN,
   SQUIRCLE_EXPONENT_MAX,
@@ -92,6 +95,14 @@ const LAYER_FIELDS: readonly {
   { index: 1, label: "Speed", min: 0, max: 1, decimals: 2 },
   { index: 2, label: "Angle", min: -3.2, max: 3.2, decimals: 2 },
   { index: 3, label: "Weight", min: 0, max: 2, decimals: 2 },
+];
+
+/** Fields of the `FilmVortex` tuple `[count, spin, radius, cycle]`. */
+const VORTEX_FIELDS: typeof LAYER_FIELDS = [
+  { index: 0, label: "Count", min: 0, max: 3, decimals: 0 },
+  { index: 1, label: "Spin", min: -4, max: 4, decimals: 2 },
+  { index: 2, label: "Radius", min: 0.05, max: 0.6, decimals: 2 },
+  { index: 3, label: "Cycle", min: 1, max: 15, decimals: 1 },
 ];
 
 // ============================================================================
@@ -231,13 +242,20 @@ type LayerSlidersProps = {
   label: string;
   layer: SharedValue<FilmLayer>;
   layerDefault: FilmLayer;
+  /** Tuple field specs. @default LAYER_FIELDS */
+  fields?: typeof LAYER_FIELDS;
 };
 
-function LayerSliders({ label, layer, layerDefault }: LayerSlidersProps) {
+function LayerSliders({
+  label,
+  layer,
+  layerDefault,
+  fields = LAYER_FIELDS,
+}: LayerSlidersProps) {
   return (
     <View style={styles.layerGroup}>
       <Text style={styles.layerLabel}>{label}</Text>
-      {LAYER_FIELDS.map((field) => (
+      {fields.map((field) => (
         <TupleTuningSlider
           key={field.index}
           label={field.label}
@@ -270,13 +288,12 @@ export function SoapFilmTuningPanel({
   initialTab = "shape",
 }: SoapFilmTuningPanelProps) {
   const [tab, setTab] = useState<SoapFilmTuningTab>(initialTab);
-  const [selectedLayer, setSelectedLayer] = useState<0 | 1 | 2>(0);
+  // 0-2 = curl layers, 3 = vortices.
+  const [selectedLayer, setSelectedLayer] = useState<0 | 1 | 2 | 3>(0);
   // Mirrors `color.mode` (a SharedValue, written from worklets by
   // `resetAll`'s plain assignment too) so the active button can re-render —
   // reading a SharedValue in the render body doesn't subscribe to it.
-  const [colorMode, setColorMode] = useState<0 | 1>(
-    defaults.mode === 1 ? 1 : 0,
-  );
+  const [colorMode, setColorMode] = useState<number>(defaults.mode);
 
   const resetAll = () => {
     scale.value = scaleDefault;
@@ -287,16 +304,19 @@ export function SoapFilmTuningPanel({
     flow.swirl.value = defaults.swirl;
     flow.seed.value = defaults.seed;
     flow.drainage.value = defaults.drainage;
+    flow.bandShape.value = defaults.bandShape;
+    flow.grain.value = defaults.grain;
     flow.touchTau.value = defaults.touchTau;
     flow.touchRadius.value = defaults.touchRadius;
-    flow.sineFreq.value = defaults.sineFreq;
+    flow.vortex.value = defaults.vortex;    flow.sineFreq.value = defaults.sineFreq;
     flow.sineSpeedA.value = defaults.sineSpeedA;
     flow.sineSpeedB.value = defaults.sineSpeedB;
     color.mode.value = defaults.mode;
     color.thicknessScale.value = defaults.thicknessScale;
     color.cosTheta.value = defaults.cosTheta;
     color.intensity.value = defaults.intensity;
-    setColorMode(defaults.mode === 1 ? 1 : 0);
+    color.opacity.value = defaults.opacity;
+    setColorMode(defaults.mode);
   };
 
   return (
@@ -349,7 +369,7 @@ export function SoapFilmTuningPanel({
           {generator === "curl" ? (
             <>
               <View style={styles.generatorRow}>
-                {([0, 1, 2] as const).map((i) => (
+                {([0, 1, 2, 3] as const).map((i) => (
                   <PressableScale
                     key={i}
                     onPress={() => setSelectedLayer(i)}
@@ -364,7 +384,7 @@ export function SoapFilmTuningPanel({
                         selectedLayer === i && styles.generatorButtonTextActive,
                       ]}
                     >
-                      Layer {i}
+                      {i === 3 ? "Vortex" : `Layer ${i}`}
                     </Text>
                   </PressableScale>
                 ))}
@@ -391,6 +411,14 @@ export function SoapFilmTuningPanel({
                   layerDefault={defaults.layer2}
                 />
               )}
+              {selectedLayer === 3 && (
+                <LayerSliders
+                  label="Vortices"
+                  layer={flow.vortex}
+                  layerDefault={defaults.vortex}
+                  fields={VORTEX_FIELDS}
+                />
+              )}
 
               <ResettableSlider
                 label="Swirl"
@@ -399,6 +427,14 @@ export function SoapFilmTuningPanel({
                 max={FILM_SWIRL_MAX}
                 decimals={2}
                 defaultValue={defaults.swirl}
+              />
+              <ResettableSlider
+                label="Grain"
+                value={flow.grain}
+                min={FILM_GRAIN_MIN}
+                max={FILM_GRAIN_MAX}
+                decimals={1}
+                defaultValue={defaults.grain}
               />
               <ResettableSlider
                 label="Seed"
@@ -415,8 +451,7 @@ export function SoapFilmTuningPanel({
                 max={FILM_TOUCH_TAU_MAX}
                 decimals={2}
                 defaultValue={defaults.touchTau}
-              />
-            </>
+              />            </>
           ) : (
             <>
               <ResettableSlider
@@ -475,8 +510,9 @@ export function SoapFilmTuningPanel({
           <View style={styles.generatorRow}>
             {(
               [
-                { label: "Ramp", value: 0 as const },
-                { label: "Physical", value: 1 as const },
+                { label: "Bubble", value: FILM_MODE_UNIFORM.bubble },
+                { label: "Ramp", value: FILM_MODE_UNIFORM.ramp },
+                { label: "Physical", value: FILM_MODE_UNIFORM.physical },
               ]
             ).map((m) => (
               <PressableScale
@@ -510,6 +546,14 @@ export function SoapFilmTuningPanel({
             defaultValue={defaults.drainage}
           />
           <ResettableSlider
+            label="Rings (0 horizontal · 1 rings)"
+            value={flow.bandShape}
+            min={0}
+            max={1}
+            decimals={2}
+            defaultValue={defaults.bandShape}
+          />
+          <ResettableSlider
             label="Thickness scale"
             value={color.thicknessScale}
             min={FILM_THICKNESS_SCALE_MIN}
@@ -532,6 +576,14 @@ export function SoapFilmTuningPanel({
             max={FILM_INTENSITY_MAX}
             decimals={2}
             defaultValue={defaults.intensity}
+          />
+          <ResettableSlider
+            label="Opacity"
+            value={color.opacity}
+            min={0}
+            max={1}
+            decimals={2}
+            defaultValue={defaults.opacity}
           />
         </>
       )}

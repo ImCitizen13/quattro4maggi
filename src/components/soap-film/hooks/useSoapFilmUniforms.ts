@@ -11,13 +11,17 @@ import type {
   SoapFilmFlowUniforms,
 } from "../SoapFilmShader";
 import {
+  FILM_BAND_SHAPE_DEFAULT,
   FILM_COS_THETA_DEFAULT,
   FILM_DRAINAGE_DEFAULT,
+  FILM_GRAIN_DEFAULT,
   FILM_INTENSITY_DEFAULT,
+  FILM_OPACITY_DEFAULT,
   FILM_LAYER_0_DEFAULT,
   FILM_LAYER_1_DEFAULT,
   FILM_LAYER_2_DEFAULT,
   FILM_MODE_DEFAULT,
+  FILM_MODE_UNIFORM,
   FILM_SEED_DEFAULT,
   FILM_SINE_FREQ_DEFAULT,
   FILM_SINE_SPEED_A_DEFAULT,
@@ -26,7 +30,9 @@ import {
   FILM_THICKNESS_SCALE_DEFAULT,
   FILM_TOUCH_RADIUS_DEFAULT,
   FILM_TOUCH_TAU_DEFAULT,
+  FILM_VORTEX_DEFAULT,
   type FilmLayer,
+  type FilmVortex,
 } from "../soapFilmConfig";
 
 // ============================================================================
@@ -43,6 +49,9 @@ export type SoapFilmUniformDefaults = {
   drainage: number;
   touchTau: number;
   touchRadius: number;
+  vortex: FilmVortex;
+  bandShape: number;
+  grain: number;
   sineFreq: number;
   sineSpeedA: number;
   sineSpeedB: number;
@@ -50,6 +59,7 @@ export type SoapFilmUniformDefaults = {
   thicknessScale: number;
   cosTheta: number;
   intensity: number;
+  opacity: number;
 };
 
 export type UseSoapFilmUniformsParams = {
@@ -78,13 +88,17 @@ export const SOAP_FILM_DEFAULTS: SoapFilmUniformDefaults = {
   drainage: FILM_DRAINAGE_DEFAULT,
   touchTau: FILM_TOUCH_TAU_DEFAULT,
   touchRadius: FILM_TOUCH_RADIUS_DEFAULT,
+  vortex: FILM_VORTEX_DEFAULT,
+  bandShape: FILM_BAND_SHAPE_DEFAULT,
+  grain: FILM_GRAIN_DEFAULT,
   sineFreq: FILM_SINE_FREQ_DEFAULT,
   sineSpeedA: FILM_SINE_SPEED_A_DEFAULT,
   sineSpeedB: FILM_SINE_SPEED_B_DEFAULT,
-  mode: FILM_MODE_DEFAULT === "physical" ? 1 : 0,
+  mode: FILM_MODE_UNIFORM[FILM_MODE_DEFAULT],
   thicknessScale: FILM_THICKNESS_SCALE_DEFAULT,
   cosTheta: FILM_COS_THETA_DEFAULT,
   intensity: FILM_INTENSITY_DEFAULT,
+  opacity: FILM_OPACITY_DEFAULT,
 };
 
 // ============================================================================
@@ -105,6 +119,9 @@ export function useSoapFilmUniforms({
   const drainage = useSharedValue<number>(SOAP_FILM_DEFAULTS.drainage);
   const touchTau = useSharedValue<number>(SOAP_FILM_DEFAULTS.touchTau);
   const touchRadius = useSharedValue<number>(SOAP_FILM_DEFAULTS.touchRadius);
+  const vortex = useSharedValue<FilmVortex>(SOAP_FILM_DEFAULTS.vortex);
+  const bandShape = useSharedValue<number>(SOAP_FILM_DEFAULTS.bandShape);
+  const grain = useSharedValue<number>(SOAP_FILM_DEFAULTS.grain);
 
   const sineFreq = useSharedValue<number>(SOAP_FILM_DEFAULTS.sineFreq);
   const sineSpeedA = useSharedValue<number>(SOAP_FILM_DEFAULTS.sineSpeedA);
@@ -117,6 +134,7 @@ export function useSoapFilmUniforms({
   );
   const cosTheta = useSharedValue<number>(SOAP_FILM_DEFAULTS.cosTheta);
   const intensity = useSharedValue<number>(SOAP_FILM_DEFAULTS.intensity);
+  const opacity = useSharedValue<number>(SOAP_FILM_DEFAULTS.opacity);
 
   const flow: SoapFilmFlowUniforms = {
     time,
@@ -131,6 +149,9 @@ export function useSoapFilmUniforms({
     touchAge,
     touchTau,
     touchRadius,
+    vortex,
+    bandShape,
+    grain,
     sineFreq,
     sineSpeedA,
     sineSpeedB,
@@ -142,6 +163,7 @@ export function useSoapFilmUniforms({
     thicknessScale,
     cosTheta,
     intensity,
+    opacity,
   };
 
   return { flow, color, defaults: SOAP_FILM_DEFAULTS };

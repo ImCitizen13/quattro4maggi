@@ -47,6 +47,7 @@ import {
 import {
   FILM_COS_THETA_DEFAULT,
   FILM_INTENSITY_DEFAULT,
+  FILM_OPACITY_DEFAULT,
   FILM_THICKNESS_SCALE_DEFAULT,
   type FilmGenerator,
 } from "./soapFilmConfig";
@@ -81,6 +82,12 @@ export type SoapFilmFlowUniforms = {
   touchTau: SharedValue<number>;
   /** Touch gaussian falloff radius, normalized units. */
   touchRadius: SharedValue<number>;
+  /** Band geometry: 0 horizontal, 1 rings around the apex. */
+  bandShape: SharedValue<number>;
+  /** Base pattern frequency; higher = finer marbling. */
+  grain: SharedValue<number>;
+  /** Vortices `(count, spin, radius, cycle)`. */
+  vortex: SharedValue<[number, number, number, number]>;
   /** Sine generator: domain frequency multiplier. */
   sineFreq: SharedValue<number>;
   /** Sine generator: x-warp time speed. */
@@ -93,13 +100,15 @@ export type SoapFilmFlowUniforms = {
 
 /** Uniforms for `SOAP_COLOR`. Omit entirely when `output="thickness"`. */
 export type SoapFilmColorUniforms = {
-  /** 0 = ramp LUT, 1 = physical thin-film. */
+  /** 0 = ramp LUT, 1 = physical thin-film, 2 = bubble palette. */
   mode: SharedValue<number>;
   /** Ramp wrap count (ramp mode) or film thickness in nm (physical mode). */
   thicknessScale: SharedValue<number>;
   /** View-angle cosine; 1 = flat screen. */
   cosTheta: SharedValue<number>;
   intensity: SharedValue<number>;
+  /** Film alpha 0..1; output is premultiplied. */
+  opacity: SharedValue<number>;
 };
 
 export type SoapFilmShaderProps = {
@@ -135,6 +144,9 @@ export function SoapFilmShader({
     uTouchAge: flow.touchAge.value,
     uTouchTau: flow.touchTau.value,
     uTouchRadius: flow.touchRadius.value,
+    uVortex: flow.vortex.value,
+    uBandShape: flow.bandShape.value,
+    uGrain: flow.grain.value,
   }));
 
   const sineUniforms = useDerivedValue(() => ({
@@ -153,6 +165,7 @@ export function SoapFilmShader({
       : FILM_THICKNESS_SCALE_DEFAULT,
     uCosTheta: color ? color.cosTheta.value : FILM_COS_THETA_DEFAULT,
     uIntensity: color ? color.intensity.value : FILM_INTENSITY_DEFAULT,
+    uOpacity: color ? color.opacity.value : FILM_OPACITY_DEFAULT,
   }));
 
   const ramp = useMemo(() => getSoapFilmRampImage(), []);
