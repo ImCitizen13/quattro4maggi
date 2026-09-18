@@ -1,27 +1,6 @@
 /**
- * useBubbleOptics
- *
- * Owns the live "look" levers of the harmonic bubble and builds the shader
- * `uniforms` from them. Currently wired to `LiquidBubbleLive` only: the
- * `iLens`/`iPrism` uniforms exist in `liquid-bubble-live/shaders.ts`, not yet
- * in the still-image shader.
- *
- * FLOW:
- * 1. One `SharedValue` per lever, seeded from the `bubbleModes.ts` defaults
- *    (every Gargantua-derived lever defaults OFF, so the untouched panel
- *    renders the pre-lever look).
- * 2. `BubbleTuningPanel` sliders write those values on the UI thread; resets
- *    write back `defaults`, the preset button writes `GARGANTUA_PRESET`.
- * 3. `uniforms` reads them plus `paramBuffer` → `iParams`, `iColor`,
- *    `iRefract`, `iFilm`, `iOptics`, `iLens`, `iPrism`. No React re-render
- *    per slider tick.
- *
- * KEY FEATURES:
- * - Pre-first-frame fallback: `paramBuffer` is empty until `useBubbleShape`'s
- *   first frame; a zeroed `PARAM_FLOATS` buffer stands in, or Skia throws
- *   "Incorrect uniform size for: iParams".
- * - `refract` default is per demo (still image caps at `REFRACT`, live uses
- *   `LIVE_REFRACT`), so it is a parameter.
+ * useBubbleOptics — live "look" levers and shader uniforms.
+ * Design notes: README.md → "hooks/useBubbleOptics.ts".
  */
 
 import {

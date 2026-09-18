@@ -57,14 +57,6 @@ const demos: Demo[] = [
     tags: [{ name: "reanimated", color: "#6a539a" }],
   },
   {
-    name: "Liquid Glass Bubble",
-    href: "/liquid-glass-bubble" as const,
-    tags: [
-      { name: "skia", color: "green" },
-      { name: "reanimated", color: "#6a539a" },
-    ],
-  },
-  {
     name: "Liquid Bubble Live",
     href: "/liquid-bubble-live" as const,
     tags: [

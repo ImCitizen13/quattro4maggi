@@ -1,31 +1,6 @@
 /**
- * Liquid Bubbles — harmonic mode physics (divergence phase 6B)
- *
- * Advances the three damped harmonic modes (`a2/phi2`, `a3`, `a4`) that
- * `shaders.ts` reads as `iParams`. No React, no Reanimated, no Skia imports —
- * this module only touches plain numbers and arrays, so `bun:test` can
- * exercise it directly (see `bubbleModeMath.test.ts`).
- *
- * Every exported function carries a `'worklet'` directive so the worklets
- * babel plugin compiles it for the Reanimated UI runtime: an UNMARKED
- * imported function captured by a worklet becomes a remote function and
- * throws when called synchronously on the UI thread. A `'worklet'`-marked
- * function is still an ordinary callable on the JS thread, so the tests are
- * unaffected — same pattern as the Verlet math module this replaced (phase 3,
- * commit a724cc6; see `temp/liquid-bubbles-divergence.md`).
- *
- * `stepBubbleModes` is ONE function with the spring integration and the
- * shortest-arc phase lerp written INLINE, and never allocates. Two reasons,
- * both learned the hard way in phase 3/4 (see
- * `temp/liquid-bubbles-divergence.md` → "Lessons"):
- *   - react-native-worklets 0.10.1 in Bundle Mode resolves a `'worklet'`
- *     -marked sibling helper captured by another worklet as `undefined` at
- *     runtime — a helper function is not an option here.
- *   - A function nested inside `stepBubbleModes` would allocate a fresh
- *     closure every frame, which the zero-per-frame-allocation rule forbids.
- * Callers own `state`, `outBuf`, and `outBbox`; this function only writes
- * into them. The `create*`/`reset*` helpers allocate (or mutate in place)
- * once at init/remount, never per frame.
+ * Liquid Bubbles — harmonic mode physics (steps the damped modes).
+ * Design notes: README.md → "hooks/bubbleModeMath.ts".
  */
 
 import {

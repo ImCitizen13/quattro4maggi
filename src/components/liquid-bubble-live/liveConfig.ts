@@ -1,14 +1,6 @@
 /**
- * Liquid Bubble Live — demo-local constants (phase 12B, Skia route)
- *
- * Everything the harmonic bubble itself needs — mode springs, amplitudes,
- * `REFRACT`, `FILM`, `BBOX_PAD` — is imported from
- * `../liquid-glass-bubble/bubbleModes.ts` and deliberately NOT duplicated
- * here: the physics is renderer-independent and the still-image demo owns its
- * tuning. This file holds only what is specific to refracting LIVE content:
- * the backdrop clip padding and the background scene's own look/speed.
- *
- * No React, no Skia imports — safe to read from a worklet.
+ * Liquid Bubble Live — demo-local constants (backdrop clip, background look).
+ * Design notes: README.md → "liveConfig.ts".
  */
 
 // ============================================================================

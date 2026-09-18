@@ -1,15 +1,6 @@
 /**
- * Liquid Bubbles — harmonic mode constants (divergence phase 5B+)
- *
- * Pure data: the buffer shape shared between the physics step
- * (`hooks/bubbleModeMath.ts`, phase 6B) and the `iParams` uniform in
- * `shaders.ts`, plus the spring/idle tuning constants that
- * `stepBubbleModes` (phase 6B) will read. No React, no Skia, no Reanimated
- * imports here — safe to import from a worklet or from plain TS.
- *
- * See `temp/liquid-bubbles-divergence.md` → "Physics contract" for the
- * derivation of every constant below. Do not re-derive or re-tune these in
- * phase 5B; phase 9B is the only phase that retunes feel.
+ * Liquid Bubbles — harmonic mode constants (buffer shape + tuning values).
+ * Design notes: README.md → "bubbleModes.ts".
  */
 
 // ============================================================================

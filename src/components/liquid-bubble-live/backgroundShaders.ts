@@ -1,28 +1,6 @@
 /**
- * Liquid Bubble Live — the live background (phase 12B, Skia route)
- *
- * This is the content the bubble refracts. It is drawn as a plain `<Fill>`
- * INSIDE the same `<Canvas>` as the bubble, because that is the only place it
- * can be: the Canvas is one iOS view backed by one Metal texture, and sibling
- * React Native views are composited by CoreAnimation only AFTER Skia has
- * finished — at the moment the bubble's shader runs there is nothing "behind"
- * it to read (see `temp/liquid-bubbles-divergence.md` → "The surface
- * boundary").
- *
- * FLOW (per pixel):
- * 1. `uv = p / iResolution.y` — aspect-preserving, so the bands keep their
- *    angle on any screen. `p` is in POINTS here: an ordinary `<Fill>` shader
- *    draws straight into the canvas and never goes through a layer, so unlike
- *    `shaders.ts` there is no device-pixel conversion to do.
- * 2. One scrolling diagonal coordinate → `fract` → 4 hard-edged colour bands.
- *    Hard edges on purpose: a smooth gradient hides refraction, a hard edge
- *    makes every point of the bend visible.
- * 3. A drifting grid, moving on a different axis at a different rate, so the
- *    two motions never lock and the scene never looks like a still.
- *
- * COST: one divide, ~2 `fract`, one `floor`, a 4-way branch, one `min`, one
- * `smoothstep`. Deliberately cheap — this is the thing being refracted, not
- * the thing being measured.
+ * Liquid Bubble Live — the live background shader.
+ * Design notes: README.md → "backgroundShaders.ts".
  */
 
 import { Skia } from '@shopify/react-native-skia';

@@ -1,28 +1,6 @@
 /**
- * BubbleTuningPanel
- *
- * Live tuning levers for the harmonic bubble, shared by `LiquidBubbles` and
- * `LiquidBubbleLive`. Every slider writes a `SharedValue` on the UI thread
- * (`TuningSlider`), so dragging never re-renders React.
- *
- * FLOW:
- * 1. Tab row: Hide · Shape · Refraction · Surface · Rim (React state — changes
- *    only on tap). Wraps onto two lines on a ~393pt phone.
- * 2. Shape      → Wobble (mode 3/4 master multiplier).
- * 3. Refraction → Refract, Lens falloff, Lens, Dispersion, Edge width.
- * 4. Surface    → Film, Film bands, Tint, Specular.
- * 5. Rim        → Rim dark, Rim width, Rainbow mix, Rainbow glow, Halo
- *    spread, Halo.
- * 6. Every slider is wrapped in `ResettableSlider`, pairing it with a small
- *    "↺" button that snaps that one value back to its default.
- * 7. When a slider tab is open, a row of two buttons sits under the tabs:
- *    "Reset all" (every optics value + wobble back to its default) and
- *    "Gargantua" (applies `GARGANTUA_PRESET` on top of the current values).
- *
- * KEY FEATURES:
- * - Render it AFTER the bubble's `GestureDetector`, not inside it, so the
- *   bubble's pan can't steal slider touches.
- * - Hide collapses to the tab row so the bubble can be judged unobstructed.
+ * BubbleTuningPanel — live tuning levers for the harmonic bubble.
+ * Design notes: README.md → "BubbleTuningPanel.tsx".
  */
 
 import React, { useState } from "react";

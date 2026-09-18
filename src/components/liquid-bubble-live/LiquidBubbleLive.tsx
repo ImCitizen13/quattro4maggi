@@ -1,69 +1,6 @@
 /**
- * LiquidBubbleLive
- *
- * Divergence phase 12B (`temp/liquid-bubbles-divergence.md` → "Refraction
- * source"): the same harmonic bubble as `liquid-glass-bubble/LiquidBubbles`,
- * refracting LIVE content instead of a still image. That demo is untouched and
- * stays as the one-pass, cheapest-available version.
- *
- * WHY THIS IS A SEPARATE DEMO, NOT A FLAG
- * The two differ in pass structure, not in a prop. The still-image version is:
- *     pass 1: draw Rect, shader samples a child ImageShader → store
- * — one pass, the photo already a texture. This one is:
- *     pass 1: draw the background                        → STORE (forced:
- *             the backdrop must be samplable)
- *     pass 2: bubble shader reads that snapshot          → store
- *     pass 3: composite the layer back onto the canvas   → store
- * Pass 3 exists only because Skia's `saveLayer` is a TEMPORARY it has to paste
- * back; there is no "keep this layer between frames" in Skia. Clipping bounds
- * how much AREA each pass touches, but not how many passes there are, and on a
- * tile-based GPU each break is real main-memory traffic. That is the price of
- * live content on this route, and it is why the doc lists a 2-pass
- * WebGPU/TypeGPU variant as the alternative if these three ever prove too many.
- *
- * FLOW:
- * 1. Gestures and physics are IMPORTED from the still-image demo, not
- *    reimplemented: `useBubblePanGesture` / `useBubblePinchGesture` own the
- *    anchor and radius, `useBubbleShape` steps `stepBubbleModes` on the UI
- *    runtime and publishes the double-buffered 12-float `iParams` buffer plus
- *    the shape bbox. The mode state is renderer-independent — nothing in it
- *    knows whether the thing behind the bubble is a photo or a live scene.
- * 2. A `<Fill>` draws the live background (`backgroundShaders.ts`) FIRST, so
- *    it is what Skia snapshots as the backdrop. It has to live inside this
- *    same `<Canvas>`: sibling RN views are composited by CoreAnimation only
- *    after Skia has finished, so at shader time there is nothing behind the
- *    Canvas to read.
- * 3. `<BackdropFilter>` runs the bubble effect over that snapshot. Skia binds
- *    the snapshot to the effect's single `uniform shader` slot; there is no
- *    `<ImageShader>` child here and therefore no `tx/ty="clamp"` guardrail.
- * 4. `clipRect` is the shape bbox grown by `REFRACT + CLIP_SLACK`. This is the
- *    ONE place where the still-image demo's `BBOX_PAD` reasoning inverts — see
- *    `liveConfig.ts`. A clip governs which pixels are READABLE, and the rim
- *    samples outward; the draw rect governs where alpha is non-zero, and that
- *    never leaves `r + 0.75`.
- *
- * KEY FEATURES:
- * - The 12-float physics buffer is forwarded to the shader VERBATIM. The
- *   backdrop filter was expected to need a PixelRatio conversion (a runtime
- *   shader image filter is usually handed the layer's device space); measuring
- *   it showed this one runs in absolute canvas POINTS, so there is nothing to
- *   rescale and nothing allocated per frame. See `shaders.ts` for the
- *   measurement and how to redo it.
- * - Outside the bubble the filter returns alpha 0, and the layer composites
- *   src-over, so the clip rect never reads as a visible box over the
- *   background.
- * - `LIVE_REFRACT` (18 pt) is a demo-local starting `iRefract`, not the
- *   still-image demo's `REFRACT` (9); it is now live-tunable via
- *   `BubbleTuningPanel`, so the clip pads by the current slider value, not the
- *   constant. That 9 exists to stop the rim sampling past the edge of a small
- *   `<ImageShader>` rect; the backdrop is the whole canvas, so the bend can be
- *   twice as strong without smearing.
- * - `SHOW_FPS_OVERLAY` mounts `FpsOverlay`. Note the simulator caps at 60 Hz,
- *   which pins `j120` at 100% and makes it carry no signal — real numbers need
- *   a release build on a 120 Hz device.
- * - `SHOW_TUNING_PANEL` mounts `BubbleTuningPanel` (Wobble + the 7 optics
- *   levers), all `SharedValue`s written on the UI thread with no React
- *   re-render per tick.
+ * LiquidBubbleLive — canvas, live background, backdrop-filter bubble, tuning panel.
+ * Design notes: README.md → "LiquidBubbleLive.tsx".
  */
 
 import {
@@ -85,16 +22,15 @@ import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 
-import { WOBBLE_DEFAULT } from "../liquid-glass-bubble/bubbleModes";
-import { BubbleTuningPanel } from "../liquid-glass-bubble/BubbleTuningPanel";
+import { backgroundEffect } from "./backgroundShaders";
+import { WOBBLE_DEFAULT } from "./bubbleModes";
+import { BubbleTuningPanel } from "./BubbleTuningPanel";
 import {
   useBubblePanGesture,
   useBubblePinchGesture,
-} from "../liquid-glass-bubble/hooks/useBubbleGestures";
-import { useBubbleOptics } from "../liquid-glass-bubble/hooks/useBubbleOptics";
-import { useBubbleShape } from "../liquid-glass-bubble/hooks/useBubbleShape";
-
-import { backgroundEffect } from "./backgroundShaders";
+} from "./hooks/useBubbleGestures";
+import { useBubbleOptics } from "./hooks/useBubbleOptics";
+import { useBubbleShape } from "./hooks/useBubbleShape";
 import { useClock } from "./hooks/useClock";
 import {
   BG_BAND_DIR_X,

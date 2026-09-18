@@ -1,29 +1,6 @@
 /**
- * Liquid Bubbles — bubble mode shape hook (divergence phase 6B)
- *
- * FLOW
- *   bubbleX/bubbleY/scaledRadius/isActive (from useBubblePanGesture /
- *   useBubblePinchGesture) → useFrameCallback('worklet') →
- *   stepBubbleModes (see bubbleModeMath.ts) → paramBuffer SharedValue<number[]>
- *   (12 floats, one of two buffers flipped each frame) + bboxX/Y/W/H
- *   SharedValues.
- *
- * KEY FEATURES
- *   - Zero per-frame allocation: the mode state, both output buffers and the
- *     scratch bbox are created ONCE, lazily, on the first frame, and filled
- *     in place afterwards. The frame callback never calls `new` or `.fill`
- *     on a steady-state frame.
- *   - All mutable state lives on the UI runtime (hung off `globalThis`
- *     there), not in JS module scope — same reasoning as the phase 3 Verlet
- *     hook this replaced (commit a724cc6; see
- *     `temp/liquid-bubbles-divergence.md`): a JS module-scope object
- *     captured by a worklet is cloned into a frozen shareable on the UI
- *     side, so the state has to be born on the runtime that mutates it.
- *   - Double-buffered `paramBuffer`: the shader always reads a fully-written
- *     buffer, never one being mutated mid-frame.
- *
- * Mounted in `LiquidBubbles.tsx` (phase 7B), replacing the phase 3/4 Verlet
- * ball-physics hook it superseded.
+ * Liquid Bubbles — bubble mode shape hook (drives the physics each frame).
+ * Design notes: README.md → "hooks/useBubbleShape.ts".
  */
 
 import { useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
