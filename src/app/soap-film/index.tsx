@@ -1,12 +1,16 @@
 import { SoapFilm } from "@/components/soap-film/SoapFilm";
-import { ThemeHeaderTitle, ThemeView } from "@/components/Theme";
+import { ThemeHeaderTitle } from "@/components/Theme";
 import { Stack } from "expo-router";
 import React from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 
+// `ThemeView` centers its children (no `flex:1` on the cross axis), which
+// collapses a flex-only Skia `<Canvas>` to 0x0 — see
+// `.claude/rules/webgpu-shaders.md` → "Screens" (same collapse, not a
+// WebGPU-only issue). A plain `View` keeps the canvas full-size.
 export default function Index() {
   return (
-    <ThemeView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -14,12 +18,13 @@ export default function Index() {
         }}
       />
       <SoapFilm />
-    </ThemeView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#1a1a1a",
   },
 });

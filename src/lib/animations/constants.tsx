@@ -101,6 +101,28 @@ export const SPRING_REFRESH_SETTLE = {
   reduceMotion: ReduceMotion.System,
 };
 
+/** Soap Film: squircle scale slider/pinch → size. Snappy, minimal overshoot. */
+export const SPRING_SQUIRCLE_SCALE = {
+  stiffness: 260,
+  damping: 26,
+  mass: 1,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
+/** Soap Film: film on/off crossfade opacity. */
+export const SPRING_FILM_CROSSFADE = {
+  stiffness: 180,
+  damping: 24,
+  mass: 1,
+  overshootClamping: true,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,

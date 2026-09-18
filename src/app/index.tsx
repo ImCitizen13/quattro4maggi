@@ -59,7 +59,10 @@ const demos: Demo[] = [
   {
     name: "Soap Film",
     href: "/soap-film" as const,
-    tags: [{ name: "reanimated", color: "#6a539a" }],
+    tags: [
+      { name: "skia", color: "green" },
+      { name: "reanimated", color: "#6a539a" },
+    ],
   },
   {
     name: "Liquid Bubble Live",
