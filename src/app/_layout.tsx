@@ -24,6 +24,7 @@ export default function RootLayout() {
     "LobsterTwo-Regular": require("@/assets/fonts/LobsterTwo-Regular.ttf"),
     LexendDeca: require("@/assets/fonts/LexendDeca-VariableFont_wght.ttf"),
     Merriweather: require("@/assets/fonts/Merriweather-VariableFont_opsz,wdth,wght.ttf"),
+    BoldonseRegular: require("@/assets/fonts/Boldonse-Regular.ttf"),
   });
 
   const [isAnimationDone, setIsAnimationDone] = useState(false);
@@ -40,60 +41,61 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardProvider>
-      <PortalProvider>
-        {showSplash && (
-          <Splash
-            onAnimationFinish={onAnimationFinish}
-            onExitComplete={onExitComplete}
-          />
-        )}
-        <ThemeProvider
-          value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-        >
-          <Stack>
-            <Stack.Screen
-              name="index"
-              options={{ headerShown: false, title: "Demos" }}
+        <PortalProvider>
+          {showSplash && (
+            <Splash
+              onAnimationFinish={onAnimationFinish}
+              onExitComplete={onExitComplete}
             />
-            <Stack.Screen
-              name="bouncy-scale-ball"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="liquid-metal"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="live-border-card"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="ripple-effect"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="scale-flip-card"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="select-from-list"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="text-flyin"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="wabi-and-more"
-              options={{ headerShown: false }}
-            />            <Stack.Screen
-              name="gargantua-type-gpu"
-              options={{ headerShown: false }}
-            />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </PortalProvider>
+          )}
+          <ThemeProvider
+            value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+          >
+            <Stack>
+              <Stack.Screen
+                name="index"
+                options={{ headerShown: false, title: "Demos" }}
+              />
+              <Stack.Screen
+                name="bouncy-scale-ball"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="liquid-metal"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="live-border-card"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ripple-effect"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="scale-flip-card"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="select-from-list"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="text-flyin"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="wabi-and-more"
+                options={{ headerShown: false }}
+              />{" "}
+              <Stack.Screen
+                name="gargantua-type-gpu"
+                options={{ headerShown: false }}
+              />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </PortalProvider>
       </KeyboardProvider>
     </GestureHandlerRootView>
   );
