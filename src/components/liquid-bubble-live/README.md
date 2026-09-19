@@ -9,6 +9,7 @@ Drag to move it, pinch to resize it. It refracts through a Skia
 
 - `LiquidBubbleLive.tsx`: canvas, background, backdrop clip, panel
 - `shaders.ts`: the bubble shader
+- `filmOverlayShader.ts`: the soap-film overlay pass (film from `soap-film`)
 - `bubbleModes.ts`: physics + look constants
 - `liveConfig.ts`: background + clip constants
 - `BubbleTuningPanel.tsx`: the controls
@@ -29,8 +30,10 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 |            | Lens                 | + magnify, − pincushion                                                                                      |
 |            | Dispersion           | Rainbow color split at the rim                                                                               |
 |            | Edge width           | Width of the rim band                                                                                        |
-| Surface    | Film                 | Soap-film rainbow strength                                                                                   |
-|            | Film bands           | Number of film color bands                                                                                   |
+| Surface    | Soap film: On/Off    | Swap the built-in cosine film for the animated soap-film overlay                                             |
+|            | Film                 | Film strength (both films)                                                                                   |
+|            | Film reach           | Soap film only: 0 rim only · 1 covers the whole bubble                                                       |
+|            | Film bands           | Number of built-in film color bands (soap film off)                                                          |
 |            | Tint                 | Blue tint amount                                                                                             |
 |            | Specular             | Shine highlight, top-left                                                                                    |
 | Rim        | Rim dark / Rim width | Dark outline strength and width                                                                              |
@@ -208,6 +211,57 @@ The filter's output is composited over the untouched background with
 src-over (`saveLayer(undefined, null, filter)` then `restore()`), so the
 `alpha = 0` region outside the bubble leaves the live background showing
 through — the clip rect is not a visible box.
+
+### filmOverlayShader.ts
+
+Puts the animated soap film from `src/components/soap-film` (curl-noise
+flow, vortices, ring bands) on the bubble.
+
+**Why a second pass, not a child shader.** The bubble is a `<RuntimeShader>`
+image filter inside `<BackdropFilter>`, and that filter's single child slot
+is the backdrop. It cannot also take the film as `uniform shader film`. So
+the film is drawn after the `BackdropFilter`, as a `<Rect>` over the same
+`clipRect`:
+
+```
+pass 1: BackdropFilter → bubble shader (built-in film zeroed: iFilm = 0)
+pass 2: Rect(clipRect) → overlay shader
+          ├─ child: SoapFilmShader output="thickness"
+          └─ child: 20x1 ramp ImageShader
+```
+
+**Same shape, same weight.** The overlay reads the same `iParams` buffer and
+re-derives the harmonic radius, AA alpha and shell tilt `nz` with the same
+math as `shaders.ts`, so it tracks every wobble, pinch and inertia frame.
+It composites with `fresnel · iFilm · alpha`. src-over with that weight is
+the bubble's own `mix(col, film, f · iFilm)`, now as a separate pass.
+
+**Film space.** The film is sampled in bubble-local coordinates: the rest
+disk (radius `R`) maps onto the inscribed circle of a virtual
+`FILM_OVERLAY_SIZE` square. The film rides with the bubble, the rings center
+on it, and wobble shows as the rim cutting through the pattern.
+
+**Color.** The shared `SOAP_FILM_COLOR_FN` from `src/lib/shaders/soapFilm.ts`,
+so the palette can never drift from the standalone demo. It gets the
+bubble's real per-pixel view angle (`cosθ = nz`, clamped ≥ 0.2), which
+shortens the optical path toward the rim and shifts colors there.
+
+**Film reach.** `f = om^(3·(1 − reach))`: 0 is the bubble's rim-only `om³`,
+1 drops the exponent to 0 so the film covers the whole disk evenly.
+
+**Toggle.** React state mounts/unmounts the pass (off = no fill cost); a
+`SharedValue` mirror zeroes the bubble's built-in film on the UI thread.
+
+**Known limits**
+
+- The overlay draws AFTER the whole bubble, so near the rim it partly covers
+  the specular, rainbow rim and dark rim line, which the built-in film sat
+  under. The fix, if needed, is moving those terms into the overlay pass.
+- Extra fill: the film shader (5-step backtrace × 3 curl layers + 2 vortex
+  phases) runs over the whole clip rect. The bubble is already fill-bound;
+  watch the FPS overlay when pinched large.
+- Film controls beyond Film / Film reach use the soap-film defaults
+  (`soap-film/soapFilmConfig.ts`); no film touches are fed yet.
 
 ### bubbleModes.ts
 

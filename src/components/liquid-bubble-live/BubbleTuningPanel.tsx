@@ -45,6 +45,10 @@ export type BubbleTuningPanelProps = {
   defaults: BubbleOpticsValues;
   /** Upper bound of the Refract slider, pt. */
   refractMax: number;
+  /** Soap-film overlay state (Surface tab toggle). */
+  soapFilmOn: boolean;
+  /** Flips the soap-film overlay. */
+  onSoapFilmToggle: () => void;
   /** Tab shown on mount. @default "refraction" */
   initialTab?: BubbleTuningTab;
 };
@@ -111,6 +115,8 @@ export function BubbleTuningPanel({
   optics,
   defaults,
   refractMax,
+  soapFilmOn,
+  onSoapFilmToggle,
   initialTab = "refraction",
 }: BubbleTuningPanelProps) {
   const [tab, setTab] = useState<BubbleTuningTab>(initialTab);
@@ -236,6 +242,16 @@ export function BubbleTuningPanel({
 
       {tab === "surface" && (
         <>
+          <View style={styles.presetRow}>
+            <PressableScale
+              onPress={onSoapFilmToggle}
+              style={styles.presetButton}
+            >
+              <Text style={styles.presetButtonText}>
+                Soap film: {soapFilmOn ? "On" : "Off"}
+              </Text>
+            </PressableScale>
+          </View>
           <ResettableSlider
             label="Film"
             value={optics.film}

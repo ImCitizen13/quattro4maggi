@@ -20,7 +20,7 @@ import {
   useFont,
   Skia,
 } from "@shopify/react-native-skia";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
@@ -74,10 +74,11 @@ const SHOW_FPS_OVERLAY = true;
 const SHOW_TUNING_PANEL = true;
 
 /**
- * Draw the soap-film overlay pass and zero the bubble's built-in cosine film.
- * Becomes a live panel toggle in the next step.
+ * Soap-film overlay on at mount (live toggle: Surface tab). On = overlay pass
+ * drawn and the bubble's built-in cosine film zeroed; off = no overlay pass
+ * (no fill cost) and the built-in film is back.
  */
-const SHOW_SOAP_FILM = true;
+const SOAP_FILM_ON_DEFAULT = true;
 
 /**
  * `iColor` tint hue, rgb 0..1. The tint WEIGHT (`iColor.a`) is no longer a
@@ -196,10 +197,20 @@ export function LiquidBubbleLive({
   });
   const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
 
+  // React state mounts/unmounts the overlay pass; the SharedValue mirror lets
+  // the bubble's uniforms react on the UI thread without a closure rebuild.
+  const [soapFilmOn, setSoapFilmOn] = useState(SOAP_FILM_ON_DEFAULT);
+  const soapFilmOnValue = useSharedValue(SOAP_FILM_ON_DEFAULT ? 1 : 0);
+  const toggleSoapFilm = () => {
+    const next = !soapFilmOn;
+    setSoapFilmOn(next);
+    soapFilmOnValue.value = next ? 1 : 0;
+  };
+
   // The overlay replaces the bubble's built-in cosine film, so zero it there.
   const bubbleUniforms = useDerivedValue(() => ({
     ...uniforms.value,
-    iFilm: SHOW_SOAP_FILM ? 0 : uniforms.value.iFilm,
+    iFilm: soapFilmOnValue.value === 1 ? 0 : uniforms.value.iFilm,
   }));
 
   const filmOverlayUniforms = useDerivedValue(() => ({
@@ -320,7 +331,7 @@ export function LiquidBubbleLive({
             }
           />
 
-          {SHOW_SOAP_FILM && (
+          {soapFilmOn && (
             <Rect rect={clipRect}>
               <Shader source={filmOverlayEffect} uniforms={filmOverlayUniforms}>
                 <SoapFilmShader
@@ -356,6 +367,8 @@ export function LiquidBubbleLive({
           optics={optics}
           defaults={defaults}
           refractMax={LIVE_REFRACT_SLIDER_MAX}
+          soapFilmOn={soapFilmOn}
+          onSoapFilmToggle={toggleSoapFilm}
         />
       )}
     </View>
