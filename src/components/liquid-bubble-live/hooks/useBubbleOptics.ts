@@ -14,6 +14,7 @@ import {
   DISPERSION,
   EDGE_WIDTH,
   FILM,
+  FILM_REACH,
   FILM_SCALE,
   HALO_OPACITY,
   HALO_SPREAD,
@@ -47,6 +48,8 @@ export type BubbleOptics = {
   edgeWidth: SharedValue<number>;
   /** `iFilm`: iridescence strength, 0..1. */
   film: SharedValue<number>;
+  /** Soap-film overlay reach: 0 rim only · 1 whole bubble. Overlay-only, not a bubble uniform. */
+  filmReach: SharedValue<number>;
   /** `iOptics.z`: thin-film band count. */
   filmScale: SharedValue<number>;
   /** `iColor.a`: tint weight, 0..1. */
@@ -134,6 +137,7 @@ export function useBubbleOptics({
   const dispersion = useSharedValue(DISPERSION);
   const edgeWidth = useSharedValue(EDGE_WIDTH);
   const film = useSharedValue(FILM);
+  const filmReach = useSharedValue(FILM_REACH);
   const filmScale = useSharedValue(FILM_SCALE);
   const tint = useSharedValue(TINT);
   const specular = useSharedValue(SPECULAR);
@@ -172,6 +176,7 @@ export function useBubbleOptics({
       dispersion,
       edgeWidth,
       film,
+      filmReach,
       filmScale,
       tint,
       specular,
@@ -189,6 +194,7 @@ export function useBubbleOptics({
       dispersion: DISPERSION,
       edgeWidth: EDGE_WIDTH,
       film: FILM,
+      filmReach: FILM_REACH,
       filmScale: FILM_SCALE,
       tint: TINT,
       specular: SPECULAR,

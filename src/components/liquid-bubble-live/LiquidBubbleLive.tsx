@@ -7,8 +7,13 @@ import {
   BackdropFilter,
   Canvas,
   Fill,
+  FilterMode,
   Image,
+  ImageShader,
+  MipmapMode,
+  Rect,
   RuntimeShader,
+  Shader,
   rect,
   useImage,
   Text as SKText,
@@ -21,6 +26,13 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
+import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
+import {
+  FILM_TOUCH_AGE_INACTIVE,
+  FILM_TOUCH_SLOTS,
+} from "@/components/soap-film/soapFilmConfig";
+import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
 import { backgroundEffect } from "./backgroundShaders";
 import {
@@ -47,6 +59,7 @@ import {
   CLIP_SLACK,
   LIVE_REFRACT,
 } from "./liveConfig";
+import { FILM_OVERLAY_SIZE, filmOverlayEffect } from "./filmOverlayShader";
 import { liveBubbleEffect } from "./shaders";
 import { BoldonseRegular } from "@/assets/fonts/getFonts";
 
@@ -59,6 +72,12 @@ const SHOW_FPS_OVERLAY = true;
 
 /** Mount `BubbleTuningPanel` (Wobble + the 7 live optics levers). */
 const SHOW_TUNING_PANEL = true;
+
+/**
+ * Draw the soap-film overlay pass and zero the bubble's built-in cosine film.
+ * Becomes a live panel toggle in the next step.
+ */
+const SHOW_SOAP_FILM = true;
 
 /**
  * `iColor` tint hue, rgb 0..1. The tint WEIGHT (`iColor.a`) is no longer a
@@ -155,11 +174,51 @@ export function LiquidBubbleLive({
     refract: LIVE_REFRACT,
   });
 
+  const time = useClock();
+
+  // ==========================================================================
+  // Soap film overlay (second pass — see filmOverlayShader.ts)
+  // ==========================================================================
+
+  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
+  // No film touches yet — every slot inactive.
+  const filmTouch = useSharedValue<number[]>(
+    new Array(FILM_TOUCH_SLOTS * 4).fill(0),
+  );
+  const filmTouchAge = useSharedValue<number[]>(
+    new Array(FILM_TOUCH_SLOTS).fill(FILM_TOUCH_AGE_INACTIVE),
+  );
+  const film = useSoapFilmUniforms({
+    time,
+    size: filmSize,
+    touch: filmTouch,
+    touchAge: filmTouchAge,
+  });
+  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
+
+  // The overlay replaces the bubble's built-in cosine film, so zero it there.
+  const bubbleUniforms = useDerivedValue(() => ({
+    ...uniforms.value,
+    iFilm: SHOW_SOAP_FILM ? 0 : uniforms.value.iFilm,
+  }));
+
+  const filmOverlayUniforms = useDerivedValue(() => ({
+    iParams: uniforms.value.iParams,
+    iFilm: optics.film.value,
+    iFalloff: optics.falloff.value,
+    uReach: optics.filmReach.value,
+    uFilmSize: filmSize.value,
+    uFilmColor: [
+      film.color.mode.value,
+      film.color.thicknessScale.value,
+      film.color.intensity.value,
+      film.color.opacity.value,
+    ],
+  }));
+
   // ==========================================================================
   // Live background
   // ==========================================================================
-
-  const time = useClock();
 
   const backgroundUniforms = useDerivedValue(() => ({
     iResolution: [width, height],
@@ -254,9 +313,34 @@ export function LiquidBubbleLive({
           <BackdropFilter
             clip={clipRect}
             filter={
-              <RuntimeShader source={liveBubbleEffect} uniforms={uniforms} />
+              <RuntimeShader
+                source={liveBubbleEffect}
+                uniforms={bubbleUniforms}
+              />
             }
           />
+
+          {SHOW_SOAP_FILM && (
+            <Rect rect={clipRect}>
+              <Shader source={filmOverlayEffect} uniforms={filmOverlayUniforms}>
+                <SoapFilmShader
+                  generator="curl"
+                  output="thickness"
+                  flow={film.flow}
+                />
+                <ImageShader
+                  image={filmRamp}
+                  tx="repeat"
+                  ty="clamp"
+                  fit="none"
+                  sampling={{
+                    filter: FilterMode.Linear,
+                    mipmap: MipmapMode.None,
+                  }}
+                />
+              </Shader>
+            </Rect>
+          )}
         </Canvas>
       </GestureDetector>
       {SHOW_FPS_OVERLAY && <FpsOverlay dark />}

@@ -245,6 +245,14 @@ export function BubbleTuningPanel({
             defaultValue={defaults.film}
           />
           <ResettableSlider
+            label="Film reach"
+            value={optics.filmReach}
+            min={0}
+            max={1}
+            decimals={2}
+            defaultValue={defaults.filmReach}
+          />
+          <ResettableSlider
             label="Film bands"
             value={optics.filmScale}
             min={0}

@@ -443,6 +443,16 @@ export const REFRACT = 9;
 export const FILM = 0.55;
 
 /**
+ * Soap-film overlay only (filmOverlayShader.ts): how far in from the rim the
+ * film reaches. Scales the fresnel exponent, `om^(3·(1 − reach))` — 0 keeps
+ * the rim-only `om³` weight above, 1 drops the exponent to 0 so the film
+ * covers the whole bubble evenly (strength is then just `iFilm`).
+ *
+ * TUNE: reach. 0 rim only · 0.6 half the body · 1 whole bubble.
+ */
+export const FILM_REACH = 0;
+
+/**
  * `iColor.a`: tint WEIGHT of `iColor.rgb` over the refracted body (not
  * opacity). Was the literal `0.35` in each demo's `BUBBLE_COLOR`; lifted here
  * so the live tuning panel has one default to start from.

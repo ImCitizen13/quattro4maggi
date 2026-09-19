@@ -298,6 +298,45 @@ half4 main(float2 fragCoord) {
 // 1c. COLOR — thickness → iridescent color
 // ============================================================================
 
+/**
+ * Shared thickness → color function, spliced into every shader that colors
+ * a film (`SOAP_COLOR` here, the bubble's film overlay in liquid-bubble-live)
+ * so the palettes can never drift apart.
+ *
+ * CONTRACT: the host shader must declare `uniform shader ramp;` (the 20x1
+ * LUT from `getSoapFilmRampImage`) before splicing this in.
+ *
+ * `cosTheta` shortens the optical path (≈ thickness · cosθ) in every mode, so
+ * a consumer with a real per-pixel view angle (a bubble's shell tilt) gets
+ * colors that shift toward the rim. 1 = flat, face-on.
+ */
+export const SOAP_FILM_COLOR_FN = `
+float3 soapFilmColor(float t, float mode, float scale, float cosTheta) {
+  const float PI = 3.14159265359;
+  float path = t * cosTheta;
+
+  if (mode < 0.5) {
+    // Ramp LUT: wrap around the 20-stop strip, sampled in the image's own
+    // pixel space (repeat in x).
+    float u = fract(path * scale);
+    half4 rampCol = ramp.eval(float2(u * 20.0, 0.5));
+    return pow(float3(rampCol.rgb), float3(0.8));
+  }
+  if (mode > 1.5) {
+    // Bubble palette: the exact cosine film used by liquid-bubble-live.
+    return 0.5 + 0.5 * cos(2.0 * PI * path * scale + float3(0.0, 2.1, 4.2));
+  }
+  // Physically-approximated thin-film interference: reflectance per channel
+  // at lambda = (650, 532, 450) nm, film index n ~= 1.33.
+  // R = sin^2(2*pi*n*d / lambda) — d = 0 goes black (the squared sine
+  // already folds in the single phase flip, since sin(x + pi)^2 == sin(x)^2).
+  float d = path * scale; // nm
+  float3 lambda = float3(650.0, 532.0, 450.0);
+  float3 R = sin((2.0 * PI * 1.33 * d) / lambda);
+  return R * R;
+}
+`;
+
 export const SOAP_COLOR = `
 uniform shader thickness;
 uniform shader ramp;
@@ -307,38 +346,12 @@ uniform float uCosTheta;
 uniform float uIntensity;
 uniform float uOpacity;       // film alpha, 0..1 (output is premultiplied)
 
-const float PI = 3.14159265359;
+${SOAP_FILM_COLOR_FN}
 
 half4 main(float2 fragCoord) {
-  half4 tSample = thickness.eval(fragCoord);
-  float t = float(tSample.r);
+  float t = float(thickness.eval(fragCoord).r);
+  float3 color = soapFilmColor(t, uMode, uThicknessScale, uCosTheta) * uIntensity;
 
-  float3 color;
-  if (uMode < 0.5) {
-    // Ramp LUT: wrap thickness around a 20-stop strip, sampled in the
-    // image's own pixel space (repeat in x).
-    float u = fract(t * uThicknessScale);
-    half4 rampCol = ramp.eval(float2(u * 20.0, 0.5));
-    color = pow(rampCol.rgb, float3(0.8));
-  } else if (uMode > 1.5) {
-    // Bubble palette: the exact cosine film used by liquid-bubble-live
-    // (shaders.ts), so the film matches the bubble when composited there.
-    color = 0.5 + 0.5 * cos(2.0 * PI * t * uThicknessScale + float3(0.0, 2.1, 4.2));
-  } else {
-    // Physically-approximated thin-film interference: reflectance per
-    // channel at lambda = (650, 532, 450) nm, film index n ~= 1.33.
-    // R = sin^2(2*pi*n*d*cosTheta / lambda) — d = 0 goes black (the
-    // squared sine already folds in the single reflected/transmitted
-    // phase flip, since sin(x + pi)^2 == sin(x)^2).
-    float d = t * uThicknessScale; // nm
-    float n = 1.33;
-    float3 lambda = float3(650.0, 532.0, 450.0);
-    float3 phase = (2.0 * PI * n * d * uCosTheta) / lambda;
-    float3 R = sin(phase);
-    color = R * R;
-  }
-
-  color *= uIntensity;
   // Premultiplied: Skia shaders output premul alpha, so scale rgb too.
   float a = clamp(uOpacity, 0.0, 1.0);
   return half4(clamp(color, 0.0, 1.0) * a, a);
