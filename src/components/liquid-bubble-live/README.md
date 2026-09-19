@@ -263,6 +263,16 @@ shortens the optical path toward the rim and shifts colors there.
 - Film controls beyond Film / Film reach use the soap-film defaults
   (`soap-film/soapFilmConfig.ts`); no film touches are fed yet.
 
+**TODO: film flows with the bubble's motion direction.** Moving the bubble
+should drag its film along the direction of travel, the way a real film
+sloshes when a bubble is thrown. Plan: feed the bubble's velocity
+(`useBubblePanGesture` → `velocityX/velocityY`) into the overlay's film touch
+ring buffer (`filmTouch` / `filmTouchAge` in `LiquidBubbleLive.tsx`, now
+all-inactive) as impulses at the bubble center, converted into film space,
+optionally scaled by `inertia` so heavier bubbles slosh longer. The flow
+field's existing touch push then advects the film opposite to the motion,
+and the swirl settles as the impulse decays.
+
 ### bubbleModes.ts
 
 Liquid Bubbles — harmonic mode constants (divergence phase 5B+).
