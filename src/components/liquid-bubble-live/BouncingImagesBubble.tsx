@@ -15,7 +15,10 @@
  *                  springs it back to the center
  *
  * KEY FEATURES:
- * - Radius is `width / 2`: the bubble spans the screen width.
+ * - Radius starts at `width / 2` (spans the screen) and is adjustable (Shape →
+ *   Size slider, or pinch). Image size, cruise speed and the wall all scale
+ *   with it; a resize rescales positions/velocities in place.
+ * - Each image has a random size (IMAGE_SIZE_MUL_MIN..MAX) and mass ∝ area.
  * - Image positions are LOCAL to the bubble center, so they ride with it.
  * - Zero React renders per frame: one `SharedValue<number[]>` mutated with
  *   `modify`, each image derives its own x/y.
@@ -46,6 +49,7 @@ import {
   useFrameCallback,
   useSharedValue,
   withSpring,
+  type DerivedValue,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -66,6 +70,7 @@ import {
   WOBBLE_DEFAULT,
 } from "./bubbleModes";
 import { BubbleTuningPanel } from "./BubbleTuningPanel";
+import { useBubblePinchGesture } from "./hooks/useBubbleGestures";
 import { useBubbleOptics } from "./hooks/useBubbleOptics";
 import { useBubbleShape } from "./hooks/useBubbleShape";
 import { useClock } from "./hooks/useClock";
@@ -99,16 +104,24 @@ const STRIDE = 4;
 const WALL_INSET = 4;
 
 /** Energy kept on a wall / image hit (1 = perfectly elastic). */
-const RESTITUTION = 0.95;
+const RESTITUTION = 0.65;
 
 /** Time constant pulling each image's speed back to its cruise speed, s. */
 const SPEED_RELAX_TAU = 1.2;
 
 /** How much of the bubble's acceleration the images feel (slosh), 0..1+. */
-const SLOSH = 1;
+const SLOSH = 0.2;
 
 /** dt clamp, s — a stalled frame can't tunnel an image through the wall. */
 const DT_MAX = 1 / 30;
+
+/** Per-image size multiplier range (× the scaled base size). */
+const IMAGE_SIZE_MUL_MIN = 0.6;
+const IMAGE_SIZE_MUL_MAX = 1.5;
+
+/** Bubble radius range for the Size slider / pinch, × the default (width/2). */
+const RADIUS_MUL_MIN = 0.35;
+const RADIUS_MUL_MAX = 1;
 
 // ============================================================================
 // Types
@@ -117,16 +130,19 @@ const DT_MAX = 1 / 30;
 export type BouncingImagesBubbleProps = {
   /** Number of images inside the bubble (≤ imageArray length). */
   imageCount?: number;
-  /** Image side, pt. */
+  /** Base image side at the default bubble size (width/2), pt. Scales with the bubble. */
   imageSize?: number;
-  /** Cruise speed each image relaxes back to, pt/s. */
+  /** Cruise speed at the default bubble size, pt/s. Scales with the bubble. */
   imageSpeed?: number;
 };
 
 type BouncingImageProps = {
   source: number;
   index: number;
-  size: number;
+  /** This image's size multiplier (IMAGE_SIZE_MUL_MIN..MAX). */
+  sizeMul: number;
+  /** Base image side for the current bubble size, pt. */
+  baseSize: DerivedValue<number>;
   bodies: SharedValue<number[]>;
   centerX: SharedValue<number>;
   centerY: SharedValue<number>;
@@ -149,21 +165,35 @@ function pickSources(count: number): number[] {
   return all.slice(0, n);
 }
 
-/** Non-overlapping start positions in a disk, random headings at `speed`. */
+/** Random per-image size multipliers. */
+function pickSizeMuls(count: number): number[] {
+  return Array.from(
+    { length: count },
+    () =>
+      IMAGE_SIZE_MUL_MIN +
+      Math.random() * (IMAGE_SIZE_MUL_MAX - IMAGE_SIZE_MUL_MIN),
+  );
+}
+
+/**
+ * Non-overlapping start positions in a disk, random headings at `speed`.
+ * `radii[i]` is image i's collision radius, pt.
+ */
 function seedBodies(
-  count: number,
-  wallRadius: number,
-  imageRadius: number,
+  bubbleRadius: number,
+  radii: number[],
   speed: number,
 ): number[] {
+  const count = radii.length;
   const out = new Array<number>(count * STRIDE).fill(0);
   for (let i = 0; i < count; i++) {
+    const wall = Math.max(0, bubbleRadius - WALL_INSET - radii[i]);
     let x = 0;
     let y = 0;
     // Rejection sample; give up after a few tries rather than loop forever
     // (the collision pass separates any leftover overlap on frame one).
     for (let attempt = 0; attempt < 60; attempt++) {
-      const r = wallRadius * Math.sqrt(Math.random());
+      const r = wall * Math.sqrt(Math.random());
       const a = Math.random() * Math.PI * 2;
       x = r * Math.cos(a);
       y = r * Math.sin(a);
@@ -171,7 +201,8 @@ function seedBodies(
       for (let j = 0; j < i; j++) {
         const dx = x - out[j * STRIDE];
         const dy = y - out[j * STRIDE + 1];
-        if (dx * dx + dy * dy < 4 * imageRadius * imageRadius) {
+        const minD = radii[i] + radii[j];
+        if (dx * dx + dy * dy < minD * minD) {
           clear = false;
           break;
         }
@@ -194,18 +225,19 @@ function seedBodies(
 function BouncingImage({
   source,
   index,
-  size,
+  sizeMul,
+  baseSize,
   bodies,
   centerX,
   centerY,
 }: BouncingImageProps) {
   const image = useImage(source);
-  const half = size / 2;
+  const size = useDerivedValue(() => baseSize.value * sizeMul);
   const x = useDerivedValue(
-    () => centerX.value + bodies.value[index * STRIDE] - half,
+    () => centerX.value + bodies.value[index * STRIDE] - size.value / 2,
   );
   const y = useDerivedValue(
-    () => centerY.value + bodies.value[index * STRIDE + 1] - half,
+    () => centerY.value + bodies.value[index * STRIDE + 1] - size.value / 2,
   );
   if (!image) return null;
   return (
@@ -218,16 +250,15 @@ function BouncingImage({
 // ============================================================================
 
 export function BouncingImagesBubble({
-  imageCount = 10,
+  imageCount = 20,
   imageSize = 64,
   imageSpeed = 140,
 }: BouncingImagesBubbleProps) {
   const { width, height } = useWindowDimensions();
   const restX = width / 2;
   const restY = height / 2;
+  // Default radius; the live one is `scaledRadius` (Size slider / pinch).
   const radius = width / 2;
-  const imageRadius = imageSize / 2;
-  const wallRadius = Math.max(0, radius - WALL_INSET - imageRadius);
 
   // ==========================================================================
   // Bubble drag (translation, not jump-to-finger) + spring home on release
@@ -266,6 +297,19 @@ export function BouncingImagesBubble({
     [bubbleX, bubbleY, startX, startY, isActive, velocityX, velocityY],
   );
 
+  // Pinch and the Size slider both write `scaledRadius`.
+  const { scaledRadius, pinchGesture } = useBubblePinchGesture({
+    restRadius: radius,
+    minRadius: radius * RADIUS_MUL_MIN,
+    maxRadius: radius * RADIUS_MUL_MAX,
+  });
+
+  // Simultaneous so a two-finger pinch doesn't lose to the pan.
+  const gesture = useMemo(
+    () => Gesture.Simultaneous(pinchGesture, panGesture),
+    [pinchGesture, panGesture],
+  );
+
   useAnimatedReaction(
     () => isActive.value,
     (active, prev) => {
@@ -281,7 +325,6 @@ export function BouncingImagesBubble({
   // Shape physics + optics (shared with LiquidBubbleLive)
   // ==========================================================================
 
-  const scaledRadius = useSharedValue(radius);
   const wobble = useSharedValue(WOBBLE_DEFAULT);
   const inertia = useSharedValue(INERTIA_DEFAULT);
   const strength = useSharedValue(STRENGTH_DEFAULT);
@@ -381,9 +424,22 @@ export function BouncingImagesBubble({
 
   const [sources] = useState(() => pickSources(imageCount));
   const count = sources.length;
-  const bodies = useSharedValue<number[]>(
-    seedBodies(count, wallRadius, imageRadius, imageSpeed),
+  const [sizeMuls] = useState(() => pickSizeMuls(count));
+  const [bodies0] = useState(() =>
+    seedBodies(
+      radius,
+      sizeMuls.map((m) => (imageSize * m) / 2),
+      imageSpeed,
+    ),
   );
+  const bodies = useSharedValue<number[]>(bodies0);
+
+  // Everything inside scales with the bubble: s = R / default R.
+  const baseSize = useDerivedValue(
+    () => imageSize * (scaledRadius.value / radius),
+  );
+  // Radius the bodies were last laid out for; a change rescales them.
+  const lastR = useSharedValue(radius);
 
   // Bubble velocity last frame, to turn its acceleration into slosh.
   const lastX = useSharedValue(restX);
@@ -413,20 +469,35 @@ export function BouncingImagesBubble({
     lastVy.value = bvy;
 
     const relax = 1 - Math.exp(-dt / SPEED_RELAX_TAU);
-    const minDist = 2 * imageRadius;
+    const R = scaledRadius.value;
+    const scale = R / radius;
+    const cruise = imageSpeed * scale;
+    const halfBase = (imageSize * scale) / 2;
+    // Bubble resized since last frame → rescale the whole layout with it, so
+    // images grow/shrink in place instead of piling against the wall.
+    const rescale = lastR.value > 0 ? R / lastR.value : 1;
+    lastR.value = R;
 
     bodies.modify((b) => {
       "worklet";
       // Integrate + wall.
       for (let i = 0; i < count; i++) {
         const o = i * STRIDE;
+        const ri = halfBase * sizeMuls[i];
+        const wall = Math.max(0, R - WALL_INSET - ri);
+        if (rescale !== 1) {
+          b[o] *= rescale;
+          b[o + 1] *= rescale;
+          b[o + 2] *= rescale;
+          b[o + 3] *= rescale;
+        }
         let vx = b[o + 2] - dvx;
         let vy = b[o + 3] - dvy;
 
         // Relax speed back to cruise (keeps them moving forever, damps slosh).
         const s = Math.sqrt(vx * vx + vy * vy);
         if (s > 1e-3) {
-          const k = (s + (imageSpeed - s) * relax) / s;
+          const k = (s + (cruise - s) * relax) / s;
           vx *= k;
           vy *= k;
         }
@@ -435,11 +506,11 @@ export function BouncingImagesBubble({
         let y = b[o + 1] + vy * dt;
 
         const d = Math.sqrt(x * x + y * y);
-        if (d > wallRadius && d > 1e-6) {
+        if (d > wall && d > 1e-6) {
           const nx = x / d;
           const ny = y / d;
-          x = nx * wallRadius;
-          y = ny * wallRadius;
+          x = nx * wall;
+          y = ny * wall;
           const vn = vx * nx + vy * ny;
           if (vn > 0) {
             vx -= (1 + RESTITUTION) * vn * nx;
@@ -453,11 +524,14 @@ export function BouncingImagesBubble({
         b[o + 3] = vy;
       }
 
-      // Image–image: equal-mass elastic along the contact normal + separation.
+      // Image–image: elastic along the contact normal + separation. Mass ∝
+      // area (sizeMul²), so a big image shoves a small one, not the reverse.
       for (let i = 0; i < count; i++) {
         const oi = i * STRIDE;
+        const mi = sizeMuls[i] * sizeMuls[i];
         for (let j = i + 1; j < count; j++) {
           const oj = j * STRIDE;
+          const minDist = halfBase * (sizeMuls[i] + sizeMuls[j]);
           const dx = b[oj] - b[oi];
           const dy = b[oj + 1] - b[oi + 1];
           const d2 = dx * dx + dy * dy;
@@ -465,18 +539,22 @@ export function BouncingImagesBubble({
           const d = Math.sqrt(d2);
           const nx = dx / d;
           const ny = dy / d;
-          const push = (minDist - d) / 2;
-          b[oi] -= nx * push;
-          b[oi + 1] -= ny * push;
-          b[oj] += nx * push;
-          b[oj + 1] += ny * push;
+          const mj = sizeMuls[j] * sizeMuls[j];
+          // Share of the correction each side takes: the lighter moves more.
+          const wi = mj / (mi + mj);
+          const wj = mi / (mi + mj);
+          const overlap = minDist - d;
+          b[oi] -= nx * overlap * wi;
+          b[oi + 1] -= ny * overlap * wi;
+          b[oj] += nx * overlap * wj;
+          b[oj + 1] += ny * overlap * wj;
           const rel = (b[oj + 2] - b[oi + 2]) * nx + (b[oj + 3] - b[oi + 3]) * ny;
           if (rel < 0) {
-            const imp = ((1 + RESTITUTION) / 2) * rel;
-            b[oi + 2] += imp * nx;
-            b[oi + 3] += imp * ny;
-            b[oj + 2] -= imp * nx;
-            b[oj + 3] -= imp * ny;
+            const imp = (1 + RESTITUTION) * rel;
+            b[oi + 2] += imp * wi * nx;
+            b[oi + 3] += imp * wi * ny;
+            b[oj + 2] -= imp * wj * nx;
+            b[oj + 3] -= imp * wj * ny;
           }
         }
       }
@@ -486,7 +564,7 @@ export function BouncingImagesBubble({
 
   return (
     <View style={styles.container}>
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={gesture}>
         <Canvas style={[styles.canvas, { width, height }]}>
           {/* ---- Backdrop (what the bubble refracts), drawn first ---- */}
           <Fill color="#ffffff" />
@@ -496,7 +574,8 @@ export function BouncingImagesBubble({
               key={i}
               source={source}
               index={i}
-              size={imageSize}
+              sizeMul={sizeMuls[i]}
+              baseSize={baseSize}
               bodies={bodies}
               centerX={bubbleX}
               centerY={bubbleY}
@@ -551,6 +630,10 @@ export function BouncingImagesBubble({
           inertiaDefault={INERTIA_DEFAULT}
           strength={strength}
           strengthDefault={STRENGTH_DEFAULT}
+          size={scaledRadius}
+          sizeDefault={radius}
+          sizeMin={radius * RADIUS_MUL_MIN}
+          sizeMax={radius * RADIUS_MUL_MAX}
           optics={optics}
           defaults={defaults}
           refractMax={REFRACT_SLIDER_MAX}

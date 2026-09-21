@@ -39,6 +39,13 @@ export type BubbleTuningPanelProps = {
   strength: SharedValue<number>;
   /** Default strength value, used by "Reset all". */
   strengthDefault: number;
+  /** Bubble radius, pt. Omit to hide the Size slider. */
+  size?: SharedValue<number>;
+  /** Default radius, used by per-slider reset and "Reset all". */
+  sizeDefault?: number;
+  /** Size slider range, pt. */
+  sizeMin?: number;
+  sizeMax?: number;
   /** Float buoyancy multiplier (0 = drifts, never rises). Omit to hide the slider. */
   buoyancy?: SharedValue<number>;
   /** Default buoyancy value, used by "Reset all". */
@@ -120,6 +127,10 @@ export function BubbleTuningPanel({
   inertiaDefault,
   strength,
   strengthDefault,
+  size,
+  sizeDefault,
+  sizeMin = 40,
+  sizeMax = 300,
   buoyancy,
   buoyancyDefault,
   floatOn,
@@ -140,6 +151,9 @@ export function BubbleTuningPanel({
     wobble.value = wobbleDefault;
     inertia.value = inertiaDefault;
     strength.value = strengthDefault;
+    if (size && sizeDefault !== undefined) {
+      size.value = sizeDefault;
+    }
     if (buoyancy && buoyancyDefault !== undefined) {
       buoyancy.value = buoyancyDefault;
     }
@@ -194,6 +208,16 @@ export function BubbleTuningPanel({
                 </Text>
               </PressableScale>
             </View>
+          )}
+          {size && sizeDefault !== undefined && (
+            <ResettableSlider
+              label="Size"
+              value={size}
+              min={sizeMin}
+              max={sizeMax}
+              decimals={0}
+              defaultValue={sizeDefault}
+            />
           )}
           {buoyancy && buoyancyDefault !== undefined && (
             <ResettableSlider
