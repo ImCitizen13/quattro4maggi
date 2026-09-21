@@ -4,7 +4,13 @@
  */
 
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import { PressableScale } from "pressto";
 
@@ -70,6 +76,8 @@ export type BubbleTuningPanelProps = {
   filmDragDefault?: number;
   /** Tab shown on mount. @default "refraction" */
   initialTab?: BubbleTuningTab;
+  /** Overrides the panel's placement (default: pinned 40 pt above the bottom). */
+  style?: StyleProp<ViewStyle>;
 };
 
 // ============================================================================
@@ -147,6 +155,7 @@ export function BubbleTuningPanel({
   filmDrag,
   filmDragDefault,
   initialTab = "refraction",
+  style,
 }: BubbleTuningPanelProps) {
   const [tab, setTab] = useState<BubbleTuningTab>(initialTab);
 
@@ -178,7 +187,7 @@ export function BubbleTuningPanel({
   };
 
   return (
-    <View style={styles.panel} pointerEvents="box-none">
+    <View style={[styles.panel, style]} pointerEvents="box-none">
       <View style={styles.tabs}>
         {TABS.map(({ key, label }) => (
           <PressableScale

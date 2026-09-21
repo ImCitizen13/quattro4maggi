@@ -131,18 +131,20 @@ WebGPU/TypeGPU variant as the alternative if these three ever prove too many.
 
 ### ArcCarouselBubble.tsx
 
-Arc mode: the `assets/liquid-glass-bubble` images as round thumbnails on a
-semicircle at the bottom, a fixed glass bubble at the arc's top slot, and
-the top image as the full-screen background.
+Arc mode: the `assets/liquid-glass-bubble` images as rectangular thumbnails
+(each keeps its own aspect) on a semicircle at the bottom, a fixed glass
+bubble at the arc's top slot, and the top image as the full-screen
+background.
 
 ```
  pan (UI)      offset = start − dx / (arcR · STEP)        STEP = 2π / N (wraps)
  release (UI)  offset = withSpring(round(offset + v · 0.25), SPRING_ARC_SNAP, velocity v)
  item i        d = wrap(i − offset), θ = d · STEP
-               x = cx + arcR·sinθ, y = cy − arcR·cosθ, scale 1.4 at θ 0 → 1 at ±STEP
+               x = cx + arcR·sinθ, y = cy − arcR·cosθ, height × 1.4 at θ 0 → 1 at ±STEP
                fades out below the horizon (90° → 115°), not drawn past it
  background i  weight = max(0, 1 − |d|), blend "plus" over black
- draw          black → backgrounds → thumbnails → BackdropFilter bubble
+ draw          black → backgrounds → thumbnails → BackdropFilter bubble → soap film
+ film motion   virtual bubble x = cx + offset · stepPx → useBubbleFilmMotion
 ```
 
 - **Crossfade:** "plus" makes the two nearest layers sum to an exact mix, in
@@ -151,8 +153,13 @@ the top image as the full-screen background.
 - **Images load once** with Skia's `useCollectionLoading`, shared by the
   background and the thumbnail. All 10 stay decoded at full size.
 - **Bubble:** fixed; `isActive` + the release velocity (× `BUBBLE_KICK`) feed
-  `useBubbleShape`, so a flick makes it wobble. No tuning panel or soap film
-  yet.
+  `useBubbleShape`, so a flick makes it wobble. Radius = `BUBBLE_FIT` (1.35) ×
+  the widest centered rectangle's half-diagonal, so its corners stay off the
+  rim; Shape → Size scales it 0.6–1.6×.
+- **Soap film:** the bubble never moves, so the film lags the wheel instead:
+  content sliding right under the glass reads as the bubble moving left.
+- **Controls:** `BubbleTuningPanel` via its `style` prop at the top (the arc
+  owns the bottom), starting on Hide. No Float / Buoyancy.
 - **Geometry** comes from `onLayout`, not the window, so the arc sits on the
   real bottom edge under the header.
 
