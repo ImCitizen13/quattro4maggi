@@ -36,6 +36,9 @@ import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
 import { backgroundEffect } from "./backgroundShaders";
 import {
+  BIRTH_RADIUS_START,
+  FLOAT_BUOYANCY_LEVER_DEFAULT,
+  FLOAT_ON_DEFAULT,
   INERTIA_DEFAULT,
   STRENGTH_DEFAULT,
   WOBBLE_DEFAULT,
@@ -45,8 +48,10 @@ import {
   useBubblePanGesture,
   useBubblePinchGesture,
 } from "./hooks/useBubbleGestures";
+import { useBubbleFloat, useBubbleTraits } from "./hooks/useBubbleFloat";
 import { useBubbleOptics } from "./hooks/useBubbleOptics";
 import { useBubbleShape } from "./hooks/useBubbleShape";
+import { useImageBubble } from "./hooks/useImageBubble";
 import { useClock } from "./hooks/useClock";
 import {
   BG_BAND_DIR_X,
@@ -69,6 +74,12 @@ import { BoldonseRegular } from "@/assets/fonts/getFonts";
 
 /** Mount the on-screen FPS readout. Real numbers need a release build on device. */
 const SHOW_FPS_OVERLAY = true;
+
+/** Spawn box side, pt. Bubbles inflate out of its top edge. */
+const BOX_SIZE = 120;
+
+/** Gap between the spawn box and the bottom of the screen, pt. */
+const BOX_BOTTOM_OFFSET = 50;
 
 /** Mount `BubbleTuningPanel` (Wobble + the 7 live optics levers). */
 const SHOW_TUNING_PANEL = true;
@@ -100,7 +111,7 @@ const LIVE_REFRACT_SLIDER_MAX = 40;
 // ============================================================================
 
 export type LiquidBubbleLiveProps = {
-  /** Radius the bubble rests at before any interaction, in points. */
+  /** Mean birth radius, in points — each bubble is `× BIRTH_RADIUS_RANGE`. */
   restRadius?: number;
   /** Largest radius a pinch can reach, in points. */
   maxRadius?: number;
@@ -130,11 +141,37 @@ export function LiquidBubbleLive({
   // and strength"), live-tunable from the panel with no React re-render.
   const inertia = useSharedValue(INERTIA_DEFAULT);
   const strength = useSharedValue(STRENGTH_DEFAULT);
+  // Master wobble visibility knob (see `bubbleModes.ts` → "Wobble
+  // visibility"), live-tunable from the slider below with no React re-render.
+  const wobble = useSharedValue(WOBBLE_DEFAULT);
+
+  // Per-bubble random traits (re-rolled at every spawn by useBubbleFloat).
+  // The sliders stay the BASE; the physics reads slider × trait.
+  const traits = useBubbleTraits();
+  const bubbleInertia = useDerivedValue(
+    () => inertia.value * traits.inertiaMul.value,
+  );
+  const bubbleStrength = useDerivedValue(
+    () => strength.value * traits.strengthMul.value,
+  );
+  const bubbleWobble = useDerivedValue(
+    () => wobble.value * traits.wobbleMul.value,
+  );
+
+  // Every bubble is born at the spawn box's top-center.
+  const spawnX = width / 2;
+  const spawnY = height - (BOX_SIZE + BOX_BOTTOM_OFFSET);
 
   const { bubbleX, bubbleY, isActive, velocityX, velocityY, panGesture } =
-    useBubblePanGesture({ centerX, centerY, inertia });
+    useBubblePanGesture({
+      centerX: spawnX,
+      centerY: spawnY - BIRTH_RADIUS_START,
+      inertia: bubbleInertia,
+    });
+  // Starts at ~0 so the first bubble inflates out of the box too; the
+  // spawner springs it to its random size.
   const { scaledRadius, pinchGesture } = useBubblePinchGesture({
-    restRadius,
+    restRadius: BIRTH_RADIUS_START,
     maxRadius,
   });
 
@@ -149,20 +186,59 @@ export function LiquidBubbleLive({
   // Physics (imported wholesale — the mode state is renderer-independent)
   // ==========================================================================
 
-  // Master wobble visibility knob (see `bubbleModes.ts` → "Wobble
-  // visibility"), live-tunable from the slider below with no React re-render.
-  const wobble = useSharedValue(WOBBLE_DEFAULT);
-
-  const { paramBuffer, bboxX, bboxY, bboxW, bboxH } = useBubbleShape({
+  const { paramBuffer, bboxX, bboxY, bboxW, bboxH, anchored } = useBubbleShape({
     bubbleX,
     bubbleY,
     scaledRadius,
     isActive,
     velocityX,
     velocityY,
-    wobble,
-    inertia,
-    strength,
+    wobble: bubbleWobble,
+    inertia: bubbleInertia,
+    strength: bubbleStrength,
+    birthShape: traits.birthShape,
+  });
+
+  // ==========================================================================
+  // Float (the bubble moving on its own — see hooks/useBubbleFloat.ts)
+  // ==========================================================================
+
+  // React state for the toggle label; the SharedValue mirror is what the
+  // worklet reads, so toggling never rebuilds the frame callback.
+  const [floatOn, setFloatOn] = useState(FLOAT_ON_DEFAULT);
+  const floatOnValue = useSharedValue(FLOAT_ON_DEFAULT ? 1 : 0);
+  const toggleFloat = () => {
+    const next = !floatOn;
+    setFloatOn(next);
+    floatOnValue.value = next ? 1 : 0;
+  };
+  const buoyancy = useSharedValue(FLOAT_BUOYANCY_LEVER_DEFAULT);
+
+  // Picture riding behind the bubble; a new random one at every spawn.
+  const imageBubble = useImageBubble({
+    posX: bubbleX,
+    posY: bubbleY,
+    radius: scaledRadius,
+  });
+
+  useBubbleFloat({
+    posX: bubbleX,
+    posY: bubbleY,
+    radius: scaledRadius,
+    restRadius,
+    spawnX,
+    spawnY,
+    width,
+    height,
+    isActive,
+    flingX: velocityX,
+    flingY: velocityY,
+    enabled: floatOnValue,
+    buoyancy,
+    inertia: bubbleInertia,
+    traits,
+    anchored,
+    onSpawn: imageBubble.onSpawn,
   });
 
   // `paramBuffer` is in POINTS and the filter runs in points, so there is
@@ -281,12 +357,22 @@ export function LiquidBubbleLive({
   const textX = textBounds ? centerX - textBounds.x - textBounds.width / 2 : 0;
   const textY = textBounds ? centerY - textBounds.y - textBounds.height / 2 : 0;
 
+  // Spawn box: its top-center is where every bubble is born (spawnX/spawnY).
+  const blackBoxRect = rect(
+    spawnX - BOX_SIZE / 2,
+    spawnY,
+    BOX_SIZE,
+    BOX_SIZE,
+  );
+
   const imagePath = require("../../../assets/liquid-glass-bubble/refract-image.png");
-  const image = useImage(imagePath);
+  const bg_path = require("../../../assets/liquid-glass-bubble/focus_bg.jpg");
+  // const imagePath1 = require("../../../assets/images/pedra.jpg");
+  const image = useImage(bg_path);
   // 1. Wait for the image to resolve
   if (!image) return null;
   // 2. Read the image's raw dimensions
-  const imageSize = width * 0.9; //image.width();
+  const imageSize = width * 2; //image.width();
 
   // 3. Center it on the same point the bubble rests at
   const imageX = centerX - imageSize / 2;
@@ -294,24 +380,21 @@ export function LiquidBubbleLive({
 
   return (
     <View style={styles.container}>
+      {/* Gestures: pan (drag / throw) + pinch (resize), over the whole canvas. */}
       <GestureDetector gesture={compositeGesture}>
+        {/* One Skia canvas: everything the bubble refracts must be drawn in it,
+            BEFORE the BackdropFilter (sibling RN views composite too late). */}
         <Canvas style={[styles.canvas, { width, height }]}>
-          {/* Drawn first — this IS the backdrop the bubble samples. */}
+          {/* ---- Backdrop (what the bubble refracts), drawn first ---- */}
 
+          {/* Base fill under the background image. */}
           <Fill color="#ffffff" />
-          {/*{font && <SKText
-            x={textX}
-            y={textY}
-            text={label}
-            font={font}
-            color={"black"}
-          />}*/}
+
+          {/* Background image, centered, 2× screen width. */}
           {image && (
-            // <Circle r={imgWidth} cx={x}cy={y} color={"red"} />}
             <Image
               image={image}
-              fit="cover"
-              // rect={imageRect}
+              fit="contain"
               width={imageSize}
               height={imageSize}
               x={imageX}
@@ -321,6 +404,24 @@ export function LiquidBubbleLive({
             />
           )}
 
+          {/* ImageBubble: a random picture per bubble, filling the bubble and
+              following it. Drawn before the BackdropFilter, so the glass
+              refracts it (see hooks/useImageBubble.ts). */}
+          {imageBubble.image && (
+            <Image
+              image={imageBubble.image}
+              fit="contain"
+              x={imageBubble.x}
+              y={imageBubble.y}
+              width={imageBubble.size}
+              height={imageBubble.size}
+            />
+          )}
+
+          {/* ---- Bubble ---- */}
+
+          {/* Pass 1: the glass bubble. Snapshots everything above within
+              clipRect and runs the bubble shader over it (shaders.ts). */}
           <BackdropFilter
             clip={clipRect}
             filter={
@@ -331,6 +432,8 @@ export function LiquidBubbleLive({
             }
           />
 
+          {/* Pass 2: soap-film overlay, same shape as the bubble, composited
+              on top (filmOverlayShader.ts). Unmounted when the toggle is off. */}
           {soapFilmOn && (
             <Rect rect={clipRect}>
               <Shader source={filmOverlayEffect} uniforms={filmOverlayUniforms}>
@@ -352,10 +455,19 @@ export function LiquidBubbleLive({
               </Shader>
             </Rect>
           )}
+          {/* ---- Foreground ---- */}
+
+          {/* Spawn box: every bubble inflates out of its top edge. Drawn after
+              the bubble, so it covers it and is not refracted. */}
+          <Rect rect={blackBoxRect}></Rect>
         </Canvas>
       </GestureDetector>
+
+      {/* FPS readout (real numbers need a release build on device). */}
       {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
-      {/* After the GestureDetector, not inside it, so the bubble's pan can't steal the slider's touches. */}
+
+      {/* Tuning panel. After the GestureDetector, not inside it, so the
+          bubble's pan can't steal the slider's touches. */}
       {SHOW_TUNING_PANEL && (
         <BubbleTuningPanel
           wobble={wobble}
@@ -364,6 +476,10 @@ export function LiquidBubbleLive({
           inertiaDefault={INERTIA_DEFAULT}
           strength={strength}
           strengthDefault={STRENGTH_DEFAULT}
+          buoyancy={buoyancy}
+          buoyancyDefault={FLOAT_BUOYANCY_LEVER_DEFAULT}
+          floatOn={floatOn}
+          onFloatToggle={toggleFloat}
           optics={optics}
           defaults={defaults}
           refractMax={LIVE_REFRACT_SLIDER_MAX}

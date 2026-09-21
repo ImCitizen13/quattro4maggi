@@ -21,6 +21,7 @@ import {
 } from "react-native-gesture-handler";
 import {
   clamp,
+  DerivedValue,
   SharedValue,
   useSharedValue,
   withSpring,
@@ -35,7 +36,7 @@ type UseBubblPanGestureParams = {
    * bubble lags the finger more. Optional so existing callers keep today's
    * mass unchanged.
    */
-  inertia?: SharedValue<number>;
+  inertia?: DerivedValue<number>;
 };
 
 type UseBubblPanGestureReturn = {

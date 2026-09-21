@@ -39,6 +39,14 @@ export type BubbleTuningPanelProps = {
   strength: SharedValue<number>;
   /** Default strength value, used by "Reset all". */
   strengthDefault: number;
+  /** Float buoyancy multiplier (0 = drifts, never rises). */
+  buoyancy: SharedValue<number>;
+  /** Default buoyancy value, used by "Reset all". */
+  buoyancyDefault: number;
+  /** Float state (Shape tab toggle). */
+  floatOn: boolean;
+  /** Flips floating on/off. */
+  onFloatToggle: () => void;
   /** Optics levers from `useBubbleOptics`. */
   optics: BubbleOptics;
   /** Default optics values, used by per-slider reset and "Reset all". */
@@ -112,6 +120,10 @@ export function BubbleTuningPanel({
   inertiaDefault,
   strength,
   strengthDefault,
+  buoyancy,
+  buoyancyDefault,
+  floatOn,
+  onFloatToggle,
   optics,
   defaults,
   refractMax,
@@ -128,6 +140,7 @@ export function BubbleTuningPanel({
     wobble.value = wobbleDefault;
     inertia.value = inertiaDefault;
     strength.value = strengthDefault;
+    buoyancy.value = buoyancyDefault;
   };
 
   const applyGargantua = () => {
@@ -168,6 +181,21 @@ export function BubbleTuningPanel({
 
       {tab === "shape" && (
         <>
+          <View style={styles.presetRow}>
+            <PressableScale onPress={onFloatToggle} style={styles.presetButton}>
+              <Text style={styles.presetButtonText}>
+                Float: {floatOn ? "On" : "Off"}
+              </Text>
+            </PressableScale>
+          </View>
+          <ResettableSlider
+            label="Buoyancy"
+            value={buoyancy}
+            min={0}
+            max={3}
+            decimals={2}
+            defaultValue={buoyancyDefault}
+          />
           <ResettableSlider
             label="Wobble"
             value={wobble}

@@ -13,7 +13,7 @@ Drag to move it, pinch to resize it. It refracts through a Skia
 - `bubbleModes.ts`: physics + look constants
 - `liveConfig.ts`: background + clip constants
 - `BubbleTuningPanel.tsx`: the controls
-- `hooks/`: gestures, shape physics (`bubbleModeMath` + test), optics, clock
+- `hooks/`: gestures, float, image bubble, shape physics (`bubbleModeMath` + test), optics, clock
 
 ## Controls
 
@@ -22,7 +22,9 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 
 | Tab        | Slider               | What it does                                                                                                 |
 | ---------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Shape      | Wobble               | How much the edge wobbles                                                                                    |
+| Shape      | Float: On/Off        | Bubbles inflate out of the box and float (rise, sway, bounce, respawn) · off = park                          |
+|            | Buoyancy             | How strongly it rises · 0 drifts without rising (× each bubble's random trait)                               |
+|            | Wobble               | How much the edge wobbles                                                                                    |
 |            | Inertia              | How heavy the bubble feels — lags more, rings longer, bigger release kick, stretches further                 |
 |            | Strength             | How stiff the surface is — higher snaps back faster and rests rounder, lower wobbles longer and more at rest |
 | Refraction | Refract              | How far the rim bends the background                                                                         |
@@ -450,6 +452,79 @@ in the still-image shader.
   "Incorrect uniform size for: iParams".
 - `refract` default is per demo (still image caps at `REFRACT`, live uses
   `LIVE_REFRACT`), so it is a parameter.
+
+### hooks/useBubbleFloat.ts
+
+The bubble's life cycle. Every bubble is born in the black spawn box at the
+bottom of the screen, inflates out of the box's top edge, launches upward,
+floats like a soap bubble (buoyancy, sideways sway, air drag, soft bounces
+off the left, right and bottom edges), drifts out the top, and is born
+again from the box.
+
+```
+ UI worklet (useFrameCallback), phases SPAWN → INFLATE → FLOAT → SPAWN
+   SPAWN   roll traits: wobble ×0.6–1.6 · strength ×0.7–1.4 · inertia ×0.7–1.5
+           · buoyancy ×0.6–1.5 · birthShape [a2, phi2, a3, phi3, a4, phi4]
+           scaledRadius = 1 → withSpring(restRadius × 0.6–1.5, SPRING_BUBBLE_INFLATE)
+           pos = box top-center, anchored = false
+   INFLATE center held at spawnY − R (grows out of the box's top edge), 0.8 s,
+           then v = 100–300 pt/s within ±30° of straight up
+           (float off: the newborn waits at the mouth)
+   FLOAT   v.y −= FLOAT_BUOYANCY · buoyancy · buoyancyMul / I · dt  (y DOWN, minus = up)
+           v.x += FLOAT_SWAY · sin(2π t / FLOAT_SWAY_PERIOD + φ) · dt
+           v   *= exp(−FLOAT_DRAG / √I · dt)
+           pos += v·dt → bubbleX / bubbleY  (direct write cancels any leftover spring)
+           x < R, x > W − R, y > H − R → reflect v, keep FLOAT_BOUNCE_KEEP
+           y < −R · FLOAT_EXIT_RADII   → SPAWN
+   finger down (any phase) → the pan's follow spring drives bubbleX/Y
+   release                 → FLOAT with the fling (≤ FLOAT_FLING_MAX)
+ useBubbleShape
+   anchored false → re-anchor the modes at the box, then apply birthShape
+   (a teleport is not motion); the modes spring the birth deformation back to rest
+ LiquidBubbleLive
+   wobble / strength / inertia fed to the physics = slider × trait (useDerivedValue)
+```
+
+- **Traits:** `useBubbleTraits` holds one bubble's random multipliers and
+  birth shape. The sliders are the base and are never overwritten by a
+  spawn. It's a separate hook because `useBubbleShape` needs the effective
+  values before `useBubbleFloat` can take its `anchored` output.
+- **Numbers (inertia 1):** cruising rise ≈ 80 pt/s (`FLOAT_BUOYANCY /
+  FLOAT_DRAG`), sway ≈ ±14 pt over 3 s, a full screen in ~10 s. The launch
+  decays with τ = 2 s. Derivations are in `bubbleModes.ts` → "Float" and
+  "Birth".
+- **Inertia:** buoyancy ÷ I and drag ÷ √I, so rise speed is 80 / √I: a heavy
+  bubble rises slower and coasts longer.
+- **Drag interplay:** a touch anywhere grabs it (the pan covers the whole
+  canvas). Letting go throws it with the fling velocity.
+- **Multi-bubble ready:** one `useBubbleTraits` + one `useBubbleFloat` per
+  bubble; all state is in their own SharedValues.
+- **Limits:** the spawn box is drawn after the bubble, so it isn't in the
+  refracted backdrop and covers the bubble where they overlap. The tuning
+  panel covers the box unless it's on Hide. Width/height are captured as
+  numbers, so a rotation keeps the old bounds until remount. Touching
+  without moving freezes the bubble in place until the first move.
+
+### hooks/useImageBubble.ts
+
+A picture that rides behind the bubble. It's drawn after the background and
+before the `BackdropFilter`, so it's part of the backdrop snapshot and the
+glass refracts it.
+
+```
+ JS, mount     8 distinct random sources from assets/Bubbles/256 imageArray
+               → preloaded with useImage (IMAGE_BUBBLE_POOL_SIZE)
+ JS, spawn     useBubbleFloat → scheduleOnRN(onSpawn) → random pool index → image
+ UI, per frame x = bubbleX − R, y = bubbleY − R, size = 2R  (useDerivedValue)
+```
+
+- **Fills the bubble:** the rect is `2R` square around the center, so the
+  image inflates out of the box with the bubble and follows pinch. It uses
+  the rest radius, so the wobble shows as the rim cutting across the picture.
+- **Preloaded pool:** a spawn never waits on a decode. One React render per
+  spawn, never per frame.
+- **Limit:** the pool is fixed at mount, so a session shows only 8 of the
+  46 images. Growing the pool means adding explicit `useImage` calls.
 
 ### hooks/useClock.ts
 

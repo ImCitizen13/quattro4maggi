@@ -376,6 +376,135 @@ export const MULT_MIN = 0.1;
 export const A2_MAX_CEIL = 0.11;
 
 // ============================================================================
+// Float — the bubble moving on its own (hooks/useBubbleFloat.ts)
+// ============================================================================
+//
+// Canvas points, y DOWN. Per frame while not dragged:
+//   v.y −= FLOAT_BUOYANCY · buoyancy / I · dt      (minus = up)
+//   v.x += FLOAT_SWAY · sin(2π t / FLOAT_SWAY_PERIOD + φ) · dt
+//   v   *= exp(−FLOAT_DRAG / √I · dt)
+// Terminal rise speed = FLOAT_BUOYANCY / FLOAT_DRAG = 80 pt/s at I = 1
+// (40 / √I in general: ~51 pt/s at I 2.5, ~146 at I 0.3). A launch speed
+// decays with τ = √I / FLOAT_DRAG = 2 s. Sway: velocity amplitude
+// SWAY / ω = 60 / 2.1 ≈ 29 pt/s, position amplitude ≈ 29 / 2.1 ≈ 14 pt.
+
+/** Float on at mount (live toggle: Shape tab). Off = the bubble parks where released. */
+export const FLOAT_ON_DEFAULT = true;
+
+/**
+ * Upward acceleration, pt/s², before the Buoyancy lever and inertia.
+ *
+ * TUNE: 20 lazy rise · 40 · 80 eager (terminal speed doubles with it).
+ */
+export const FLOAT_BUOYANCY = 40;
+
+/** Buoyancy lever default: multiplier on FLOAT_BUOYANCY. 0 = drifts, never rises. */
+export const FLOAT_BUOYANCY_LEVER_DEFAULT = 1;
+
+/**
+ * Air drag rate, 1/s (velocity decays as `e^(−DRAG·t)`).
+ *
+ * TUNE: 0.25 floaty, launches coast far · 0.5 · 1.0 heavy air.
+ */
+export const FLOAT_DRAG = 0.5;
+
+/**
+ * Launch speed range when a bubble detaches from the spawn box, pt/s.
+ *
+ * TUNE: min 50 barely leaves · 100–300 · max 600 shot out.
+ */
+export const FLOAT_LAUNCH_MIN = 100;
+export const FLOAT_LAUNCH_MAX = 300;
+
+/**
+ * Launch cone half-angle around straight up, radians (π/6 = ±30°).
+ *
+ * TUNE: 0 straight up · π/6 · π/3 wide spray.
+ */
+export const FLOAT_LAUNCH_CONE = Math.PI / 6;
+
+/**
+ * Sideways sway acceleration amplitude, pt/s², and its period, seconds.
+ *
+ * TUNE: sway 0 straight rise · 60 (~14 pt drift) · 150 wandering.
+ */
+export const FLOAT_SWAY = 60;
+export const FLOAT_SWAY_PERIOD = 3;
+
+/**
+ * Fraction of speed kept after bouncing off the left, right or bottom edge.
+ *
+ * TUNE: 0.3 dead thud · 0.6 · 0.9 rubber ball.
+ */
+export const FLOAT_BOUNCE_KEEP = 0.6;
+
+/**
+ * Release fling cap, pt/s — a hard flick can't send the bubble through
+ * several edge bounces in a frame or two.
+ *
+ * TUNE: 1500 tame · 2500 · 4000.
+ */
+export const FLOAT_FLING_MAX = 2500;
+
+/**
+ * Respawn once the center is this many radii above the top edge. > 1 so
+ * the stretched, wobbling rim is off-screen too.
+ *
+ * TUNE: 1.0 respawns as the round rim leaves · 1.3 · 2.0 lingers off-screen.
+ */
+export const FLOAT_EXIT_RADII = 1.3;
+
+// ============================================================================
+// Birth — each bubble inflates out of the spawn box (hooks/useBubbleFloat.ts)
+// ============================================================================
+//
+// Spawn → inflate (held at the box's top edge, R springs ≈ 1 → target with
+// `SPRING_BUBBLE_INFLATE`) → release up the launch cone → float → out the
+// top → spawn again. Every bubble rolls its own multipliers on the slider
+// values, so the sliders stay the BASE and are never overwritten. Ranges are
+// [min, max], drawn uniformly.
+
+/** Radius the spawner starts from, pt — not 0, so nothing divides by zero. */
+export const BIRTH_RADIUS_START = 1;
+
+/**
+ * Target radius as a multiple of `restRadius`.
+ *
+ * TUNE: [0.8, 1.2] uniform sizes · [0.6, 1.5] · [0.4, 2.0] pebbles to balloons.
+ */
+export const BIRTH_RADIUS_RANGE: readonly [number, number] = [0.6, 1.5];
+
+/**
+ * Seconds held at the box mouth while inflating, before the launch.
+ * A bit longer than `SPRING_BUBBLE_INFLATE`'s 0.7 s so the pop settles first.
+ *
+ * TUNE: 0.4 spat out · 0.8 · 1.5 slow blow.
+ */
+export const BIRTH_INFLATE_TIME = 0.8;
+
+/**
+ * Per-bubble multipliers on the Wobble / Strength / Inertia / Buoyancy
+ * sliders.
+ *
+ * TUNE: narrow a range toward [1, 1] to make every bubble alike on that axis.
+ */
+export const BIRTH_WOBBLE_RANGE: readonly [number, number] = [0.6, 1.6];
+export const BIRTH_STRENGTH_RANGE: readonly [number, number] = [0.7, 1.4];
+export const BIRTH_INERTIA_RANGE: readonly [number, number] = [0.7, 1.5];
+export const BIRTH_BUOYANCY_RANGE: readonly [number, number] = [0.6, 1.5];
+
+/**
+ * Birth deformation, fractions of R: mode-2 stretch along a random axis,
+ * plus random 3- and 4-lobe amplitudes. The modes spring these back to rest
+ * as the bubble rises. Sum of maxima 0.14 stays under `A_MAX` (0.15).
+ *
+ * TUNE: halve for a subtle birth · these · anything past A_MAX gets clamped.
+ */
+export const BIRTH_A2_RANGE: readonly [number, number] = [0.02, 0.07];
+export const BIRTH_A3_MAX = 0.04;
+export const BIRTH_A4_MAX = 0.03;
+
+// ============================================================================
 // Film drift
 // ============================================================================
 

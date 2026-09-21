@@ -6,6 +6,7 @@
 import {
   useFrameCallback,
   useSharedValue,
+  type DerivedValue,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -63,19 +64,25 @@ export type UseBubbleShapeParams = {
    * default, 2 doubles it. Owned by the caller (`LiquidBubbles.tsx`) so a
    * live slider can drive it without a React re-render.
    */
-  wobble: SharedValue<number>;
+  wobble: DerivedValue<number>;
   /**
    * Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble
    * inertia and strength"): 1 is today's feel, > 1 is heavier (rings out
    * longer, bigger release kick, stretches further), < 1 is lighter.
    */
-  inertia: SharedValue<number>;
+  inertia: DerivedValue<number>;
   /**
    * Per-bubble strength multiplier (see `bubbleModes.ts` → "Per-bubble
    * inertia and strength"): 1 is today's feel, > 1 is stiffer (snaps back
    * faster), < 1 wobbles longer.
    */
-  strength: SharedValue<number>;
+  strength: DerivedValue<number>;
+  /**
+   * Optional birth deformation, applied right after a re-anchor
+   * (`anchored = false`): `[a2, phi2, a3, phi3, a4, phi4]`, amplitudes as
+   * fractions of R. The modes then spring it back to rest. Empty = none.
+   */
+  birthShape?: SharedValue<number[]>;
 };
 
 export type UseBubbleShapeReturn = {
@@ -85,6 +92,13 @@ export type UseBubbleShapeReturn = {
   bboxY: SharedValue<number>;
   bboxW: SharedValue<number>;
   bboxH: SharedValue<number>;
+  /**
+   * True once the mode state is anchored at the current center. Write
+   * `false` from a worklet to re-anchor on the next frame — e.g. after a
+   * teleport (float respawn), which the modes would otherwise read as a huge
+   * speed and answer with a full stretch kick.
+   */
+  anchored: SharedValue<boolean>;
 };
 
 // ============================================================================
@@ -101,6 +115,7 @@ export function useBubbleShape({
   wobble,
   inertia,
   strength,
+  birthShape,
 }: UseBubbleShapeParams): UseBubbleShapeReturn {
   const paramBuffer = useSharedValue<number[]>([]);
   const bboxX = useSharedValue<number>(0);
@@ -136,6 +151,19 @@ export function useBubbleShape({
     } else if (!initialized.value) {
       // Remount onto existing state: re-anchor in place, no allocation.
       resetModeState(ui.state, cx, cy);
+      // Birth deformation on top of the rest shape. Mode 2 is stored as a
+      // vector (see ModeState), so its amplitude/axis go in as (c2, s2).
+      const birth = birthShape ? birthShape.value : undefined;
+      if (birth !== undefined && birth.length === 6) {
+        ui.state.c2 = birth[0] * Math.cos(birth[1]);
+        ui.state.s2 = birth[0] * Math.sin(birth[1]);
+        ui.state.a2 = birth[0];
+        ui.state.phi2 = birth[1];
+        ui.state.a3 = birth[2];
+        ui.state.phi3 = birth[3];
+        ui.state.a4 = birth[4];
+        ui.state.phi4 = birth[5];
+      }
       initialized.value = true;
     }
 
@@ -168,5 +196,5 @@ export function useBubbleShape({
     bboxH.value = ui.bbox.h;
   }, true);
 
-  return { paramBuffer, bboxX, bboxY, bboxW, bboxH };
+  return { paramBuffer, bboxX, bboxY, bboxW, bboxH, anchored: initialized };
 }

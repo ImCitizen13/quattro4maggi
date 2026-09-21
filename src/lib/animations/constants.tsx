@@ -123,6 +123,20 @@ export const SPRING_FILM_CROSSFADE = {
   reduceMotion: ReduceMotion.System,
 };
 
+/**
+ * Liquid Bubble Live: bubble inflating out of the spawn box, R ≈ 1 → target.
+ * dampingRatio 0.6 gives one soft overshoot (a "pop" to size) that settles
+ * inside the ~0.8 s inflate hold (`BIRTH_INFLATE_TIME`).
+ */
+export const SPRING_BUBBLE_INFLATE = {
+  duration: 700,
+  dampingRatio: 0.6,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,
