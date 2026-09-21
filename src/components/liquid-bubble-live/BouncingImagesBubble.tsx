@@ -10,7 +10,8 @@
  *                  each other · relax speed back to IMAGE_SPEED
  *   draw         → background → images → BackdropFilter (bubble shader), so the
  *                  glass refracts the images near its rim → soap-film overlay
- *                  (filmOverlayShader.ts, toggle in the Surface tab)
+ *                  (filmOverlayShader.ts, toggle in the Surface tab); the film
+ *                  lags the bubble's drag / spring home (useBubbleFilmMotion)
  *   drag         → pan moves the bubble by the finger's translation; release
  *                  springs it back to the center
  *
@@ -56,20 +57,18 @@ import {
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
 import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
-import {
-  FILM_TOUCH_AGE_INACTIVE,
-  FILM_TOUCH_SLOTS,
-} from "@/components/soap-film/soapFilmConfig";
 import { SPRING_BUBBLE_INFLATE } from "@/lib/animations/constants";
 import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
 import { imageArray } from "../../../assets/Bubbles/128/images.generated";
 import {
+  FILM_DRAG_DEFAULT,
   INERTIA_DEFAULT,
   STRENGTH_DEFAULT,
   WOBBLE_DEFAULT,
 } from "./bubbleModes";
 import { BubbleTuningPanel } from "./BubbleTuningPanel";
+import { useBubbleFilmMotion } from "./hooks/useBubbleFilmMotion";
 import { useBubblePinchGesture } from "./hooks/useBubbleGestures";
 import { useBubbleOptics } from "./hooks/useBubbleOptics";
 import { useBubbleShape } from "./hooks/useBubbleShape";
@@ -120,7 +119,7 @@ const DT_MAX = 1 / 30;
 
 /** Per-image size multiplier range (× the scaled base size). */
 const IMAGE_SIZE_MUL_MIN = 0.6;
-const IMAGE_SIZE_MUL_MAX = 1.5;
+const IMAGE_SIZE_MUL_MAX = 2;
 
 /** Bubble radius range for the Size slider / pinch, × the default (width/2). */
 const RADIUS_MUL_MIN = 0.35;
@@ -273,7 +272,7 @@ function BouncingImage({
 // ============================================================================
 
 export function BouncingImagesBubble({
-  imageCount = 20,
+  imageCount = 10,
   imageSize = 64,
   imageSpeed = 140,
 }: BouncingImagesBubbleProps) {
@@ -378,21 +377,6 @@ export function BouncingImagesBubble({
   // ==========================================================================
 
   const time = useClock();
-  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
-  // No film touches — every slot inactive.
-  const filmTouch = useSharedValue<number[]>(
-    new Array(FILM_TOUCH_SLOTS * 4).fill(0),
-  );
-  const filmTouchAge = useSharedValue<number[]>(
-    new Array(FILM_TOUCH_SLOTS).fill(FILM_TOUCH_AGE_INACTIVE),
-  );
-  const film = useSoapFilmUniforms({
-    time,
-    size: filmSize,
-    touch: filmTouch,
-    touchAge: filmTouchAge,
-  });
-  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
 
   // React state mounts/unmounts the pass; the SharedValue mirror zeroes the
   // bubble's built-in film on the UI thread.
@@ -403,6 +387,37 @@ export function BouncingImagesBubble({
     setSoapFilmOn(next);
     soapFilmOnValue.value = next ? 1 : 0;
   };
+
+  // Film lags the bubble's motion (drag + spring home) — same as
+  // LiquidBubbleLive, see hooks/useBubbleFilmMotion.ts.
+  const filmDrag = useSharedValue(FILM_DRAG_DEFAULT);
+  const filmMotion = useBubbleFilmMotion({
+    posX: bubbleX,
+    posY: bubbleY,
+    radius: scaledRadius,
+    time,
+    enabled: soapFilmOnValue,
+    drag: filmDrag,
+    inertia,
+  });
+
+  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
+  const film = useSoapFilmUniforms({
+    time,
+    size: filmSize,
+    touch: filmMotion.filmTouch,
+    touchAge: filmMotion.filmTouchAge,
+  });
+  // Impulse decay/reach from the hook, not the soap-film finger-poke defaults.
+  const filmFlow = useMemo(
+    () => ({
+      ...film.flow,
+      touchTau: filmMotion.touchTau,
+      touchRadius: filmMotion.touchRadius,
+    }),
+    [film.flow, filmMotion.touchTau, filmMotion.touchRadius],
+  );
+  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
 
   const bubbleUniforms = useDerivedValue(() => ({
     ...uniforms.value,
@@ -635,7 +650,7 @@ export function BouncingImagesBubble({
                 <SoapFilmShader
                   generator="curl"
                   output="thickness"
-                  flow={film.flow}
+                  flow={filmFlow}
                 />
                 <ImageShader
                   image={filmRamp}
@@ -674,6 +689,8 @@ export function BouncingImagesBubble({
           refractMax={REFRACT_SLIDER_MAX}
           soapFilmOn={soapFilmOn}
           onSoapFilmToggle={toggleSoapFilm}
+          filmDrag={filmDrag}
+          filmDragDefault={FILM_DRAG_DEFAULT}
         />
       )}
     </View>
