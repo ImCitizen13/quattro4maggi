@@ -1,3 +1,4 @@
+import { ArcCarouselBubble } from "@/components/liquid-bubble-live/ArcCarouselBubble";
 import { BouncingImagesBubble } from "@/components/liquid-bubble-live/BouncingImagesBubble";
 import { LiquidBubbleLive } from "@/components/liquid-bubble-live/LiquidBubbleLive";
 import { ThemeHeaderTitle } from "@/components/Theme";
@@ -6,23 +7,31 @@ import { PressableScale } from "pressto";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-type Mode = "float" | "bounce";
+type Mode = "float" | "bounce" | "arc";
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "float", label: "Float" },
   { key: "bounce", label: "Bounce" },
+  { key: "arc", label: "Arc" },
 ];
+
+const SCREENS: Record<Mode, React.ComponentType> = {
+  float: LiquidBubbleLive,
+  bounce: BouncingImagesBubble,
+  arc: ArcCarouselBubble,
+};
 
 /**
  * Plain `View`, not `ThemeView`: the Canvas is sized explicitly to the window
  * and a centering container buys nothing, while the background `<Fill>` wants
  * the whole screen.
  *
- * Only one demo is mounted at a time — both drive `useBubbleShape`, whose mode
+ * Only one demo is mounted at a time — all of them drive `useBubbleShape`, whose mode
  * state is a UI-runtime singleton.
  */
 export default function Index() {
   const [mode, setMode] = useState<Mode>("float");
+  const Screen = SCREENS[mode];
 
   return (
     <View style={styles.container}>
@@ -32,7 +41,8 @@ export default function Index() {
           headerTitle: () => <ThemeHeaderTitle text="Liquid Bubble Live" />,
         }}
       />
-      {mode === "float" ? <LiquidBubbleLive /> : <BouncingImagesBubble />}
+      <Screen />
+
 
       <View style={styles.switcher} pointerEvents="box-none">
         {MODES.map(({ key, label }) => (

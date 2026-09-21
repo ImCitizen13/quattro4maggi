@@ -138,6 +138,21 @@ export const SPRING_BUBBLE_INFLATE = {
   reduceMotion: ReduceMotion.System,
 };
 
+/**
+ * Liquid Bubble Arc: carousel snapping to the nearest image after a drag or
+ * flick. Physics-based (stiffness/damping, no duration) so the release
+ * velocity carries into the snap. Slightly underdamped: one small settle.
+ */
+export const SPRING_ARC_SNAP = {
+  stiffness: 170, // TUNE: higher = snappier settle
+  damping: 22, // TUNE: lower = more overshoot past the slot
+  mass: 1,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,

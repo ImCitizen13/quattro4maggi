@@ -8,6 +8,8 @@ Drag to move it, pinch to resize it. It refracts through a Skia
 ## Files
 
 - `LiquidBubbleLive.tsx`: canvas, background, backdrop clip, panel
+- `BouncingImagesBubble.tsx`: Bounce mode — images bouncing inside one big bubble
+- `ArcCarouselBubble.tsx`: Arc mode — image wheel on a bottom semicircle, bubble at its top slot
 - `shaders.ts`: the bubble shader
 - `filmOverlayShader.ts`: the soap-film overlay pass (film from `soap-film`)
 - `bubbleModes.ts`: physics + look constants
@@ -126,6 +128,33 @@ WebGPU/TypeGPU variant as the alternative if these three ever prove too many.
 - `SHOW_TUNING_PANEL` mounts `BubbleTuningPanel` (Wobble + the 7 optics
   levers), all `SharedValue`s written on the UI thread with no React
   re-render per tick.
+
+### ArcCarouselBubble.tsx
+
+Arc mode: the `assets/liquid-glass-bubble` images as round thumbnails on a
+semicircle at the bottom, a fixed glass bubble at the arc's top slot, and
+the top image as the full-screen background.
+
+```
+ pan (UI)      offset = start − dx / (arcR · STEP)        STEP = 2π / N (wraps)
+ release (UI)  offset = withSpring(round(offset + v · 0.25), SPRING_ARC_SNAP, velocity v)
+ item i        d = wrap(i − offset), θ = d · STEP
+               x = cx + arcR·sinθ, y = cy − arcR·cosθ, scale 1.4 at θ 0 → 1 at ±STEP
+               fades out below the horizon (90° → 115°), not drawn past it
+ background i  weight = max(0, 1 − |d|), blend "plus" over black
+ draw          black → backgrounds → thumbnails → BackdropFilter bubble
+```
+
+- **Crossfade:** "plus" makes the two nearest layers sum to an exact mix, in
+  any draw order (a src-over pair breaks at the 9 → 0 wrap). Layers with
+  weight 0 get height 0, so at most 2 full-screen images are drawn.
+- **Images load once** with Skia's `useCollectionLoading`, shared by the
+  background and the thumbnail. All 10 stay decoded at full size.
+- **Bubble:** fixed; `isActive` + the release velocity (× `BUBBLE_KICK`) feed
+  `useBubbleShape`, so a flick makes it wobble. No tuning panel or soap film
+  yet.
+- **Geometry** comes from `onLayout`, not the window, so the arc sits on the
+  real bottom edge under the header.
 
 ### shaders.ts
 
