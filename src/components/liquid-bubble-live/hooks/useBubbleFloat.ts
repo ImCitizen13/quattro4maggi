@@ -6,11 +6,13 @@
  *
  * FLOW (UI worklet, one `useFrameCallback`):
  *   SPAWN     → roll traits (wobble/strength/inertia/buoyancy multipliers,
- *               birth deformation), R = 1 → withSpring(random target),
+ *               birth deformation, launch v within ±FLOAT_LAUNCH_CONE of up),
+ *               R = 1 → withSpring(random target, duration BIRTH_TIME),
  *               pos = box top, `anchored = false` so the modes re-anchor,
  *               `onSpawn` on the JS thread (scheduleOnRN)
- *   INFLATE   → center held at spawnY − R (grows out of the box's top edge)
- *               for BIRTH_INFLATE_TIME, then launch within ±FLOAT_LAUNCH_CONE of up
+ *   INFLATE   → attached at spawnY − R (grows out of the box's top edge)
+ *               while the motion eases in; both over T = BIRTH_TIME,
+ *               starting together — no hold, no velocity jump
  *   FLOAT     → buoyancy + sway + air drag → pos += v·dt, bounces;
  *               center FLOAT_EXIT_RADII above the top → SPAWN
  *   finger down at any phase → hands off to the pan's follow spring;
@@ -44,10 +46,10 @@ import {
   BIRTH_A4_MAX,
   BIRTH_BUOYANCY_RANGE,
   BIRTH_INERTIA_RANGE,
-  BIRTH_INFLATE_TIME,
   BIRTH_RADIUS_RANGE,
   BIRTH_RADIUS_START,
   BIRTH_STRENGTH_RANGE,
+  BIRTH_TIME,
   BIRTH_WOBBLE_RANGE,
   DT_MAX_MS,
   DT_MIN_MS,
@@ -166,6 +168,9 @@ export function useBubbleFloat({
   const birthAge = useSharedValue<number>(0);
   const vx = useSharedValue<number>(0);
   const vy = useSharedValue<number>(0);
+  // Free-flight displacement from the box mouth, built up during INFLATE.
+  const offsetX = useSharedValue<number>(0);
+  const offsetY = useSharedValue<number>(0);
   const swayTime = useSharedValue<number>(0);
   const swayPhase = useSharedValue<number>(0);
   const wasActive = useSharedValue<number>(0);
@@ -213,12 +218,23 @@ export function useBubbleFloat({
         (BIRTH_RADIUS_RANGE[0] +
           Math.random() * (BIRTH_RADIUS_RANGE[1] - BIRTH_RADIUS_RANGE[0]));
       radius.value = BIRTH_RADIUS_START;
-      radius.value = withSpring(targetR, SPRING_BUBBLE_INFLATE);
+      // Spring duration = BIRTH_TIME, the same factor the motion eases over.
+      radius.value = withSpring(targetR, {
+        ...SPRING_BUBBLE_INFLATE,
+        duration: BIRTH_TIME * 1000,
+      });
 
       posX.value = spawnX;
       posY.value = spawnY - BIRTH_RADIUS_START;
-      vx.value = 0;
-      vy.value = 0;
+      // Launch velocity is picked now but only eases in during INFLATE.
+      const angle =
+        -Math.PI / 2 + (Math.random() * 2 - 1) * FLOAT_LAUNCH_CONE;
+      const speed =
+        FLOAT_LAUNCH_MIN + Math.random() * (FLOAT_LAUNCH_MAX - FLOAT_LAUNCH_MIN);
+      vx.value = Math.cos(angle) * speed;
+      vy.value = Math.sin(angle) * speed;
+      offsetX.value = 0;
+      offsetY.value = 0;
       birthAge.value = 0;
       swayPhase.value = Math.random() * 2 * Math.PI;
       // A teleport is not motion — re-anchor the modes (and apply birthShape).
@@ -249,39 +265,41 @@ export function useBubbleFloat({
     }
 
     const R = Math.max(radius.value, BIRTH_RADIUS_START);
+    const inflating = phase.value === PHASE_INFLATE;
 
-    // ---- INFLATE: grow out of the box's top edge, then launch ----
-    if (phase.value === PHASE_INFLATE) {
-      posX.value = spawnX;
-      posY.value = spawnY - R;
-      birthAge.value += dt;
-      // Float off: a newborn waits at the mouth until float is back on.
-      if (birthAge.value >= BIRTH_INFLATE_TIME && enabled.value === 1) {
-        const angle =
-          -Math.PI / 2 + (Math.random() * 2 - 1) * FLOAT_LAUNCH_CONE;
-        const speed =
-          FLOAT_LAUNCH_MIN +
-          Math.random() * (FLOAT_LAUNCH_MAX - FLOAT_LAUNCH_MIN);
-        vx.value = Math.cos(angle) * speed;
-        vy.value = Math.sin(angle) * speed;
+    // ---- INFLATE: grow and start moving together, both over BIRTH_TIME ----
+    // Motion weight m = smoothstep(age / T). The bubble stays attached to
+    // the mouth (spawnY − R, rising as it grows) plus a free-flight offset
+    // that accumulates v·m·dt, so there is no hold and no velocity jump at
+    // the hand-off to FLOAT.
+    let m = 1;
+    if (inflating) {
+      // Float off: a newborn keeps growing but waits at the mouth.
+      if (enabled.value === 1) {
+        birthAge.value += dt;
+      }
+      const u = Math.min(birthAge.value / BIRTH_TIME, 1);
+      m = u * u * (3 - 2 * u);
+      if (m === 0) {
+        posX.value = spawnX + offsetX.value;
+        posY.value = spawnY - R + offsetY.value;
+        return;
+      }
+      if (u >= 1) {
         phase.value = PHASE_FLOAT;
       }
-      return;
-    }
-
-    // ---- FLOAT ----
-    if (enabled.value !== 1) {
+    } else if (enabled.value !== 1) {
+      // ---- FLOAT off: park ----
       vx.value = 0;
       vy.value = 0;
       return;
     }
 
-    let x = posX.value;
-    let y = posY.value;
     let nvx = vx.value;
     let nvy = vy.value;
 
-    // Forces. y is DOWN, so buoyancy subtracts.
+    // Forces (both phases). y is DOWN, so buoyancy subtracts. During the
+    // ease-in they shape `v` too, so the launch already curves upward.
     const I = Math.max(inertia.value, MULT_MIN);
     swayTime.value += dt;
     nvy -= ((FLOAT_BUOYANCY * buoyancy.value * traits.buoyancyMul.value) / I) * dt;
@@ -295,8 +313,22 @@ export function useBubbleFloat({
     nvx *= damp;
     nvy *= damp;
 
-    x += nvx * dt;
-    y += nvy * dt;
+    let x: number;
+    let y: number;
+    if (inflating) {
+      offsetX.value += nvx * m * dt;
+      offsetY.value += nvy * m * dt;
+      x = spawnX + offsetX.value;
+      y = spawnY - R + offsetY.value;
+      vx.value = nvx;
+      vy.value = nvy;
+      posX.value = x;
+      posY.value = y;
+      return;
+    }
+
+    x = posX.value + nvx * dt;
+    y = posY.value + nvy * dt;
 
     // Soft bounce: left, right, bottom. Only reflect a velocity heading
     // INTO the wall, so a bubble resting against it can't jitter.

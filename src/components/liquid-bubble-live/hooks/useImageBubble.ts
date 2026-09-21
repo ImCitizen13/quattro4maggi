@@ -9,7 +9,7 @@
  *   each spawn  → `onSpawn` (called via scheduleOnRN from useBubbleFloat)
  *                 → React state: random pool index → `image`
  *   every frame → x/y/size derived from the bubble's center and radius
- *                 (UI thread, no re-render): the image fills the bubble
+ *                 (UI thread, no re-render): a 1.5R square, inside the rim
  *
  * KEY FEATURES:
  * - Preloaded pool: a spawn never waits on an image decode.
@@ -35,7 +35,7 @@ export type UseImageBubbleParams = {
   /** Bubble center, canvas points. */
   posX: SharedValue<number>;
   posY: SharedValue<number>;
-  /** Bubble radius, points — the image is `2R` square. */
+  /** Bubble radius, points — the image is `1.5R` square. */
   radius: SharedValue<number>;
 };
 
@@ -109,9 +109,9 @@ export function useImageBubble({
   // Still decoding → fall back to any image that is ready.
   const image = pool[index] ?? pool.find((img) => img !== null) ?? null;
 
-  const x = useDerivedValue(() => posX.value - radius.value);
-  const y = useDerivedValue(() => posY.value - radius.value);
-  const size = useDerivedValue(() => 2 * radius.value);
+  const x = useDerivedValue(() => posX.value - (radius.value * 0.75));
+  const y = useDerivedValue(() => posY.value - (radius.value * 0.75));
+  const size = useDerivedValue(() => 1.5 * radius.value);
 
   return { image, x, y, size, onSpawn };
 }

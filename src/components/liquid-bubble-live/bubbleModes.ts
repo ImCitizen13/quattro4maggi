@@ -458,9 +458,9 @@ export const FLOAT_EXIT_RADII = 1.3;
 // Birth — each bubble inflates out of the spawn box (hooks/useBubbleFloat.ts)
 // ============================================================================
 //
-// Spawn → inflate (held at the box's top edge, R springs ≈ 1 → target with
-// `SPRING_BUBBLE_INFLATE`) → release up the launch cone → float → out the
-// top → spawn again. Every bubble rolls its own multipliers on the slider
+// Spawn → inflate (attached at the box's top edge, R springs ≈ 1 → target
+// over BIRTH_TIME) with the motion easing in up the launch cone over the
+// same BIRTH_TIME → float → out the top → spawn again. Every bubble rolls its own multipliers on the slider
 // values, so the sliders stay the BASE and are never overwritten. Ranges are
 // [min, max], drawn uniformly.
 
@@ -475,12 +475,14 @@ export const BIRTH_RADIUS_START = 1;
 export const BIRTH_RADIUS_RANGE: readonly [number, number] = [0.6, 1.5];
 
 /**
- * Seconds held at the box mouth while inflating, before the launch.
- * A bit longer than `SPRING_BUBBLE_INFLATE`'s 0.7 s so the pop settles first.
+ * Birth time `T`, seconds. Inflation and motion start together at spawn and
+ * both run over `T`: the spring grows R ≈ 1 → target, while the motion eases
+ * in (smoothstep 0 → full launch speed). At `T` the bubble is full size, at
+ * full speed, and hands off to FLOAT.
  *
- * TUNE: 0.4 spat out · 0.8 · 1.5 slow blow.
+ * TUNE: 0.8 quick puff · 1.5 · 2.5 slow blow.
  */
-export const BIRTH_INFLATE_TIME = 0.8;
+export const BIRTH_TIME = 1.5;
 
 /**
  * Per-bubble multipliers on the Wobble / Strength / Inertia / Buoyancy

@@ -465,11 +465,14 @@ again from the box.
  UI worklet (useFrameCallback), phases SPAWN → INFLATE → FLOAT → SPAWN
    SPAWN   roll traits: wobble ×0.6–1.6 · strength ×0.7–1.4 · inertia ×0.7–1.5
            · buoyancy ×0.6–1.5 · birthShape [a2, phi2, a3, phi3, a4, phi4]
-           scaledRadius = 1 → withSpring(restRadius × 0.6–1.5, SPRING_BUBBLE_INFLATE)
+           launch v = 100–300 pt/s within ±30° of straight up
+           scaledRadius = 1 → withSpring(restRadius × 0.6–1.5, duration T = BIRTH_TIME 1.5 s)
            pos = box top-center, anchored = false
-   INFLATE center held at spawnY − R (grows out of the box's top edge), 0.8 s,
-           then v = 100–300 pt/s within ±30° of straight up
-           (float off: the newborn waits at the mouth)
+   INFLATE attached at spawnY − R (grows out of the box's top edge) + offset
+           motion eases in from spawn: m = smoothstep(age / T), same T as the spring,
+           offset += v · m · dt (forces already act on v) → FLOAT at age = T
+           no hold, no velocity jump; whole birth = T = 1.5 s
+           (float off: the newborn keeps growing but waits at the mouth)
    FLOAT   v.y −= FLOAT_BUOYANCY · buoyancy · buoyancyMul / I · dt  (y DOWN, minus = up)
            v.x += FLOAT_SWAY · sin(2π t / FLOAT_SWAY_PERIOD + φ) · dt
            v   *= exp(−FLOAT_DRAG / √I · dt)
@@ -515,12 +518,12 @@ glass refracts it.
  JS, mount     8 distinct random sources from assets/Bubbles/256 imageArray
                → preloaded with useImage (IMAGE_BUBBLE_POOL_SIZE)
  JS, spawn     useBubbleFloat → scheduleOnRN(onSpawn) → random pool index → image
- UI, per frame x = bubbleX − R, y = bubbleY − R, size = 2R  (useDerivedValue)
+ UI, per frame x = bubbleX − 0.75R, y = bubbleY − 0.75R, size = 1.5R  (useDerivedValue)
 ```
 
-- **Fills the bubble:** the rect is `2R` square around the center, so the
-  image inflates out of the box with the bubble and follows pinch. It uses
-  the rest radius, so the wobble shows as the rim cutting across the picture.
+- **Sits inside the bubble:** the rect is a `1.5R` square around the center,
+  so a clear glass ring shows around it. It inflates out of the box with the
+  bubble and follows pinch.
 - **Preloaded pool:** a spawn never waits on a decode. One React render per
   spawn, never per frame.
 - **Limit:** the pool is fixed at mount, so a session shows only 8 of the

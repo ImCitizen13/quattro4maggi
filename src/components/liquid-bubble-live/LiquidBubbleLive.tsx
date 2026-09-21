@@ -399,14 +399,13 @@ export function LiquidBubbleLive({
               height={imageSize}
               x={imageX}
               y={imageY}
-              // tx="clamp"
-              // ty="clamp"
             />
           )}
 
           {/* ImageBubble: a random picture per bubble, filling the bubble and
               following it. Drawn before the BackdropFilter, so the glass
-              refracts it (see hooks/useImageBubble.ts). */}
+              refracts it (see hooks/useImageBubble.ts).
+             make the image less */}
           {imageBubble.image && (
             <Image
               image={imageBubble.image}
