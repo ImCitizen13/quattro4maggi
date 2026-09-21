@@ -215,11 +215,9 @@ export function LiquidBubbleLive({
   const buoyancy = useSharedValue(FLOAT_BUOYANCY_LEVER_DEFAULT);
 
   // Picture riding behind the bubble; a new random one at every spawn.
-  const imageBubble = useImageBubble({
-    posX: bubbleX,
-    posY: bubbleY,
-    radius: scaledRadius,
-  });
+  // Follows the glass's own center/radius (paramBuffer), not bubbleX/Y, so
+  // the picture and the glass never draw from different frames.
+  const imageBubble = useImageBubble({ paramBuffer });
 
   useBubbleFloat({
     posX: bubbleX,

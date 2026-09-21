@@ -63,7 +63,7 @@ import {
 import { SPRING_BUBBLE_INFLATE } from "@/lib/animations/constants";
 import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
-import { imageArray } from "../../../assets/Bubbles/256/images.generated";
+import { imageArray } from "../../../assets/Bubbles/128/images.generated";
 import {
   INERTIA_DEFAULT,
   STRENGTH_DEFAULT,
@@ -147,8 +147,12 @@ type BouncingImageProps = {
   /** Base image side for the current bubble size, pt. */
   baseSize: DerivedValue<number>;
   bodies: SharedValue<number[]>;
-  centerX: SharedValue<number>;
-  centerY: SharedValue<number>;
+  /**
+   * `useBubbleShape`'s `iParams` buffer; `[0..1]` = the center the glass draws
+   * this frame. Reading `bubbleX/Y` instead can put the images a frame off
+   * the glass (see README → "hooks/useImageBubble.ts").
+   */
+  paramBuffer: SharedValue<number[]>;
 };
 
 // ============================================================================
@@ -231,17 +235,25 @@ function BouncingImage({
   sizeMul,
   baseSize,
   bodies,
-  centerX,
-  centerY,
+  paramBuffer,
 }: BouncingImageProps) {
   const image = useImage(source);
-  const size = useDerivedValue(() => baseSize.value * sizeMul);
-  const x = useDerivedValue(
-    () => centerX.value + bodies.value[index * STRIDE] - size.value / 2,
+  // Empty until useBubbleShape's first frame → size 0 (nothing drawn).
+  const size = useDerivedValue(() =>
+    paramBuffer.value.length < 3 ? 0 : baseSize.value * sizeMul,
   );
-  const y = useDerivedValue(
-    () => centerY.value + bodies.value[index * STRIDE + 1] - size.value / 2,
-  );
+  const x = useDerivedValue(() => {
+    const p = paramBuffer.value;
+    return p.length < 3
+      ? 0
+      : p[0] + bodies.value[index * STRIDE] - size.value / 2;
+  });
+  const y = useDerivedValue(() => {
+    const p = paramBuffer.value;
+    return p.length < 3
+      ? 0
+      : p[1] + bodies.value[index * STRIDE + 1] - size.value / 2;
+  });
   if (!image) return null;
   return (
     <Image
@@ -601,8 +613,7 @@ export function BouncingImagesBubble({
               sizeMul={sizeMuls[i]}
               baseSize={baseSize}
               bodies={bodies}
-              centerX={bubbleX}
-              centerY={bubbleY}
+              paramBuffer={paramBuffer}
             />
           ))}
 

@@ -518,8 +518,16 @@ glass refracts it.
  JS, mount     8 distinct random sources from assets/Bubbles/256 imageArray
                → preloaded with useImage (IMAGE_BUBBLE_POOL_SIZE)
  JS, spawn     useBubbleFloat → scheduleOnRN(onSpawn) → random pool index → image
- UI, per frame x = bubbleX − 0.75R, y = bubbleY − 0.75R, size = 1.5R  (useDerivedValue)
+ UI, per frame [cx, cy, R] = paramBuffer[0..2]   (what the glass draws this frame)
+               x = cx − 0.75R, y = cy − 0.75R, size = 1.5R  (useDerivedValue)
 ```
+
+- **Same frame as the glass:** the center and radius come from `paramBuffer`,
+  not `bubbleX/Y`. `useBubbleShape` samples `bubbleX/Y` before `useBubbleFloat`
+  moves them, so reading them directly drew the picture one frame ahead of the
+  glass and its clip rect: a jitter inside the glass on uneven frames, and on
+  fast flings a leading edge outside the 2 pt `CLIP_SLACK`, where the glass
+  refracted empty pixels.
 
 - **Sits inside the bubble:** the rect is a `1.5R` square around the center,
   so a clear glass ring shows around it. It inflates out of the box with the
