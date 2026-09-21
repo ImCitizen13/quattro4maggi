@@ -410,6 +410,7 @@ export function LiquidBubbleLive({
             <Image
               image={imageBubble.image}
               fit="contain"
+              sampling={{ filter: FilterMode.Linear, mipmap: MipmapMode.Linear }}
               x={imageBubble.x}
               y={imageBubble.y}
               width={imageBubble.size}

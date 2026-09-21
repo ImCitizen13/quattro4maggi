@@ -244,7 +244,15 @@ function BouncingImage({
   );
   if (!image) return null;
   return (
-    <Image image={image} fit="contain" x={x} y={y} width={size} height={size} />
+    <Image
+      image={image}
+      fit="contain"
+      x={x}
+      y={y}
+      width={size}
+      height={size}
+      sampling={{ filter: FilterMode.Linear, mipmap: MipmapMode.Linear }}
+    />
   );
 }
 
