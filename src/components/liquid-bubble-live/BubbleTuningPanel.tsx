@@ -39,14 +39,14 @@ export type BubbleTuningPanelProps = {
   strength: SharedValue<number>;
   /** Default strength value, used by "Reset all". */
   strengthDefault: number;
-  /** Float buoyancy multiplier (0 = drifts, never rises). */
-  buoyancy: SharedValue<number>;
+  /** Float buoyancy multiplier (0 = drifts, never rises). Omit to hide the slider. */
+  buoyancy?: SharedValue<number>;
   /** Default buoyancy value, used by "Reset all". */
-  buoyancyDefault: number;
+  buoyancyDefault?: number;
   /** Float state (Shape tab toggle). */
-  floatOn: boolean;
-  /** Flips floating on/off. */
-  onFloatToggle: () => void;
+  floatOn?: boolean;
+  /** Flips floating on/off. Omit to hide the Float toggle. */
+  onFloatToggle?: () => void;
   /** Optics levers from `useBubbleOptics`. */
   optics: BubbleOptics;
   /** Default optics values, used by per-slider reset and "Reset all". */
@@ -54,9 +54,9 @@ export type BubbleTuningPanelProps = {
   /** Upper bound of the Refract slider, pt. */
   refractMax: number;
   /** Soap-film overlay state (Surface tab toggle). */
-  soapFilmOn: boolean;
-  /** Flips the soap-film overlay. */
-  onSoapFilmToggle: () => void;
+  soapFilmOn?: boolean;
+  /** Flips the soap-film overlay. Omit to hide the toggle and Film reach. */
+  onSoapFilmToggle?: () => void;
   /** Tab shown on mount. @default "refraction" */
   initialTab?: BubbleTuningTab;
 };
@@ -140,7 +140,9 @@ export function BubbleTuningPanel({
     wobble.value = wobbleDefault;
     inertia.value = inertiaDefault;
     strength.value = strengthDefault;
-    buoyancy.value = buoyancyDefault;
+    if (buoyancy && buoyancyDefault !== undefined) {
+      buoyancy.value = buoyancyDefault;
+    }
   };
 
   const applyGargantua = () => {
@@ -181,21 +183,28 @@ export function BubbleTuningPanel({
 
       {tab === "shape" && (
         <>
-          <View style={styles.presetRow}>
-            <PressableScale onPress={onFloatToggle} style={styles.presetButton}>
-              <Text style={styles.presetButtonText}>
-                Float: {floatOn ? "On" : "Off"}
-              </Text>
-            </PressableScale>
-          </View>
-          <ResettableSlider
-            label="Buoyancy"
-            value={buoyancy}
-            min={0}
-            max={3}
-            decimals={2}
-            defaultValue={buoyancyDefault}
-          />
+          {onFloatToggle && (
+            <View style={styles.presetRow}>
+              <PressableScale
+                onPress={onFloatToggle}
+                style={styles.presetButton}
+              >
+                <Text style={styles.presetButtonText}>
+                  Float: {floatOn ? "On" : "Off"}
+                </Text>
+              </PressableScale>
+            </View>
+          )}
+          {buoyancy && buoyancyDefault !== undefined && (
+            <ResettableSlider
+              label="Buoyancy"
+              value={buoyancy}
+              min={0}
+              max={3}
+              decimals={2}
+              defaultValue={buoyancyDefault}
+            />
+          )}
           <ResettableSlider
             label="Wobble"
             value={wobble}
@@ -270,16 +279,18 @@ export function BubbleTuningPanel({
 
       {tab === "surface" && (
         <>
-          <View style={styles.presetRow}>
-            <PressableScale
-              onPress={onSoapFilmToggle}
-              style={styles.presetButton}
-            >
-              <Text style={styles.presetButtonText}>
-                Soap film: {soapFilmOn ? "On" : "Off"}
-              </Text>
-            </PressableScale>
-          </View>
+          {onSoapFilmToggle && (
+            <View style={styles.presetRow}>
+              <PressableScale
+                onPress={onSoapFilmToggle}
+                style={styles.presetButton}
+              >
+                <Text style={styles.presetButtonText}>
+                  Soap film: {soapFilmOn ? "On" : "Off"}
+                </Text>
+              </PressableScale>
+            </View>
+          )}
           <ResettableSlider
             label="Film"
             value={optics.film}
@@ -288,14 +299,16 @@ export function BubbleTuningPanel({
             decimals={2}
             defaultValue={defaults.film}
           />
-          <ResettableSlider
-            label="Film reach"
-            value={optics.filmReach}
-            min={0}
-            max={1}
-            decimals={2}
-            defaultValue={defaults.filmReach}
-          />
+          {onSoapFilmToggle && (
+            <ResettableSlider
+              label="Film reach"
+              value={optics.filmReach}
+              min={0}
+              max={1}
+              decimals={2}
+              defaultValue={defaults.filmReach}
+            />
+          )}
           <ResettableSlider
             label="Film bands"
             value={optics.filmScale}
