@@ -64,6 +64,10 @@ export type BubbleTuningPanelProps = {
   soapFilmOn?: boolean;
   /** Flips the soap-film overlay. Omit to hide the toggle and Film reach. */
   onSoapFilmToggle?: () => void;
+  /** Film drag lever (film lags the bubble's motion). Omit to hide the slider. */
+  filmDrag?: SharedValue<number>;
+  /** Default film drag, used by per-slider reset and "Reset all". */
+  filmDragDefault?: number;
   /** Tab shown on mount. @default "refraction" */
   initialTab?: BubbleTuningTab;
 };
@@ -140,6 +144,8 @@ export function BubbleTuningPanel({
   refractMax,
   soapFilmOn,
   onSoapFilmToggle,
+  filmDrag,
+  filmDragDefault,
   initialTab = "refraction",
 }: BubbleTuningPanelProps) {
   const [tab, setTab] = useState<BubbleTuningTab>(initialTab);
@@ -151,6 +157,9 @@ export function BubbleTuningPanel({
     wobble.value = wobbleDefault;
     inertia.value = inertiaDefault;
     strength.value = strengthDefault;
+    if (filmDrag && filmDragDefault !== undefined) {
+      filmDrag.value = filmDragDefault;
+    }
     if (size && sizeDefault !== undefined) {
       size.value = sizeDefault;
     }
@@ -331,6 +340,16 @@ export function BubbleTuningPanel({
               max={1}
               decimals={2}
               defaultValue={defaults.filmReach}
+            />
+          )}
+          {filmDrag && filmDragDefault !== undefined && (
+            <ResettableSlider
+              label="Film drag"
+              value={filmDrag}
+              min={0}
+              max={2}
+              decimals={2}
+              defaultValue={filmDragDefault}
             />
           )}
           <ResettableSlider

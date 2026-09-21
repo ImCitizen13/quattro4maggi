@@ -28,15 +28,12 @@ import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
 import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
-import {
-  FILM_TOUCH_AGE_INACTIVE,
-  FILM_TOUCH_SLOTS,
-} from "@/components/soap-film/soapFilmConfig";
 import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
 import { backgroundEffect } from "./backgroundShaders";
 import {
   BIRTH_RADIUS_START,
+  FILM_DRAG_DEFAULT,
   FLOAT_BUOYANCY_LEVER_DEFAULT,
   FLOAT_ON_DEFAULT,
   INERTIA_DEFAULT,
@@ -48,6 +45,7 @@ import {
   useBubblePanGesture,
   useBubblePinchGesture,
 } from "./hooks/useBubbleGestures";
+import { useBubbleFilmMotion } from "./hooks/useBubbleFilmMotion";
 import { useBubbleFloat, useBubbleTraits } from "./hooks/useBubbleFloat";
 import { useBubbleOptics } from "./hooks/useBubbleOptics";
 import { useBubbleShape } from "./hooks/useBubbleShape";
@@ -255,22 +253,6 @@ export function LiquidBubbleLive({
   // Soap film overlay (second pass — see filmOverlayShader.ts)
   // ==========================================================================
 
-  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
-  // No film touches yet — every slot inactive.
-  const filmTouch = useSharedValue<number[]>(
-    new Array(FILM_TOUCH_SLOTS * 4).fill(0),
-  );
-  const filmTouchAge = useSharedValue<number[]>(
-    new Array(FILM_TOUCH_SLOTS).fill(FILM_TOUCH_AGE_INACTIVE),
-  );
-  const film = useSoapFilmUniforms({
-    time,
-    size: filmSize,
-    touch: filmTouch,
-    touchAge: filmTouchAge,
-  });
-  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
-
   // React state mounts/unmounts the overlay pass; the SharedValue mirror lets
   // the bubble's uniforms react on the UI thread without a closure rebuild.
   const [soapFilmOn, setSoapFilmOn] = useState(SOAP_FILM_ON_DEFAULT);
@@ -280,6 +262,39 @@ export function LiquidBubbleLive({
     setSoapFilmOn(next);
     soapFilmOnValue.value = next ? 1 : 0;
   };
+
+  // The bubble's motion as film touch impulses: the film lags the direction
+  // of travel and settles at rest (hooks/useBubbleFilmMotion.ts). Writes
+  // nothing while the overlay is off.
+  const filmDrag = useSharedValue(FILM_DRAG_DEFAULT);
+  const filmMotion = useBubbleFilmMotion({
+    posX: bubbleX,
+    posY: bubbleY,
+    radius: scaledRadius,
+    time,
+    enabled: soapFilmOnValue,
+    drag: filmDrag,
+    inertia: bubbleInertia,
+  });
+
+  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
+  const film = useSoapFilmUniforms({
+    time,
+    size: filmSize,
+    touch: filmMotion.filmTouch,
+    touchAge: filmMotion.filmTouchAge,
+  });
+  // The impulses' decay and reach are the hook's (inertia-scaled tau, a
+  // whole-disk radius), not the soap-film demo's finger-poke defaults.
+  const filmFlow = useMemo(
+    () => ({
+      ...film.flow,
+      touchTau: filmMotion.touchTau,
+      touchRadius: filmMotion.touchRadius,
+    }),
+    [film.flow, filmMotion.touchTau, filmMotion.touchRadius],
+  );
+  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
 
   // The overlay replaces the bubble's built-in cosine film, so zero it there.
   const bubbleUniforms = useDerivedValue(() => ({
@@ -438,7 +453,7 @@ export function LiquidBubbleLive({
                 <SoapFilmShader
                   generator="curl"
                   output="thickness"
-                  flow={film.flow}
+                  flow={filmFlow}
                 />
                 <ImageShader
                   image={filmRamp}
@@ -483,6 +498,8 @@ export function LiquidBubbleLive({
           refractMax={LIVE_REFRACT_SLIDER_MAX}
           soapFilmOn={soapFilmOn}
           onSoapFilmToggle={toggleSoapFilm}
+          filmDrag={filmDrag}
+          filmDragDefault={FILM_DRAG_DEFAULT}
         />
       )}
     </View>

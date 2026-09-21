@@ -13,7 +13,7 @@ Drag to move it, pinch to resize it. It refracts through a Skia
 - `bubbleModes.ts`: physics + look constants
 - `liveConfig.ts`: background + clip constants
 - `BubbleTuningPanel.tsx`: the controls
-- `hooks/`: gestures, float, image bubble, shape physics (`bubbleModeMath` + test), optics, clock
+- `hooks/`: gestures, float, image bubble, shape physics (`bubbleModeMath` + test), optics, film motion, clock
 
 ## Controls
 
@@ -35,6 +35,7 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 | Surface    | Soap film: On/Off    | Swap the built-in cosine film for the animated soap-film overlay                                             |
 |            | Film                 | Film strength (both films)                                                                                   |
 |            | Film reach           | Soap film only: 0 rim only · 1 covers the whole bubble                                                       |
+|            | Film drag            | Soap film only: how far the film lags the bubble's motion · 0 off · 1 calibrated · 2 exaggerated             |
 |            | Film bands           | Number of built-in film color bands (soap film off)                                                          |
 |            | Tint                 | Blue tint amount                                                                                             |
 |            | Specular             | Shine highlight, top-left                                                                                    |
@@ -262,18 +263,32 @@ shortens the optical path toward the rim and shifts colors there.
 - Extra fill: the film shader (5-step backtrace × 3 curl layers + 2 vortex
   phases) runs over the whole clip rect. The bubble is already fill-bound;
   watch the FPS overlay when pinched large.
-- Film controls beyond Film / Film reach use the soap-film defaults
-  (`soap-film/soapFilmConfig.ts`); no film touches are fed yet.
+- Film controls beyond Film / Film reach / Film drag use the soap-film
+  defaults (`soap-film/soapFilmConfig.ts`).
 
-**TODO: film flows with the bubble's motion direction.** Moving the bubble
-should drag its film along the direction of travel, the way a real film
-sloshes when a bubble is thrown. Plan: feed the bubble's velocity
-(`useBubblePanGesture` → `velocityX/velocityY`) into the overlay's film touch
-ring buffer (`filmTouch` / `filmTouchAge` in `LiquidBubbleLive.tsx`, now
-all-inactive) as impulses at the bubble center, converted into film space,
-optionally scaled by `inertia` so heavier bubbles slosh longer. The flow
-field's existing touch push then advects the film opposite to the motion,
-and the swirl settles as the impulse decays.
+**Film motion.** Moving the bubble drags its film behind the direction of
+travel, and the film sloshes back once the bubble stops
+(`hooks/useBubbleFilmMotion.ts`, constants in `bubbleModes.ts` → "Film
+motion"):
+
+```
+ UI worklet   v = Δ(bubbleX, bubbleY) / dt    (spring-smoothed, so it keeps
+                                               seeing motion after release)
+              |v| ≥ FILM_DRAG_SPEED_MIN, every FILM_DRAG_WRITE_INTERVAL
+              → vFilm = −v · (200 / R) · FILM_DRAG_GAIN · drag, ≤ FILM_DRAG_MAX
+              → impulse at the film center, into the 8-slot touch ring
+ overlay      flow.touchTau = FILM_DRAG_TAU × inertia, flow.touchRadius =
+              FILM_DRAG_RADIUS → soap-film's touchVelocity() in the backtrace
+```
+
+- The minus sign makes the backtrace sample ahead of travel, so the pattern
+  shifts backward. GAIN 1 would pin the film to the world; 0.4 is a partial
+  lag that reads as sloshing.
+- Heavier bubbles (inertia) slosh longer. Nothing is written while the soap
+  film is off.
+- `touchTau` / `touchRadius` override the soap-film demo's finger-poke
+  defaults (0.18 radius is a local poke; 0.45 moves the whole disk).
+- Live lever: Surface → **Film drag** (0 off · 1 calibrated · 2 exaggerated).
 
 ### bubbleModes.ts
 

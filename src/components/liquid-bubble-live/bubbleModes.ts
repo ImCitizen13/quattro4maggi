@@ -514,6 +514,78 @@ export const BIRTH_A4_MAX = 0.03;
 export const FILM_DRIFT = 0.15;
 
 // ============================================================================
+// Film motion — the soap film lags the bubble's travel (hooks/useBubbleFilmMotion.ts)
+// ============================================================================
+//
+// The bubble's velocity becomes touch impulses at the film center:
+//   vFilm = −v · (200 / R) · FILM_DRAG_GAIN · drag   (film pt/s, |vFilm| ≤ MAX)
+// Film space is normalized by FILM_OVERLAY_SIZE (400), so the rest disk is a
+// radius-0.5 circle at (0.5, 0.5), and `advect` backtraces 5 × 0.09 = 0.45 s.
+// At GAIN 1 the backtrace would shift the film by exactly the distance the
+// bubble moved in 0.45 s: the pattern would stay fixed in WORLD space (full
+// lag, the film looks painted on the background). GAIN < 1 is a partial lag,
+// which reads as the film sloshing inside a moving bubble.
+
+/** Film drag lever default (Surface → Film drag): 0 off · 1 calibrated · 2 exaggerated. */
+export const FILM_DRAG_DEFAULT = 1;
+
+/**
+ * Fraction of full lag. 0.4 → a bubble moving 1 R/s shifts its film by
+ * 0.4 · 0.45 ≈ 0.18 R behind the direction of travel.
+ *
+ * TUNE: 0.2 subtle · 0.4 visible slosh · 1 film pinned to the world.
+ */
+export const FILM_DRAG_GAIN = 0.4;
+
+/**
+ * Cap on the STEADY impulse sum, film pt/s. 240 → 240/400 · 0.45 ≈ 0.27 in
+ * normalized units, about half the disk radius: a fling (up to 2500 pt/s)
+ * drags the film hard but never smears it past the far rim. Float cruise
+ * (80 pt/s at R = 60 → 107 film pt/s) stays under it.
+ *
+ * TUNE: 120 gentle flings · 240 · 400 flings wash the pattern out.
+ */
+export const FILM_DRAG_MAX = 240;
+
+/**
+ * Gaussian radius of each impulse, normalized film units. The impulse sits at
+ * the center and the disk's rim is at 0.5, so 0.45 reaches the rim at
+ * e^(−1.23) ≈ 0.29 of full strength — the whole film moves, the center most.
+ * (The soap-film demo's finger touch uses 0.18, a local poke, not a slosh.)
+ *
+ * TUNE: 0.3 only the middle moves · 0.45 · 0.7 near-uniform shift.
+ */
+export const FILM_DRAG_RADIUS = 0.45;
+
+/**
+ * Bubble speed below which no impulse is written, canvas pt/s. Filters the
+ * follow spring's last sub-point settling and sensor-level jitter at rest;
+ * slow float drift (~80 pt/s) still moves the film.
+ *
+ * TUNE: 5 everything counts · 20 · 60 only real drags.
+ */
+export const FILM_DRAG_SPEED_MIN = 20;
+
+/**
+ * Impulse decay at inertia 1, seconds (× inertia, clamped to the soap-film's
+ * [FILM_TOUCH_TAU_MIN, FILM_TOUCH_TAU_MAX] = [0.2, 4]). How long the film keeps
+ * sloshing after the bubble stops. Matches the ring's reach: 8 slots ×
+ * FILM_DRAG_WRITE_INTERVAL = 0.8 s, so the oldest live slot is ~1 τ old.
+ *
+ * TUNE: 0.4 settles at once · 0.8 · 2 long lazy slosh.
+ */
+export const FILM_DRAG_TAU = 0.8;
+
+/**
+ * Seconds between impulse writes. Each write copies the 32-float ring (one
+ * small allocation), so this bounds the cost at 10 writes/s regardless of
+ * frame rate; the S(τ) stacking factor in the hook depends on it.
+ *
+ * TUNE: 0.05 smoother onset, 2× the writes · 0.1 · 0.2 steppy.
+ */
+export const FILM_DRAG_WRITE_INTERVAL = 0.1;
+
+// ============================================================================
 // Frame timing
 // ============================================================================
 
