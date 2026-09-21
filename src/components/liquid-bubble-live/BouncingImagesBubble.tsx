@@ -94,6 +94,9 @@ const REFRACT_SLIDER_MAX = 40;
 /** Soap-film overlay on at mount (live toggle: Surface tab). */
 const SOAP_FILM_ON_DEFAULT = true;
 
+/** Full-screen background the bubble refracts (fit: cover). */
+const BACKGROUND_SOURCE = require("../../../assets/liquid-glass-bubble/stars_bg.jpg");
+
 /** Tint hue, rgb 0..1 (same as LiquidBubbleLive). */
 const BUBBLE_TINT: [number, number, number] = [0.85, 0.93, 1.0];
 
@@ -422,6 +425,9 @@ export function BouncingImagesBubble({
   // Bouncing images
   // ==========================================================================
 
+  // Full-screen backdrop; drawn first so the glass refracts it too.
+  const background = useImage(BACKGROUND_SOURCE);
+
   const [sources] = useState(() => pickSources(imageCount));
   const count = sources.length;
   const [sizeMuls] = useState(() => pickSizeMuls(count));
@@ -567,7 +573,17 @@ export function BouncingImagesBubble({
       <GestureDetector gesture={gesture}>
         <Canvas style={[styles.canvas, { width, height }]}>
           {/* ---- Backdrop (what the bubble refracts), drawn first ---- */}
-          <Fill color="#ffffff" />
+          <Fill color="#000000" />
+          {background && (
+            <Image
+              image={background}
+              fit="cover"
+              x={0}
+              y={0}
+              width={width}
+              height={height}
+            />
+          )}
 
           {sources.map((source, i) => (
             <BouncingImage
@@ -654,9 +670,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#000000",
   },
   canvas: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#000000",
   },
 });
