@@ -108,12 +108,52 @@ bubble). At 1 bubble, current is probably slightly cheaper than A.
 
 ## Plan
 
-1. Replace the `useBubbleShape` singleton with one physics step for N
-   bubbles writing one buffer. Both routes need this.
-2. Build **A** as a new mode with 4–8 bubbles (keeps live content, 4N → 3
-   passes).
-3. If Bounce / Arc need more speed later, move them to **B**.
+**Decisions:** a separate demo with its own route, 5 bubbles, the cheap
+built-in (cosine) film first.
 
-**Measure before committing to a route:** a stress mode with 5 current
-bubbles on a release build (FPS overlay), then the same for A. The simulator
-caps at 60 Hz and says nothing about fill cost.
+### Kept separate from the single bubble
+
+- New folder `src/components/liquid-bubbles-multi/` and route
+  `src/app/liquid-bubbles-multi/`, plus a card in the home gallery.
+- `liquid-bubble-live/` is not changed. The new demo only imports its pure
+  modules: `hooks/bubbleModeMath.ts` (`stepBubbleModes` takes its state as
+  a parameter, so it can run N times) and the `bubbleModes.ts` constants.
+- The new physics keeps its state under its own UI-thread key
+  (`__liquidBubblesMulti`), so it never collides with `useBubbleShape`.
+
+### Layout
+
+```
+ one useFrameCallback (UI)
+   for each of 5 bubbles: float step → stepBubbleModes
+   → one flat buffer  float4 iBubbles[3 × MAX]  (12 floats per bubble)
+     + count + the box around all bubbles
+ draw
+   background → 5 pictures (plain draws) → ONE BackdropFilter (loops bubbles)
+```
+
+### Phases
+
+1. **Physics for N bubbles:** `useMultiBubblePhysics(count)`. Float and
+   respawn move out of `useBubbleFloat` into a pure `stepBubbleFloat` so
+   they can be tested with `bun test`. Each bubble has its own traits and
+   birth shape. One frame callback for everything, no allocation per frame.
+2. **Stress baseline:** 5 copies of today's `BackdropFilter` + `shaders.ts`,
+   fed from that buffer. This is the "5 current bubbles" measurement.
+3. **One shader for all (A):** `multiBubbleShader.ts` runs the same math in
+   a fixed `MAX = 8` loop. A quick circle check skips pixels outside every
+   bubble, and where bubbles overlap the top one wins. Built-in cosine film
+   only, so there's no second pass. Clipped to the box around all bubbles.
+4. **Gestures:** on touch-down, pick the bubble under the finger and drag
+   or fling only that one. The rest keep floating.
+5. **Pictures:** one picture per bubble, drawn before the filter, placed
+   from the same buffer so they stay in the same frame as the glass.
+6. **Measure:** phase 2 vs phase 3 on a release build with the FPS overlay.
+   The simulator caps at 60 Hz and says nothing about fill cost.
+7. **Later, optional:** port the soap film into the shader with a color
+   function that needs no ramp (the filter's one input is the backdrop), and
+   give each bubble a small film offset that springs back, in place of the
+   touch buffer.
+
+**Handoff:** phases 1, 2, 4 and 5 are mechanical (Sonnet). Phases 3 and 7
+are shader work.
