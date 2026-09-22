@@ -153,6 +153,20 @@ export const SPRING_ARC_SNAP = {
   reduceMotion: ReduceMotion.System,
 };
 
+/**
+ * Liquid Bubble Stack: the bubble pair springing back to the screen center
+ * after a drag. Physics-based so the release velocity carries into the return.
+ */
+export const SPRING_BUBBLE_RECENTER = {
+  stiffness: 120, // TUNE: higher = faster return
+  damping: 14, // TUNE: lower = more overshoot past the center
+  mass: 1,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,

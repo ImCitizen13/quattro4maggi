@@ -1,24 +1,27 @@
 import { ArcCarouselBubble } from "@/components/liquid-bubble-live/ArcCarouselBubble";
 import { BouncingImagesBubble } from "@/components/liquid-bubble-live/BouncingImagesBubble";
 import { LiquidBubbleLive } from "@/components/liquid-bubble-live/LiquidBubbleLive";
+import { StackedBubbles } from "@/components/liquid-bubble-live/StackedBubbles";
 import { ThemeHeaderTitle } from "@/components/Theme";
 import { Stack } from "expo-router";
 import { PressableScale } from "pressto";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-type Mode = "float" | "bounce" | "arc";
+type Mode = "float" | "bounce" | "arc" | "stack";
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "float", label: "Float" },
   { key: "bounce", label: "Bounce" },
   { key: "arc", label: "Arc" },
+  { key: "stack", label: "Stack" },
 ];
 
 const SCREENS: Record<Mode, React.ComponentType> = {
   float: LiquidBubbleLive,
   bounce: BouncingImagesBubble,
   arc: ArcCarouselBubble,
+  stack: StackedBubbles,
 };
 
 /**

@@ -10,6 +10,7 @@ Drag to move it, pinch to resize it. It refracts through a Skia
 - `LiquidBubbleLive.tsx`: canvas, background, backdrop clip, panel
 - `BouncingImagesBubble.tsx`: Bounce mode — images bouncing inside one big bubble
 - `ArcCarouselBubble.tsx`: Arc mode — image wheel on a bottom semicircle, bubble at its top slot
+- `StackedBubbles.tsx`: Stack mode — two concentric bubbles (inner = 0.875×) sharing one shape
 - `shaders.ts`: the bubble shader
 - `filmOverlayShader.ts`: the soap-film overlay pass (film from `soap-film`)
 - `bubbleModes.ts`: physics + look constants
@@ -163,6 +164,27 @@ background.
   owns the bottom), starting on Hide. No Float / Buoyancy.
 - **Geometry** comes from `onLayout`, not the window, so the arc sits on the
   real bottom edge under the header.
+
+### StackedBubbles.tsx
+
+Stack mode: two concentric glass bubbles at the center over the live
+background. The inner one is `INNER_SCALE` (0.875) of the outer.
+
+```
+ gestures (UI)  pan drags the pair, pinch resizes it; release → withSpring(center)
+ physics (UI)   ONE useBubbleShape → outer iParams [cx, cy, R, a2, phi2, …]
+ inner          same buffer, R × 0.875 (mode amplitudes are fractions of R)
+ draw           background → outer BackdropFilter → outer film
+                → inner BackdropFilter (refracts the outer bubble) → inner film
+```
+
+- **Shared shape:** one physics state, so the pair wobbles as one and the
+  `useBubbleShape` singleton is never shared by two callers.
+- **Inner clip:** the outer bbox's shape part scaled by 0.875, AA pad kept.
+- **Controls:** the top-right toggle mounts/unmounts `BubbleTuningPanel`
+  (no collapsed tab row left behind). One set of levers drives both bubbles.
+- **Cost:** 2 × (backdrop filter + film pass) ≈ 8 pass breaks — see
+  `multi_bubble.md`.
 
 ### shaders.ts
 
