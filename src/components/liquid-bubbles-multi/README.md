@@ -9,6 +9,9 @@ single bubble's state.
 
 ## Files
 
+- `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
+- `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
+- `TextTuningPanel.tsx`: live controls for the greeting and the bubble's position
 - `multiBubbleConfig.ts`: count, buffer size, spawn stagger, inflate spring
 - `hooks/multiBubbleMath.ts`: one bubble's float life cycle as a pure step (+ test)
 - `hooks/useMultiBubblePhysics.ts`: float + shape for every bubble in one frame callback
@@ -16,6 +19,42 @@ single bubble's state.
 Tests: `bun test src/components/liquid-bubbles-multi`
 
 ## Design notes
+
+### LiquidBubblesMulti.tsx
+
+```
+ onLayout → size → scene (keyed by size: the physics captures the walls)
+ draw     white → greeting paragraph + squiggle → floaters → pinned bubble
+```
+
+- **Reuses the single bubble's look read-only:** `shaders.ts`,
+  `useBubbleOptics`, `BubbleTuningPanel`, `useClock`, `liveConfig.ts`,
+  `backgroundShaders.ts` (currently unused: the backdrop is plain white).
+  They hold no shared state, so the two demos can't interfere.
+- **Greeting:** a centered Skia `Paragraph` — "Good Morning" / the name on
+  two lines — with a squiggle `Path` under the name, scaled to the name's
+  measured width. It is drawn BEFORE the bubble, so the glass refracts it.
+- **Pinned bubble:** slot `FLOATER_COUNT`, resting `TEXT_BUBBLE_GAP` above
+  the paragraph's top edge; it follows the text's Vertical and Size and its
+  own radius. Drawn last, so it is on top.
+- **Floaters are off** (`SHOW_FLOATERS = false`) while the text is being
+  designed; set it true for the phase 2 stress baseline.
+- **Panels** (one at a time, top right): **Text** (size, vertical, squiggle
+  thickness/gap, bubble X/Y) and **Bubble** (`BubbleTuningPanel`: size,
+  wobble, inertia, strength + all the optics). Every slider writes a
+  SharedValue — dragging never re-renders React; Size scales the text group
+  instead of rebuilding the paragraph.
+- **Cosine film only**, no soap-film pass. No gestures yet.
+
+### BaselineBubble.tsx
+
+The phase 2 stress baseline: today's `BackdropFilter` + `liveBubbleEffect`,
+once per slot, so 5 bubbles cost ~15 pass breaks.
+
+- `iParams` = this slot's 12 floats (a 12-float slice per frame).
+- **Clip** is a circle bound, `R·(1 + |a2| + |a3| + |a4|)`, grown by the same
+  refract / lens / dispersion / halo padding as the single bubble. A waiting
+  slot (R = 0) gets an empty clip.
 
 ### hooks/multiBubbleMath.ts
 

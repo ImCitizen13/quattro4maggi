@@ -72,6 +72,14 @@ const demos: Demo[] = [
       { name: "reanimated", color: "#6a539a" },
     ],
   },
+  {
+    name: "Liquid Bubbles Multi",
+    href: "/liquid-bubbles-multi" as const,
+    tags: [
+      { name: "skia", color: "green" },
+      { name: "reanimated", color: "#6a539a" },
+    ],
+  },
 ];
 
 export default function HomeScreen() {

@@ -27,6 +27,7 @@
 import {
   useFrameCallback,
   useSharedValue,
+  type DerivedValue,
   type SharedValue,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -64,6 +65,8 @@ type UiMulti = {
   bufA: number[];
   bufB: number[];
   useA: boolean;
+  /** False until the pinned bubble's modes are anchored at its position. */
+  pinnedAnchored: boolean;
 };
 
 type UiMultiHost = { __liquidBubblesMulti?: UiMulti };
@@ -88,6 +91,14 @@ export type UseMultiBubblePhysicsParams = {
   strength: SharedValue<number>;
   /** JS-thread callback fired with the bubble's index at each spawn. */
   onSpawn?: (index: number) => void;
+  /**
+   * Optional pinned bubble in slot `count` (drawn after the floaters): it
+   * doesn't float, it sits at (`pinnedX`, `pinnedY`) with radius `pinnedR`
+   * (R ≤ 0 hides it). Moving it still drives the shape like a drag.
+   */
+  pinnedX?: DerivedValue<number>;
+  pinnedY?: DerivedValue<number>;
+  pinnedR?: DerivedValue<number>;
 };
 
 export type UseMultiBubblePhysicsReturn = {
@@ -121,8 +132,17 @@ export function useMultiBubblePhysics({
   inertia,
   strength,
   onSpawn,
+  pinnedX,
+  pinnedY,
+  pinnedR,
 }: UseMultiBubblePhysicsParams): UseMultiBubblePhysicsReturn {
-  const n = Math.min(Math.max(Math.floor(count), 0), MAX_BUBBLES);
+  const hasPinned =
+    pinnedX !== undefined && pinnedY !== undefined && pinnedR !== undefined;
+  // The pinned bubble takes the slot after the floaters, so leave room.
+  const n = Math.min(
+    Math.max(Math.floor(count), 0),
+    hasPinned ? MAX_BUBBLES - 1 : MAX_BUBBLES,
+  );
 
   // Zeroed from the start so a shader reading it before the first frame gets
   // the right uniform size.
@@ -165,6 +185,7 @@ export function useMultiBubblePhysics({
         bufA,
         bufB,
         useA: true,
+        pinnedAnchored: false,
       };
       host.__liquidBubblesMulti = ui;
       initialized.value = true;
@@ -196,6 +217,46 @@ export function useMultiBubblePhysics({
     for (let i = 0; i < MAX_BUBBLES; i++) {
       const base = i * PARAM_FLOATS;
       const f = ui.floats[i];
+
+      // ---- Pinned bubble: no float, position from the caller ----
+      if (
+        i === n &&
+        pinnedX !== undefined &&
+        pinnedY !== undefined &&
+        pinnedR !== undefined &&
+        pinnedR.value > 0
+      ) {
+        const px = pinnedX.value;
+        const py = pinnedY.value;
+        const mode = ui.modes[i];
+        if (!ui.pinnedAnchored) {
+          resetModeState(mode, px, py);
+          ui.pinnedAnchored = true;
+        }
+        stepBubbleModes(
+          mode,
+          px,
+          py,
+          pinnedR.value,
+          wob,
+          0,
+          0,
+          0,
+          dtMs,
+          scratch,
+          bbox,
+          iner,
+          str,
+        );
+        for (let k = 0; k < PARAM_FLOATS; k++) {
+          out[base + k] = scratch[k];
+        }
+        if (bbox.x < minX) minX = bbox.x;
+        if (bbox.y < minY) minY = bbox.y;
+        if (bbox.x + bbox.w > maxX) maxX = bbox.x + bbox.w;
+        if (bbox.y + bbox.h > maxY) maxY = bbox.y + bbox.h;
+        continue;
+      }
 
       if (i < n && stepBubbleFloat(f, env, dtMs, Math.random) && onSpawn) {
         scheduleOnRN(onSpawn, i);

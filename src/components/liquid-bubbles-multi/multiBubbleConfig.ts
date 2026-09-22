@@ -40,6 +40,29 @@ export const SPAWN_STAGGER = 1.2;
 export const SPAWN_SPREAD = 40;
 
 // ============================================================================
+// Greeting text + its bubble (defaults for the Text panel)
+// ============================================================================
+
+/** Size the font is loaded at, pt. The Size slider scales from this. */
+export const TEXT_BASE_SIZE = 32;
+export const TEXT_SIZE_DEFAULT = 32;
+/** Vertical offset from the screen center, pt (+ = down). */
+export const TEXT_Y_DEFAULT = 0;
+/** Squiggle under the name: stroke thickness and gap below the baseline, pt. */
+export const UNDERLINE_WIDTH_DEFAULT = 5;
+export const UNDERLINE_GAP_DEFAULT = 6;
+/**
+ * The pinned bubble ABOVE the text: radius, pt, and offset from where it
+ * rests (a `TEXT_BUBBLE_GAP` gap over the paragraph's top edge), pt.
+ */
+export const TEXT_BUBBLE_SIZE_DEFAULT = 90;
+
+/** Gap between the bubble's rim and the paragraph's top edge, pt. */
+export const TEXT_BUBBLE_GAP = 16;
+export const TEXT_BUBBLE_X_DEFAULT = 0;
+export const TEXT_BUBBLE_Y_DEFAULT = 0;
+
+// ============================================================================
 // Inflate spring
 // ============================================================================
 
