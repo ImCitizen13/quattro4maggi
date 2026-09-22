@@ -16,6 +16,7 @@ Drag to move it, pinch to resize it. It refracts through a Skia
 - `liveConfig.ts`: background + clip constants
 - `BubbleTuningPanel.tsx`: the controls
 - `hooks/`: gestures, float, image bubble, shape physics (`bubbleModeMath` + test), optics, film motion, clock
+- `multi_bubble.md`: design notes + cost comparison for several bubbles on one screen
 
 ## Controls
 
