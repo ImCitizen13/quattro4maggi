@@ -19,6 +19,7 @@ import {
   type TuningSliderProps,
 } from "@/components/liquid-metal/TuningSlider";
 
+import { PRISM_PALETTE_POSTER, PRISM_PALETTE_RAINBOW } from "./bubbleModes";
 import {
   GARGANTUA_PRESET,
   type BubbleOptics,
@@ -158,11 +159,22 @@ export function BubbleTuningPanel({
   style,
 }: BubbleTuningPanelProps) {
   const [tab, setTab] = useState<BubbleTuningTab>(initialTab);
+  // Label state for the prism toggle. Seeded from the live value (once, at
+  // mount) so a remounted panel shows what the shader is actually drawing.
+  const [posterOn, setPosterOn] = useState(
+    () => optics.palette.value === PRISM_PALETTE_POSTER,
+  );
+  const togglePalette = () => {
+    const next = !posterOn;
+    setPosterOn(next);
+    optics.palette.value = next ? PRISM_PALETTE_POSTER : PRISM_PALETTE_RAINBOW;
+  };
 
   const resetAll = () => {
     (Object.keys(defaults) as (keyof BubbleOptics)[]).forEach((key) => {
       optics[key].value = defaults[key];
     });
+    setPosterOn(defaults.palette === PRISM_PALETTE_POSTER);
     wobble.value = wobbleDefault;
     inertia.value = inertiaDefault;
     strength.value = strengthDefault;
@@ -390,6 +402,13 @@ export function BubbleTuningPanel({
 
       {tab === "rim" && (
         <>
+          <View style={styles.presetRow}>
+            <PressableScale onPress={togglePalette} style={styles.presetButton}>
+              <Text style={styles.presetButtonText}>
+                Prism: {posterOn ? "Poster" : "Rainbow"}
+              </Text>
+            </PressableScale>
+          </View>
           <ResettableSlider
             label="Rim dark"
             value={optics.rimDark}

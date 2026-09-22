@@ -21,6 +21,7 @@ import {
   LENS,
   OPTICS_FALLOFF,
   PARAM_FLOATS,
+  PRISM_PALETTE,
   RAINBOW_GLOW,
   RAINBOW_MIX,
   REFRACT,
@@ -68,6 +69,8 @@ export type BubbleOptics = {
   haloSpread: SharedValue<number>;
   /** `iPrism.w`: halo opacity, signed (− dark, + light). */
   haloOpacity: SharedValue<number>;
+  /** `iPalette`: prism colors, 0 = hue wheel · 1 = poster bands. */
+  palette: SharedValue<number>;
 };
 
 /** Plain-number snapshot of every lever (defaults, presets). */
@@ -91,6 +94,7 @@ export type BubbleUniforms = {
   iOptics: number[];
   iLens: number[];
   iPrism: number[];
+  iPalette: number;
 };
 
 export type UseBubbleOpticsResult = {
@@ -147,6 +151,7 @@ export function useBubbleOptics({
   const rainbowGlow = useSharedValue(RAINBOW_GLOW);
   const haloSpread = useSharedValue(HALO_SPREAD);
   const haloOpacity = useSharedValue(HALO_OPACITY);
+  const palette = useSharedValue(PRISM_PALETTE);
 
   const [red, green, blue] = tintColor;
 
@@ -166,6 +171,7 @@ export function useBubbleOptics({
       haloSpread.value,
       haloOpacity.value,
     ],
+    iPalette: palette.value,
   }));
 
   return {
@@ -186,6 +192,7 @@ export function useBubbleOptics({
       rainbowGlow,
       haloSpread,
       haloOpacity,
+      palette,
     },
     defaults: {
       refract: refractDefault,
@@ -204,6 +211,7 @@ export function useBubbleOptics({
       rainbowGlow: RAINBOW_GLOW,
       haloSpread: HALO_SPREAD,
       haloOpacity: HALO_OPACITY,
+      palette: PRISM_PALETTE,
     },
     uniforms,
   };

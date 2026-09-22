@@ -9,7 +9,7 @@
  *   physics (UI)  → ONE useBubbleShape → outer iParams [cx, cy, R, modes…]
  *   inner         → same buffer with R × INNER_SCALE. The mode amplitudes are
  *                   fractions of R, so the scaled shape is exactly similar
- *   draw          → live background → outer BackdropFilter → outer film
+ *   draw          → wallpaper image → outer BackdropFilter → outer film
  *                   → inner BackdropFilter (refracts the outer bubble too)
  *                   → inner film
  *
@@ -26,12 +26,14 @@ import {
   Canvas,
   Fill,
   FilterMode,
+  Image,
   ImageShader,
   MipmapMode,
   Rect,
   RuntimeShader,
   Shader,
   rect,
+  useImage,
   type SkImage,
 } from "@shopify/react-native-skia";
 import React, { useMemo, useState } from "react";
@@ -60,7 +62,6 @@ import {
 import { SPRING_BUBBLE_RECENTER } from "@/lib/animations/constants";
 import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
-import { backgroundEffect } from "./backgroundShaders";
 import {
   BBOX_PAD,
   FILM_DRAG_DEFAULT,
@@ -78,17 +79,7 @@ import { useBubbleOptics, type BubbleUniforms } from "./hooks/useBubbleOptics";
 import { useBubbleShape } from "./hooks/useBubbleShape";
 import { useClock } from "./hooks/useClock";
 import { FILM_OVERLAY_SIZE, filmOverlayEffect } from "./filmOverlayShader";
-import {
-  BG_BAND_DIR_X,
-  BG_BAND_DIR_Y,
-  BG_GRID_DENSITY,
-  BG_GRID_DRIFT,
-  BG_GRID_STRENGTH,
-  BG_GRID_WIDTH,
-  BG_SCROLL_RATE,
-  CLIP_SLACK,
-  LIVE_REFRACT,
-} from "./liveConfig";
+import { CLIP_SLACK, LIVE_REFRACT } from "./liveConfig";
 import { liveBubbleEffect } from "./shaders";
 
 // ============================================================================
@@ -113,6 +104,12 @@ const SIZE_MUL_MAX = 1.6;
 
 /** Controls toggle distance from the top, pt: sits under the mode switcher. */
 const TOGGLE_TOP = 60;
+
+/** Background image: fine topographic lines show every bit of the bend. */
+const BACKGROUND_SOURCE = require("../../../assets/liquid-glass-bubble/black_and_white_aesthetic_wallpapers.jpg");
+
+/** Base fill under the image (matches the paper tone while it loads). */
+const BACKGROUND_FILL = "#fbfaf3";
 
 /** Tint hue, rgb 0..1 (same as LiquidBubbleLive). */
 const BUBBLE_TINT: [number, number, number] = [0.85, 0.93, 1.0];
@@ -329,12 +326,8 @@ function StackedScene({ size, restRadius }: StackedSceneProps) {
     iParams: innerUniforms.value.iParams,
   }));
 
-  const backgroundUniforms = useDerivedValue(() => ({
-    iResolution: [width, height],
-    iTime: time.value,
-    iBand: [BG_SCROLL_RATE, BG_BAND_DIR_X, BG_BAND_DIR_Y, BG_GRID_DENSITY],
-    iGrid: [BG_GRID_DRIFT, BG_GRID_WIDTH, BG_GRID_STRENGTH, 0],
-  }));
+  // Null until decoded: the base fill shows alone for the first frame(s).
+  const background = useImage(BACKGROUND_SOURCE);
 
   // ==========================================================================
   // Backdrop clips
@@ -382,10 +375,18 @@ function StackedScene({ size, restRadius }: StackedSceneProps) {
     <>
       <GestureDetector gesture={compositeGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
-          {/* ---- Backdrop: live background, drawn first ---- */}
-          <Fill>
-            <Shader source={backgroundEffect} uniforms={backgroundUniforms} />
-          </Fill>
+          {/* ---- Backdrop: wallpaper image, drawn first ---- */}
+          <Fill color={BACKGROUND_FILL} />
+          {background && (
+            <Image
+              image={background}
+              fit="cover"
+              x={0}
+              y={0}
+              width={width}
+              height={height}
+            />
+          )}
 
           {/* ---- Outer bubble ---- */}
           <BackdropFilter

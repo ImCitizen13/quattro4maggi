@@ -747,6 +747,15 @@ export const RAINBOW_MIX = 0;
 export const RAINBOW_GLOW = 0;
 
 /**
+ * `iPalette`: which colors the prismatic rim uses.
+ * 0 = the smooth 6-stop hue wheel · 1 = the 5 poster colors (blue, cyan,
+ * green, yellow, red) as hard bands. Colors live in `shaders.ts`.
+ */
+export const PRISM_PALETTE_RAINBOW = 0;
+export const PRISM_PALETTE_POSTER = 1;
+export const PRISM_PALETTE = PRISM_PALETTE_RAINBOW;
+
+/**
  * `iPrism.z`: halo reach outside the rim, fraction of R. Must stay > 0. The
  * Live clip pads by `R·this` because the halo draws there.
  *

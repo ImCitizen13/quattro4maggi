@@ -43,7 +43,8 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 |            | Film bands           | Number of built-in film color bands (soap film off)                                                          |
 |            | Tint                 | Blue tint amount                                                                                             |
 |            | Specular             | Shine highlight, top-left                                                                                    |
-| Rim        | Rim dark / Rim width | Dark outline strength and width                                                                              |
+| Rim        | Prism: Rainbow/Poster | Rim colors (`iPalette`): smooth hue wheel, or the 5 poster colors (blue, cyan, green, yellow, red) as bands |
+|            | Rim dark / Rim width | Dark outline strength and width                                                                              |
 |            | Rainbow mix / glow   | Rainbow color around the rim                                                                                 |
 |            | Halo spread / Halo   | Glow outside the bubble (− dark, + light)                                                                    |
 
@@ -167,14 +168,16 @@ background.
 
 ### StackedBubbles.tsx
 
-Stack mode: two concentric glass bubbles at the center over the live
-background. The inner one is `INNER_SCALE` (0.875) of the outer.
+Stack mode: two concentric glass bubbles at the center over a full-screen
+wallpaper (`black_and_white_aesthetic_wallpapers.jpg`, fit cover — fine
+topographic lines make the bend easy to read). The inner one is
+`INNER_SCALE` (0.875) of the outer.
 
 ```
  gestures (UI)  pan drags the pair, pinch resizes it; release → withSpring(center)
  physics (UI)   ONE useBubbleShape → outer iParams [cx, cy, R, a2, phi2, …]
  inner          same buffer, R × 0.875 (mode amplitudes are fractions of R)
- draw           background → outer BackdropFilter → outer film
+ draw           wallpaper → outer BackdropFilter → outer film
                 → inner BackdropFilter (refracts the outer bubble) → inner film
 ```
 

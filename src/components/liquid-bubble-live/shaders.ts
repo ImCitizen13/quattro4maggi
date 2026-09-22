@@ -17,7 +17,34 @@ uniform float  iFilm;        // iridescence strength, 0..1
 uniform float4 iOptics;      // rimDark, rimWidth (pt), filmScale, falloff exponent
 uniform float4 iLens;        // lens (×R, + magnify / − pincushion), dispersion (×R), edgeWidth, specular
 uniform float4 iPrism;       // rainbowMix, rainbowGlow, haloSpread (×R), haloOpacity (signed: − dark, + light)
+uniform float  iPalette;     // prism colors: 0 = hue wheel, 1 = 5-color poster bands
 uniform shader iImage;      // THE BACKDROP — exactly one child shader, bound by Skia
+
+// Poster palette, sampled from the reference print (bands 1 → 5).
+const float3 POSTER_1 = float3(0.106, 0.471, 0.839); // blue
+const float3 POSTER_2 = float3(0.373, 0.827, 0.902); // cyan
+const float3 POSTER_3 = float3(0.176, 0.780, 0.294); // green
+const float3 POSTER_4 = float3(0.969, 0.894, 0.227); // yellow
+const float3 POSTER_5 = float3(0.941, 0.271, 0.173); // red
+
+float3 posterColor(float i) {
+  if (i < 0.5) return POSTER_1;
+  if (i < 1.5) return POSTER_2;
+  if (i < 2.5) return POSTER_3;
+  if (i < 3.5) return POSTER_4;
+  return POSTER_5;
+}
+
+// Hard bands around the rim, each edge blended over POSTER_EDGE of a band
+// so the seams don't alias.
+const float POSTER_EDGE = 0.04;
+
+float3 posterBands(float hue) {
+  float x    = hue * 5.0;
+  float band = floor(x);
+  float t    = smoothstep(1.0 - POSTER_EDGE, 1.0, x - band);
+  return mix(posterColor(band), posterColor(mod(band + 1.0, 5.0)), t);
+}
 
 // p arrives in absolute canvas POINTS — measured, see the module doc.
 half4 main(float2 p) {
@@ -85,9 +112,11 @@ half4 main(float2 p) {
   float3 col  = mix(base, base * iColor.rgb, iColor.a);
   col = mix(col, film, f * iFilm);
 
-  // ---- prismatic rim: hue by angle, same 6-stop rainbow, branchless ----
+  // ---- prismatic rim: color by angle — hue wheel or poster bands ----
   float  hue     = fract(th / 6.2831853 + 0.5);
-  float3 rainbow = clamp(abs(mod(hue * 6.0 + float3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+  float3 rainbow = iPalette > 0.5
+    ? posterBands(hue)
+    : clamp(abs(mod(hue * 6.0 + float3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
   col = mix(col, rainbow, edge * iPrism.x) + rainbow * (edge * iPrism.y);
 
   // ---- specular: Gargantua's up-left light against the WOBBLING normal ----
@@ -138,4 +167,5 @@ export const UNIFORM_NAMES = [
   "iOptics",
   "iLens",
   "iPrism",
+  "iPalette",
 ] as const;
