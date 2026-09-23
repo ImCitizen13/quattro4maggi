@@ -243,6 +243,38 @@ export const INTRO_TOTAL_MS =
   );
 
 // ============================================================================
+// Scene ripple (fires just before the bubbles bloom)
+// ============================================================================
+
+/**
+ * How far BEFORE the first bubble blooms the ripple goes off, ms. It lands
+ * inside the trigger's collapse: the bubble is emptying into the centre, the
+ * water snaps, and the four bubbles come out of the ring it leaves.
+ *
+ * Keep it below `TRIGGER_COLLAPSE_MS + INTRO_BUBBLE_DELAY_MS` or the ripple
+ * would start before the trigger has even finished swelling.
+ */
+export const RIPPLE_LEAD_MS = 140;
+
+/** When the first bubble starts blooming, ms into the intro. */
+export const BLOOM_START_MS =
+  TRIGGER_SWELL_MS + TRIGGER_COLLAPSE_MS + INTRO_BUBBLE_DELAY_MS;
+
+/**
+ * The `progress` the ripple fires at. DERIVED, like `INTRO_TOTAL_MS` — retime
+ * any stage above and the ripple follows the bloom instead of drifting off it.
+ */
+export const RIPPLE_AT_PROGRESS =
+  (BLOOM_START_MS - RIPPLE_LEAD_MS) / INTRO_TOTAL_MS;
+
+/**
+ * How far back below the threshold `progress` must fall before the ripple can
+ * fire again. Only matters for the scrub bar: without it, a finger parked on
+ * the trigger point would re-fire on alternate frames.
+ */
+export const RIPPLE_REARM_SLOP = 0.02;
+
+// ============================================================================
 // Inflate spring
 // ============================================================================
 

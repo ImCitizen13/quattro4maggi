@@ -10,8 +10,11 @@
  *   useIntroTimeline → one `progress` value + textOpacity + four pinned
  *     bubbles + the trigger bubble, every one a pure function of progress
  *   useMultiBubblePhysics → one flat buffer (12 floats per bubble)
- *   draw: background image → greeting (× intro.textOpacity) → labels
- *     → trigger → BaselineBubble × 4
+ *   useSceneRipple → fires a ripple when `progress` crosses just before the
+ *     bubbles bloom; it is a layer over the whole canvas
+ *   draw: background image → greeting (× intro.textOpacity)
+ *     → LabeledBubble × 4 (label then glass) → the trigger
+ *     → all of it through the ripple layer
  *
  * KEY FEATURES:
  * - No autoplay: the screen sits at rest — full-size greeting, a small "Go"
@@ -31,6 +34,8 @@
  *   baseline) — five of them now, ~15 pass breaks. Phase 3 swaps them for
  *   one looping pass.
  * - Built-in cosine film only (no soap-film overlay pass).
+ * - `SCENE_RIPPLE`: the whole frame runs through the bouncy-ripple prism
+ *   shader, fired from the centre just before the bubbles bloom.
  * - Top-right panels: Text and Bubble. FPS readout top-left.
  */
 
@@ -38,6 +43,7 @@ import {
   Canvas,
   Fill,
   Rect,
+  RuntimeShader,
   Shader,
   rect,
   useImage,
@@ -91,8 +97,11 @@ import {
   LIVE_REFRACT,
 } from "@/components/liquid-bubble-live/liveConfig";
 
+import { BouncyRipplePrismShader } from "@/components/premium/shaders";
+
 import { BaselineBubble } from "./BaselineBubble";
 import { useIntroTimeline } from "./hooks/useIntroTimeline";
+import { useSceneRipple } from "./hooks/useSceneRipple";
 import { INTRO_ICONS } from "./IconPaths";
 import { LabeledBubble } from "./LabeledBubble";
 import { IntroScrubBar } from "./IntroScrubBar";
@@ -170,6 +179,19 @@ const SHOW_FLOATERS = false;
 
 /** The intro's hand-scrub bar. Off for an FPS run — it costs a gesture + a few derived reads. */
 const SHOW_SCRUB_BAR = true;
+
+/**
+ * Run the whole scene through the bouncy-ripple prism shader, fired just
+ * before the bubbles bloom (`useSceneRipple`).
+ *
+ * It is a flag because it is not free even at rest: the layer is a
+ * FULL-SCREEN `saveLayer` at device resolution every frame, and the shader
+ * samples the image three times per pixel (one per colour channel, for the
+ * dispersion). When no ripple is running the wave term is exactly 0, so it
+ * reads as a pass-through — but the layer and the resampling are still paid.
+ * Flip it off to compare FPS, the same way `CRISP_BUBBLES` works.
+ */
+const SCENE_RIPPLE = true;
 
 /** Floating bubbles actually run. */
 const FLOATER_COUNT = SHOW_FLOATERS ? BUBBLE_COUNT : 0;
@@ -519,6 +541,21 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     pinned: [...intro.bubbles, intro.trigger],
   });
 
+  // ==========================================================================
+  // Scene ripple — fires on `progress`, just before the bubbles bloom
+  // ==========================================================================
+
+  // Origin is the canvas centre, which is also where the trigger empties and
+  // the four bubbles are born. `pixelDensity` because the layer it paints
+  // sits inside DPR_DOWN, so its fragment coords are device pixels.
+  const ripple = useSceneRipple({
+    progress: intro.progress,
+    time,
+    width,
+    height,
+    pixelDensity: PD,
+  });
+
   // One look for all; each BaselineBubble swaps in its own iParams.
   const { optics, defaults, uniforms } = useBubbleOptics({
     paramBuffer,
@@ -542,6 +579,20 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // const imagePath1 = require("../../../assets/images/pedra.jpg");
   const image = useImage(bg_path);
 
+  // The ripple's layer paint. `undefined` when the flag is off (or if the
+  // shader failed to compile) so the Group below takes no saveLayer at all.
+  // The RuntimeShader's `uniform shader image` is the layer's own contents —
+  // the finished scene — which is what makes this a post-process.
+  const rippleLayer =
+    SCENE_RIPPLE && BouncyRipplePrismShader ? (
+      <Paint>
+        <RuntimeShader
+          source={BouncyRipplePrismShader}
+          uniforms={ripple.uniforms}
+        />
+      </Paint>
+    ) : undefined;
+
   return (
     <>
       {/* The tap that starts the intro: the trigger bubble is a Skia circle,
@@ -553,108 +604,124 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
               runs in, and it is what makes the backdrop snapshot — and the
               text refracted through it — full resolution. See CRISP_BUBBLES. */}
           <Group transform={DPR_DOWN}>
-            {/* DPR_UP puts the backdrop back in logical points, so everything
-                inside it is authored in pt exactly as before. */}
-            <Group transform={DPR_UP}>
-              {/* ---- Backdrop: drawn first so the bubbles refract it ---- */}
-              {/* Base fill under the background image. */}
-              {/*<Fill color="#ffffff" />*/}
+            {/* ---- The scene ripple. A layer over EVERYTHING below — the
+                backdrop, the labels and the glass passes alike — so the wave
+                bends the finished frame rather than any one element.
 
-              {/* Background image, centered, 2× screen width. */}
-              {image && (
-                <Image
-                  image={image}
-                  fit="cover"
-                  x={0}
-                  y={0}
-                  width={width}
-                  height={height}
-                  opacity={1}
-                  blendMode="plus"
-                />
-              )}
+                It is inside DPR_DOWN on purpose: a `layer` rasterizes at the
+                resolution of the space it is declared in, so out here it
+                would snapshot the scene at logical points and hand back a
+                pd×-upscaled blur. In here one local unit is one device
+                pixel, which is also why `useSceneRipple` scales
+                `u_resolution` by PD.
 
-              {/* Greeting: centered paragraph, name on line 2, underlined.
-                  Part of the backdrop, so the bubble refracts it. Opacity is
-                  the intro's textOpacity — a function of how far the trigger
-                  has swollen, not of time (see useIntroTimeline.ts).
+                `layer={undefined}` when SCENE_RIPPLE is off = no saveLayer
+                at all, not an identity one. ---- */}
+            <Group layer={rippleLayer}>
+              {/* DPR_UP puts the backdrop back in logical points, so everything
+                  inside it is authored in pt exactly as before. */}
+              <Group transform={DPR_UP}>
+                {/* ---- Backdrop: drawn first so the bubbles refract it ---- */}
+                {/* Base fill under the background image. */}
+                {/*<Fill color="#ffffff" />*/}
 
-                  The fade MUST be a `layer`, not a plain `opacity` prop: a
-                  Group's opacity is applied to the paint its children
-                  inherit, and the renderer draws a Paragraph with
-                  `paragraph.paint(canvas, x, y)` using the text's OWN baked
-                  paint — so the inherited alpha never reaches it. With
-                  `opacity` the squiggle (a Path, which does use the paint)
-                  faded while the text stayed solid. A layer composites the
-                  whole group through one alpha instead, which catches both.
-                  It costs a saveLayer over the greeting's bounds per frame. */}
-              <Group
-                transform={textTransform}
-                layer={<Paint opacity={intro.textOpacity} />}
-              >
-                <Paragraph
-                  paragraph={paragraph}
-                  x={paragraphX}
-                  y={paragraphY}
-                  width={width}
-                />
+                {/* Background image, centered, 2× screen width. */}
+                {image && (
+                  <Image
+                    image={image}
+                    fit="cover"
+                    x={0}
+                    y={0}
+                    width={width}
+                    height={height}
+                    opacity={1}
+                    blendMode="plus"
+                  />
+                )}
+
+                {/* Greeting: centered paragraph, name on line 2, underlined.
+                    Part of the backdrop, so the bubble refracts it. Opacity is
+                    the intro's textOpacity — a function of how far the trigger
+                    has swollen, not of time (see useIntroTimeline.ts).
+
+                    The fade MUST be a `layer`, not a plain `opacity` prop: a
+                    Group's opacity is applied to the paint its children
+                    inherit, and the renderer draws a Paragraph with
+                    `paragraph.paint(canvas, x, y)` using the text's OWN baked
+                    paint — so the inherited alpha never reaches it. With
+                    `opacity` the squiggle (a Path, which does use the paint)
+                    faded while the text stayed solid. A layer composites the
+                    whole group through one alpha instead, which catches both.
+                    It costs a saveLayer over the greeting's bounds per frame. */}
+                <Group
+                  transform={textTransform}
+                  layer={<Paint opacity={intro.textOpacity} />}
+                >
+                  <Paragraph
+                    paragraph={paragraph}
+                    x={paragraphX}
+                    y={paragraphY}
+                    width={width}
+                  />
+                </Group>
               </Group>
-            </Group>
 
-            {/* ---- Floaters: one backdrop pass each (phase 2 baseline). They
-                sit OUTSIDE DPR_UP, so their filter space is device pixels;
-                BaselineBubble scales its point uniforms by the same PD. ---- */}
-            {SLOTS.map((i) => (
-              <BaselineBubble
-                key={i}
-                index={i}
-                paramBuffer={paramBuffer}
-                uniforms={uniforms}
-                optics={optics}
-                pixelDensity={PD}
-              />
-            ))}
+              {/* ---- Floaters: one backdrop pass each (phase 2 baseline).
+                  They sit OUTSIDE DPR_UP, so their filter space is device
+                  pixels; BaselineBubble scales its point uniforms by PD. ---- */}
+              {SLOTS.map((i) => (
+                <BaselineBubble
+                  key={i}
+                  index={i}
+                  paramBuffer={paramBuffer}
+                  uniforms={uniforms}
+                  optics={optics}
+                  pixelDensity={PD}
+                />
+              ))}
 
-            {/* ---- The four intro bubbles. Each LabeledBubble draws its own
-                label (icon + text, back in points via its own pd group) and
-                then its glass pass, so a bubble always refracts its own
-                contents. Drawn after the floaters, so they sit on top. ---- */}
-            {/* Mapped over the SLOTS, not over `labels`: the glass has to be
-                there from the first frame, while `labels` is still empty
-                until the font manager resolves. A null paragraph just skips
-                the label. */}
-            {INTRO_SLOTS.map((slot, i) => (
+              {/* ---- The four intro bubbles. Each LabeledBubble draws its own
+                  label (icon + text, back in points via its own pd group) and
+                  then its glass pass, so a bubble always refracts its own
+                  contents. Drawn after the floaters, so they sit on top.
+
+                  Mapped over the SLOTS, not over `labels`: the glass has to be
+                  there from the first frame, while `labels` is still empty
+                  until the font manager resolves. A null paragraph just skips
+                  the label. ---- */}
+              {INTRO_SLOTS.map((slot, i) => (
+                <LabeledBubble
+                  key={slot}
+                  bubble={intro.bubbles[i]}
+                  index={slot}
+                  paramBuffer={paramBuffer}
+                  uniforms={uniforms}
+                  optics={optics}
+                  paragraph={labels[i]?.paragraph ?? null}
+                  labelWidth={labels[i]?.width ?? 0}
+                  labelHeight={labels[i]?.height ?? 0}
+                  restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
+                  icon={INTRO_ICONS[i]}
+                  pixelDensity={PD}
+                />
+              ))}
+
+              {/* ---- The trigger bubble, on top of everything else. No icon:
+                  "Go" is the whole label. ---- */}
               <LabeledBubble
-                key={slot}
-                bubble={intro.bubbles[i]}
-                index={slot}
+                bubble={intro.trigger}
+                index={TRIGGER_SLOT}
                 paramBuffer={paramBuffer}
                 uniforms={uniforms}
                 optics={optics}
-                paragraph={labels[i]?.paragraph ?? null}
-                labelWidth={labels[i]?.width ?? 0}
-                labelHeight={labels[i]?.height ?? 0}
-                restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
-                icon={INTRO_ICONS[i]}
+                paragraph={triggerLabel?.paragraph ?? null}
+                labelWidth={triggerLabel?.width ?? 0}
+                labelHeight={triggerLabel?.height ?? 0}
+                restRadius={TRIGGER_RADIUS}
+                showIcon={false}
                 pixelDensity={PD}
               />
-            ))}
-
-            {/* ---- The trigger bubble, on top of everything else. No icon:
-                "Go" is the whole label. ---- */}
-            <LabeledBubble
-              bubble={intro.trigger}
-              index={TRIGGER_SLOT}
-              paramBuffer={paramBuffer}
-              uniforms={uniforms}
-              optics={optics}
-              paragraph={triggerLabel?.paragraph ?? null}
-              labelWidth={triggerLabel?.width ?? 0}
-              labelHeight={triggerLabel?.height ?? 0}
-              restRadius={TRIGGER_RADIUS}
-              showIcon={false}
-              pixelDensity={PD}
-            />
+            </Group>
           </Group>
         </Canvas>
       </GestureDetector>

@@ -25,6 +25,7 @@ single bubble's state.
 - `hooks/multiBubbleMath.ts`: one bubble's float life cycle as a pure step (+ test)
 - `hooks/useMultiBubblePhysics.ts`: float + shape for every bubble in one frame callback
 - `hooks/useIntroTimeline.ts`: rest state ↔ intro, as one scrubbable `progress` value — the trigger bubble, and the swell/collapse → four-bubbles run it kicks off
+- `hooks/useSceneRipple.ts`: one water ripple over the whole scene, fired off `progress` just before the bubbles bloom
 - `animation_timeline.md`: the intro's stages, curves, constants and the reasoning — the reference for changing how it feels
 
 Tests: `bun test src/components/liquid-bubbles-multi`
@@ -54,12 +55,18 @@ flowchart TD
     SCENE --> SCRUB
     GESTURE -- "scheduleOnRN(intro.play)" --> PROGRESS
     SCRUB -- "drag: cancelAnimation + write<br/>Play/Pause: intro.play() / cancelAnimation" --> PROGRESS
+    RIPPLE["useSceneRipple<br/>fires when progress crosses<br/>RIPPLE_AT_PROGRESS"]
+    RLAYER["Ripple layer over the whole scene<br/>BouncyRipplePrismShader"]
+
     PROGRESS --> INTRO
+    PROGRESS --> RIPPLE --> RLAYER
     CLOCK --> INTRO
+    CLOCK --> RIPPLE
     PANELS --> INTRO
     PANELS --> PHYS
     PANELS --> OPTICS
     BUF --> OPTICS --> PASS
+    PASS --> RLAYER
 ```
 
 And what the canvas draws. Arrows are draw order, which is also refraction
@@ -71,6 +78,8 @@ still inside `1 / pd`, which is what puts their filter in device pixels.
 flowchart TD
     subgraph CANVAS["Canvas, Group scale 1 / pd - one local unit = one device pixel"]
         direction TB
+        subgraph RIPPLE["Group layer = BouncyRipplePrismShader - the whole scene"]
+        direction TB
         subgraph PTS["Group scale pd - backdrop, authored in points"]
             direction TB
             BG["Background image<br/>cover, full bleed"]
@@ -80,6 +89,7 @@ flowchart TD
         PASSES["LabeledBubble x 4<br/>each: label in its own pd group,<br/>then its pass (point uniforms x pd)"]
         TRIGPASS["LabeledBubble<br/>trigger: Go, no icon, on top"]
         PTS --> PASSES --> TRIGPASS
+        end
     end
     CANVAS --> OVERLAY["Outside the canvas: FPS, tuning panels, Reset"]
 ```
@@ -93,10 +103,12 @@ flowchart TD
  fontMgr ready → intro.reset() arms the rest state (progress → 0, no autoplay)
  tap the trigger bubble → GestureDetector worklet → scheduleOnRN(intro.play)
  drag IntroScrubBar     → cancelAnimation(progress) → writes progress directly
+ progress crosses RIPPLE_AT_PROGRESS → useSceneRipple fires the scene ripple
  draw     background image → greeting paragraph (× intro.textOpacity)
                 → floaters
                 → the four intro bubbles, each label-then-glass
                 → the trigger bubble, label-then-glass
+                → all of the above through the ripple layer
 ```
 
 - **Reuses the single bubble's look read-only:** `shaders.ts`,
@@ -161,6 +173,45 @@ flowchart TD
   instead of rebuilding the paragraph.
 - **Cosine film only**, no soap-film pass. The only gesture is the trigger
   tap; the floaters still have none.
+- **`SCENE_RIPPLE`:** wraps the whole canvas in one ripple layer, fired just
+  before the bubbles bloom — see `hooks/useSceneRipple.ts` for the timing,
+  the DPR constraint and the cost.
+
+### hooks/useSceneRipple.ts
+
+One bouncy water ripple over the WHOLE finished frame — backdrop, labels and
+glass alike — from `premium/shaders.ts`'s `BouncyRipplePrismShader` (the same
+shader the `ripple-effect` demo's Advanced switch uses). Origin is the canvas
+centre, which is also where the trigger empties and the four bubbles are born.
+
+- **Fired by `progress`, not a timer.** `useAnimatedReaction` watches the
+  intro's one master value and fires on its FORWARD crossing of
+  `RIPPLE_AT_PROGRESS`. That keeps the ripple honest under the scrub bar:
+  drag through the collapse and it goes off, drag back and it re-arms. A
+  `setTimeout` hung off `play()` would desync the moment the bar was touched.
+- **`RIPPLE_AT_PROGRESS` is derived**, like `INTRO_TOTAL_MS`: bloom start
+  (`TRIGGER_SWELL_MS + TRIGGER_COLLAPSE_MS + INTRO_BUBBLE_DELAY_MS`) minus
+  `RIPPLE_LEAD_MS`. Retime any stage and the ripple stays pinned to the bloom
+  instead of drifting off it. It lands inside the trigger's collapse — the
+  bubble is emptying into the centre, the water snaps, and the four bubbles
+  come out of the ring it leaves.
+- **Idle = a tapTime in the FUTURE (1e9), not -1.** The shader clamps
+  `max(u_time - u_tapTime, 0)`, so a future tap reads as `globalTime = 0` →
+  zero displacement. `RippleEffect`'s -1 would instead read as "tapped one
+  second ago" and flash a ripple at mount.
+- **Edge-triggered with slop** (`RIPPLE_REARM_SLOP`), so a `progress` parked
+  on the threshold by a finger can't re-fire every frame.
+- **The layer must be INSIDE `DPR_DOWN`.** A `layer` rasterizes in the space
+  it is declared in: outside, it would snapshot at logical points and hand
+  back a `pd`×-upscaled blur (the same trap `CRISP_BUBBLES` exists for).
+  Inside, one local unit is a device pixel — which is also why the hook
+  scales `u_resolution` by PD rather than passing the size in points.
+- **`SCENE_RIPPLE` is a flag, because it is not free at rest.** The layer is a
+  full-screen `saveLayer` at device resolution every frame, and the shader
+  samples the image three times per pixel for the dispersion. With no ripple
+  running the wave term is exactly 0 and it reads as a pass-through, but the
+  layer and the resampling are still paid. `layer={undefined}` when the flag
+  is off means no `saveLayer` at all, not an identity one.
 
 ### LabeledBubble.tsx
 
