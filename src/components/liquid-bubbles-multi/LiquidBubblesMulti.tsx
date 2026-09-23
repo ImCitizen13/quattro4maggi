@@ -1,19 +1,24 @@
 /**
- * LiquidBubblesMulti — five glass bubbles floating over live content.
+ * LiquidBubblesMulti — a greeting that collapses into four labelled bubbles.
  * Design notes: README.md → "LiquidBubblesMulti.tsx".
  *
  * FLOW:
  *   onLayout → size → MultiBubbleScene (physics needs the real bounds)
+ *   useIntroTimeline → text scale + four pinned bubbles (where / how big)
  *   useMultiBubblePhysics → one flat buffer (12 floats per bubble)
- *   draw: live background → BaselineBubble × BUBBLE_COUNT → spawn box
+ *   draw: white → greeting (× textScale) → labels → BaselineBubble × 4
  *
  * KEY FEATURES:
+ * - Intro: the greeting springs to 1.2 and collapses to nothing; four
+ *   bubbles of slightly different sizes are born at that point, wobble out
+ *   to the corners of a tilted quad, and drift there for good.
+ * - Each bubble carries its own label, drawn BEFORE the glass, so the
+ *   bubble refracts its own text. "Replay" re-runs the whole thing.
  * - Phase 2: every bubble is today's single-bubble pass (the stress
- *   baseline). Phase 3 swaps them for one looping pass.
+ *   baseline) — four of them, ~12 pass breaks. Phase 3 swaps them for one
+ *   looping pass.
  * - Built-in cosine film only (no soap-film overlay pass).
- * - One look for every bubble; wobble/inertia/strength vary per bubble
- *   through its random traits.
- * - Top-right toggle: float on/off. FPS readout top-left.
+ * - Top-right panels: Text and Bubble. FPS readout top-left.
  */
 
 import {
@@ -32,8 +37,14 @@ import {
   Path,
 } from "@shopify/react-native-skia";
 import { PressableScale } from "pressto";
-import React, { useMemo, useState } from "react";
-import { StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  PixelRatio,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import {
   interpolate,
   useDerivedValue,
@@ -64,12 +75,18 @@ import {
 } from "@/components/liquid-bubble-live/liveConfig";
 
 import { BaselineBubble } from "./BaselineBubble";
+import { BubbleLabel } from "./BubbleLabel";
+import { useIntroTimeline } from "./hooks/useIntroTimeline";
 import { useMultiBubblePhysics } from "./hooks/useMultiBubblePhysics";
 import {
   BUBBLE_COUNT,
+  INTRO_BASE_RADIUS,
+  INTRO_COUNT,
+  INTRO_LABELS,
+  INTRO_LABEL_SIZE,
+  INTRO_LABEL_WIDTH_MUL,
+  INTRO_RADIUS_MUL,
   TEXT_BASE_SIZE,
-  TEXT_BUBBLE_GAP,
-  TEXT_BUBBLE_SIZE_DEFAULT,
   TEXT_BUBBLE_X_DEFAULT,
   TEXT_BUBBLE_Y_DEFAULT,
   TEXT_SIZE_DEFAULT,
@@ -95,6 +112,31 @@ const LIVE_REFRACT_SLIDER_MAX = 40;
 /** Tint hue, rgb 0..1 (same as the single bubble). */
 const BUBBLE_TINT: [number, number, number] = [0.85, 0.93, 1.0];
 
+/**
+ * Render the bubbles' backdrop at device resolution instead of at logical
+ * points. Skia can't apply the canvas matrix to a `RuntimeShader` image
+ * filter, so it factors the scale out and snapshots the backdrop at 1 texel
+ * per local unit — at logical size, every texel is then blown up `pd`× and
+ * the text seen through the glass looks pixelated.
+ *
+ * The fix is to make one local unit = one device pixel: draw everything
+ * inside a `1 / pd` group (so the bubbles' local space is device pixels) and
+ * put the backdrop content back in points with a matching `pd` group.
+ *
+ * It costs `pd²` (≈ 9×) the texels per pass, so it is a flag: set it false
+ * to compare FPS.
+ */
+const CRISP_BUBBLES = true;
+
+/** Local units per point inside the canvas. 1 = the old, logical-res look. */
+const PD = CRISP_BUBBLES ? PixelRatio.get() : 1;
+
+/** Outer group: puts the canvas in device pixels for the bubble passes. */
+const DPR_DOWN = [{ scale: 1 / PD }];
+
+/** Inner group: backdrop content stays authored in logical points. */
+const DPR_UP = [{ scale: PD }];
+
 /** Floating bubbles on/off. Off = only the bubble pinned over the text. */
 const SHOW_FLOATERS = false;
 
@@ -104,11 +146,14 @@ const FLOATER_COUNT = SHOW_FLOATERS ? BUBBLE_COUNT : 0;
 /** Slot indices, built once. */
 const SLOTS = Array.from({ length: FLOATER_COUNT }, (_, i) => i);
 
+/** Intro bubble slots: right after the floaters. */
+const INTRO_SLOTS = Array.from(
+  { length: INTRO_COUNT },
+  (_, i) => FLOATER_COUNT + i,
+);
+
 const TEXT = "Good ";
 const NAME_TEXT = ["Mohamed", "Jack", "Lily", "Marco"];
-
-/** Slot of the bubble pinned over the text: right after the floaters. */
-const TEXT_BUBBLE_SLOT = FLOATER_COUNT;
 
 /** Hand-drawn squiggle used as the rule under the name. */
 const SQWIGGLE =
@@ -201,8 +246,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     bubbleX: useSharedValue(TEXT_BUBBLE_X_DEFAULT),
     bubbleY: useSharedValue(TEXT_BUBBLE_Y_DEFAULT),
   };
-  // Bubble radius: the Bubble panel's Shape → Size slider.
-  const bubbleSize = useSharedValue(TEXT_BUBBLE_SIZE_DEFAULT);
+  // Mean bubble radius: the Bubble panel's Shape → Size slider. Each intro
+  // bubble multiplies it by its own `INTRO_RADIUS_MUL`.
+  const bubbleSize = useSharedValue(INTRO_BASE_RADIUS);
 
   // ==========================================================================
   // Greeting text (before the physics: the bubble is placed off its height)
@@ -211,6 +257,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const name = NAME_TEXT[0];
 
   const fontMgr = useFonts({
+    Boldonse: [require("../../assets/fonts/Boldonse-Regular.ttf")],
     Lexend: [require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf")],
   });
 
@@ -226,7 +273,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       fontMgr,
     )
       .pushStyle({
-        fontFamilies: ["Lexend"],
+        fontFamilies: ["Boldonse"],
         fontSize: TEXT_BASE_SIZE,
         color: Skia.Color("#000000"),
       })
@@ -236,6 +283,32 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     p.layout(width);
     return p;
   }, [fontMgr, name, width]);
+
+  // One paragraph per bubble label, laid out at that bubble's rest size.
+  // `BubbleLabel` only scales the result, so a bubble's text never re-measures.
+  const labels = useMemo(() => {
+    if (!fontMgr) {
+      return [];
+    }
+    return INTRO_LABELS.slice(0, INTRO_COUNT).map((text, i) => {
+      const rest = INTRO_BASE_RADIUS * INTRO_RADIUS_MUL[i];
+      const labelWidth = rest * INTRO_LABEL_WIDTH_MUL;
+      const p = Skia.ParagraphBuilder.Make(
+        { textAlign: TextAlign.Center },
+        fontMgr,
+      )
+        .pushStyle({
+          fontFamilies: ["Boldonse"],
+          fontSize: INTRO_LABEL_SIZE,
+          color: Skia.Color("#0f1725"),
+        })
+        .addText(text)
+        .pop()
+        .build();
+      p.layout(labelWidth);
+      return { paragraph: p, width: labelWidth, height: p.getHeight(), rest };
+    });
+  }, [fontMgr]);
 
   // Paragraph drawn centered on (0, 0); the group moves it to the screen
   // center. The underline sits under line 2 (the name), from its measured
@@ -248,10 +321,36 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const underlineBaseline = paragraphY + (nameLine?.baseline ?? 0);
   const underlineW = nameLine?.width ?? 0;
 
+  // ==========================================================================
+  // Intro timeline (text collapse → four bubbles out to the corners)
+  // ==========================================================================
+
+  const time = useClock();
+  const intro = useIntroTimeline({
+    centerX: width / 2,
+    centerY: height / 2 + TEXT_Y_DEFAULT,
+    radius: bubbleSize,
+    time,
+    offsetX: textControls.bubbleX,
+    offsetY: textControls.bubbleY,
+  });
+
+  // Autoplay once the font is in, so the greeting is never drawn unstyled.
+  const { play } = intro;
+  useEffect(() => {
+    if (fontMgr) {
+      play();
+    }
+  }, [fontMgr, play]);
+
+  // The intro's scale rides on top of the Size slider's, so the collapse
+  // works at whatever size the text is tuned to.
   const textTransform = useDerivedValue(() => [
     { translateX: width / 2 },
     { translateY: height / 2 + textControls.y.value },
-    { scale: textControls.size.value / TEXT_BASE_SIZE },
+    {
+      scale: (textControls.size.value / TEXT_BASE_SIZE) * intro.textScale.value,
+    },
   ]);
 
   // The squiggle is authored at SQWIGGLE_W × SQWIGGLE_H from its own origin,
@@ -267,22 +366,6 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const squiggleStroke = useDerivedValue(
     () => textControls.underlineWidth.value ,
   );
-
-  // The pinned bubble rests ABOVE the paragraph: its rim sits
-  // TEXT_BUBBLE_GAP over the text's top edge, which moves with the text's
-  // Vertical and Size and with the bubble's own radius. Bubble X / Y are
-  // offsets from there.
-  const pinnedX = useDerivedValue(
-    () => width / 2 + textControls.bubbleX.value,
-  );
-  const pinnedY = useDerivedValue(() => {
-    const scale = textControls.size.value / TEXT_BASE_SIZE;
-    const textTop = height / 2 + textControls.y.value - (paragraphH * scale) / 2;
-    return (
-      textTop - TEXT_BUBBLE_GAP - bubbleSize.value + textControls.bubbleY.value
-    );
-  });
-  const pinnedR = useDerivedValue(() => bubbleSize.value);
 
   // ==========================================================================
   // Physics
@@ -303,9 +386,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     wobble,
     inertia,
     strength,
-    pinnedX,
-    pinnedY,
-    pinnedR,
+    pinned: intro.bubbles,
   });
 
   // One look for all; each BaselineBubble swaps in its own iParams.
@@ -319,7 +400,6 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // Live background
   // ==========================================================================
 
-  const time = useClock();
   const backgroundUniforms = useDerivedValue(() => ({
     iResolution: [width, height],
     iTime: time.value,
@@ -327,72 +407,101 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     iGrid: [BG_GRID_DRIFT, BG_GRID_WIDTH, BG_GRID_STRENGTH, 0],
   }));
 
-  // const bg_path = require("../../../assets/liquid-glass-bubble/focus_bg.jpg");
+  const bg_path = require("../../../assets/liquid-glass-bubble/3_bg.jpg");
 
-  // // const imagePath1 = require("../../../assets/images/pedra.jpg");
-  // const image = useImage(bg_path);
+  // const imagePath1 = require("../../../assets/images/pedra.jpg");
+  const image = useImage(bg_path);
 
   return (
     <>
       <Canvas style={{ width, height }}>
-        {/* ---- Backdrop: drawn first so the bubbles can refract it ---- */}
-        {/* Base fill under the background image. */}
-        <Fill color="#ffffff" />
+        {/* Everything lives under DPR_DOWN, so one local unit inside it is
+            one device pixel: that is the space the bubbles' image filter
+            runs in, and it is what makes the backdrop snapshot — and the
+            text refracted through it — full resolution. See CRISP_BUBBLES. */}
+        <Group transform={DPR_DOWN}>
+          {/* DPR_UP puts the backdrop back in logical points, so everything
+              inside it is authored in pt exactly as before. */}
+          <Group transform={DPR_UP}>
+            {/* ---- Backdrop: drawn first so the bubbles refract it ---- */}
+            {/* Base fill under the background image. */}
+            {/*<Fill color="#ffffff" />*/}
 
-        {/* Greeting: centered paragraph, name on line 2, underlined. Part
-            of the backdrop, so the bubble refracts it. */}
-        <Group transform={textTransform}>
-          <Paragraph
-            paragraph={paragraph}
-            x={paragraphX}
-            y={paragraphY}
-            width={width}
-          />
-          {/* Squiggle under the name, in place of a straight rule. */}
-          <Group transform={squiggleTransform}>
-            <Path
-              path={SQWIGGLE}
-              color="lightblue"
-              style="stroke"
-              strokeJoin="round"
+            {/* Background image, centered, 2× screen width. */}
+            {image && (
+              <Image
+                image={image}
+                fit="cover"
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                opacity={1}
+                blendMode="plus"
+              />
+            )}
 
-              strokeWidth={squiggleStroke}
-            />
+            {/* Greeting: centered paragraph, name on line 2, underlined.
+                Part of the backdrop, so the bubble refracts it. */}
+            <Group transform={textTransform}>
+              <Paragraph
+                paragraph={paragraph}
+                x={paragraphX}
+                y={paragraphY}
+                width={width}
+              />
+              {/* Squiggle under the name, in place of a straight rule. */}
+              <Group transform={squiggleTransform}>
+                <Path
+                  path={SQWIGGLE}
+                  color="lightblue"
+                  style="stroke"
+                  strokeJoin="round"
+                  strokeWidth={squiggleStroke}
+                />
+              </Group>
+            </Group>
+
+            {/* Bubble labels: part of the backdrop too, so each bubble
+                refracts its own text. */}
+            {labels.map((label, i) => (
+              <BubbleLabel
+                key={i}
+                bubble={intro.bubbles[i]}
+                paragraph={label.paragraph}
+                width={label.width}
+                height={label.height}
+                restRadius={label.rest}
+              />
+            ))}
           </Group>
+
+          {/* ---- Bubbles: one backdrop pass each (phase 2 baseline). They
+              sit OUTSIDE DPR_UP, so their filter space is device pixels;
+              BaselineBubble scales its point uniforms by the same PD. ---- */}
+          {SLOTS.map((i) => (
+            <BaselineBubble
+              key={i}
+              index={i}
+              paramBuffer={paramBuffer}
+              uniforms={uniforms}
+              optics={optics}
+              pixelDensity={PD}
+            />
+          ))}
+
+          {/* ---- The four intro bubbles, drawn last so they are on top ---- */}
+          {INTRO_SLOTS.map((slot) => (
+            <BaselineBubble
+              key={slot}
+              index={slot}
+              paramBuffer={paramBuffer}
+              uniforms={uniforms}
+              optics={optics}
+              pixelDensity={PD}
+            />
+          ))}
         </Group>
-
-        {/* Background image, centered, 2× screen width. */}
-        {/*{image && (
-          <Image
-            image={image}
-            fit="cover"
-            x={0}
-            y={0}
-            width={width}
-            height={height}
-            opacity={1}
-            blendMode="plus"
-          />
-        )}*/}
-
-        {/* ---- Bubbles: one backdrop pass each (phase 2 baseline) ---- */}
-        {SLOTS.map((i) => (
-          <BaselineBubble
-            key={i}
-            index={i}
-            paramBuffer={paramBuffer}
-            uniforms={uniforms}
-            optics={optics}
-          />
-        ))}
-
-        {/* ---- Bubble pinned over the text: drawn last, so on top ---- */}
-        <BaselineBubble
-          index={TEXT_BUBBLE_SLOT}
-          paramBuffer={paramBuffer}
-          uniforms={uniforms}
-          optics={optics}
-        />
       </Canvas>
 
       <FpsOverlay dark />
@@ -416,7 +525,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           strength={strength}
           strengthDefault={STRENGTH_DEFAULT}
           size={bubbleSize}
-          sizeDefault={TEXT_BUBBLE_SIZE_DEFAULT}
+          sizeDefault={INTRO_BASE_RADIUS}
           sizeMin={0}
           sizeMax={240}
           optics={optics}
@@ -427,6 +536,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       )}
 
       <View style={styles.toggles}>
+        <PressableScale style={styles.toggle} onPress={intro.play}>
+          <Text style={styles.toggleText}>Replay</Text>
+        </PressableScale>
         <PressableScale
           style={[styles.toggle, panel === "text" && styles.toggleActive]}
           onPress={() => togglePanel("text")}

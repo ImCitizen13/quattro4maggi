@@ -9,6 +9,8 @@
  *     needsAnchor → resetModeState + birth shape (a teleport is not motion)
  *     stepBubbleModes(mode[i], x, y, R, …)     → 12 floats
  *     copy into out[i·12 … i·12 + 11], grow the union bbox
+ *   pinned slots (i ≥ count): position + radius from the caller, then the
+ *     same stepBubbleModes — anchored the first frame their radius > 0
  *   waiting / unused slots → 12 zeros (R = 0: nothing to draw)
  *   paramBuffer = out  (double-buffered), bbox = union
  *
@@ -65,8 +67,11 @@ type UiMulti = {
   bufA: number[];
   bufB: number[];
   useA: boolean;
-  /** False until the pinned bubble's modes are anchored at its position. */
-  pinnedAnchored: boolean;
+  /**
+   * Per slot: false until that pinned bubble's modes are anchored at its
+   * first visible position, so being placed is never read as motion.
+   */
+  pinnedAnchored: boolean[];
 };
 
 type UiMultiHost = { __liquidBubblesMulti?: UiMulti };
@@ -92,13 +97,21 @@ export type UseMultiBubblePhysicsParams = {
   /** JS-thread callback fired with the bubble's index at each spawn. */
   onSpawn?: (index: number) => void;
   /**
-   * Optional pinned bubble in slot `count` (drawn after the floaters): it
-   * doesn't float, it sits at (`pinnedX`, `pinnedY`) with radius `pinnedR`
-   * (R ≤ 0 hides it). Moving it still drives the shape like a drag.
+   * Pinned bubbles, taking the slots right after the floaters (`count`,
+   * `count + 1`, …). They don't float: each sits at (`x`, `y`) with radius
+   * `r` (r ≤ 0 hides it), and moving one still drives the shape like a drag.
+   * The array's length is fixed for the mount.
    */
-  pinnedX?: DerivedValue<number>;
-  pinnedY?: DerivedValue<number>;
-  pinnedR?: DerivedValue<number>;
+  pinned?: readonly PinnedBubble[];
+};
+
+/** One caller-driven bubble: position and radius, all on the UI thread. */
+export type PinnedBubble = {
+  x: DerivedValue<number>;
+  y: DerivedValue<number>;
+  r: DerivedValue<number>;
+  /** Multiplies the wobble slider for this bubble only (default 1). */
+  wobbleMul?: number;
 };
 
 export type UseMultiBubblePhysicsReturn = {
@@ -132,16 +145,13 @@ export function useMultiBubblePhysics({
   inertia,
   strength,
   onSpawn,
-  pinnedX,
-  pinnedY,
-  pinnedR,
+  pinned,
 }: UseMultiBubblePhysicsParams): UseMultiBubblePhysicsReturn {
-  const hasPinned =
-    pinnedX !== undefined && pinnedY !== undefined && pinnedR !== undefined;
-  // The pinned bubble takes the slot after the floaters, so leave room.
+  const pinnedCount = Math.min(pinned?.length ?? 0, MAX_BUBBLES);
+  // The pinned bubbles take the slots after the floaters, so leave room.
   const n = Math.min(
     Math.max(Math.floor(count), 0),
-    hasPinned ? MAX_BUBBLES - 1 : MAX_BUBBLES,
+    MAX_BUBBLES - pinnedCount,
   );
 
   // Zeroed from the start so a shader reading it before the first frame gets
@@ -176,6 +186,10 @@ export function useMultiBubblePhysics({
         bufA.push(0);
         bufB.push(0);
       }
+      const pinnedAnchored: boolean[] = [];
+      for (let i = 0; i < MAX_BUBBLES; i++) {
+        pinnedAnchored.push(false);
+      }
       ui = {
         floats,
         modes,
@@ -185,7 +199,7 @@ export function useMultiBubblePhysics({
         bufA,
         bufB,
         useA: true,
-        pinnedAnchored: false,
+        pinnedAnchored,
       };
       host.__liquidBubblesMulti = ui;
       initialized.value = true;
@@ -218,27 +232,32 @@ export function useMultiBubblePhysics({
       const base = i * PARAM_FLOATS;
       const f = ui.floats[i];
 
-      // ---- Pinned bubble: no float, position from the caller ----
-      if (
-        i === n &&
-        pinnedX !== undefined &&
-        pinnedY !== undefined &&
-        pinnedR !== undefined &&
-        pinnedR.value > 0
-      ) {
-        const px = pinnedX.value;
-        const py = pinnedY.value;
+      // ---- Pinned bubbles: no float, position from the caller ----
+      if (pinned !== undefined && i >= n && i < n + pinnedCount) {
+        const p = pinned[i - n];
+        const pr = p.r.value;
+        if (!(pr > 0)) {
+          // Not out yet (or already gone): nothing to draw, and it must
+          // re-anchor wherever it next appears.
+          for (let k = 0; k < PARAM_FLOATS; k++) {
+            out[base + k] = 0;
+          }
+          ui.pinnedAnchored[i] = false;
+          continue;
+        }
+        const px = p.x.value;
+        const py = p.y.value;
         const mode = ui.modes[i];
-        if (!ui.pinnedAnchored) {
+        if (!ui.pinnedAnchored[i]) {
           resetModeState(mode, px, py);
-          ui.pinnedAnchored = true;
+          ui.pinnedAnchored[i] = true;
         }
         stepBubbleModes(
           mode,
           px,
           py,
-          pinnedR.value,
-          wob,
+          pr,
+          wob * (p.wobbleMul ?? 1),
           0,
           0,
           0,

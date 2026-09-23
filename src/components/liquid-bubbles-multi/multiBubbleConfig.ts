@@ -63,6 +63,68 @@ export const TEXT_BUBBLE_X_DEFAULT = 0;
 export const TEXT_BUBBLE_Y_DEFAULT = 0;
 
 // ============================================================================
+// Intro animation (greeting collapse → four labelled bubbles)
+// ============================================================================
+
+/** Bubbles the intro brings in. Each one is a pinned slot, not a floater. */
+export const INTRO_COUNT = 4;
+
+/** What each bubble says. One per `INTRO_COUNT`. */
+export const INTRO_LABELS: readonly string[] = [
+  "Exercise",
+  "Learn Portuguese",
+  "Meeting @7",
+  "Read 20 min",
+];
+
+/** Mean bubble radius, pt. The Bubble panel's Size slider drives it. */
+export const INTRO_BASE_RADIUS = 72;
+
+/** Per-bubble radius multipliers — "slightly different sizes". */
+export const INTRO_RADIUS_MUL: readonly number[] = [1, 0.86, 0.96, 0.8];
+
+/** Half-diagonal of the arrangement around the center, pt (x, y). */
+export const INTRO_SPREAD_X = 80;
+export const INTRO_SPREAD_Y = 94;
+
+/** The whole quad is rotated by this, so it never reads as a plain grid. */
+export const INTRO_TILT = 0.21; // rad, ~12°
+
+/** Resting drift: amplitude (pt) and period (s) of the in-place float. */
+export const INTRO_DRIFT_X = 7;
+export const INTRO_DRIFT_Y = 10;
+export const INTRO_DRIFT_PERIOD = 3.4;
+
+/** Greeting: peak scale before it collapses, and the two spring legs (ms). */
+export const INTRO_TEXT_PEAK = 1.2;
+export const INTRO_TEXT_GROW_MS = 520;
+export const INTRO_TEXT_COLLAPSE_MS = 380;
+
+/** First bubble starts as the text finishes collapsing; the rest follow. */
+export const INTRO_BUBBLE_DELAY_MS = INTRO_TEXT_GROW_MS + INTRO_TEXT_COLLAPSE_MS - 120;
+export const INTRO_BUBBLE_STAGGER_MS = 90;
+
+/** Inflate: bouncy, so the bubble arrives alive. */
+export const INTRO_INFLATE_MS = 900;
+export const INTRO_INFLATE_DAMPING = 0.6;
+
+/**
+ * Travel to the corner. Deliberately underdamped: the overshoot is what
+ * `stepBubbleModes` reads as motion, so the glass wobbles on the way out
+ * without any extra shape work.
+ */
+export const INTRO_TRAVEL_MS = 1100;
+export const INTRO_TRAVEL_DAMPING = 0.52;
+
+/** Label fade, after the bubble is most of the way to its corner. */
+export const INTRO_LABEL_DELAY_MS = 700;
+export const INTRO_LABEL_MS = 420;
+
+/** Label type: size at `INTRO_BASE_RADIUS`, and the wrap width as a ×R. */
+export const INTRO_LABEL_SIZE = 15;
+export const INTRO_LABEL_WIDTH_MUL = 1.45;
+
+// ============================================================================
 // Inflate spring
 // ============================================================================
 
