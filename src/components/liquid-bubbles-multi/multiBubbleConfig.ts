@@ -84,7 +84,7 @@ export const INTRO_LABELS: readonly string[] = [
   "Podcast",
   "Learn Portuguese",
   "Meeting @7",
-  "Post on X",
+  "Daily post",
 ];
 
 /** Mean bubble radius, pt. The Bubble panel's Size slider drives it. */
@@ -141,7 +141,7 @@ export const INTRO_LABEL_DELAY_MS = 700;
 export const INTRO_LABEL_MS = 420;
 
 /** Label type: size at `INTRO_BASE_RADIUS`, and the wrap width as a ×R. */
-export const INTRO_LABEL_SIZE = 32;
+export const INTRO_LABEL_SIZE = 18;
 export const INTRO_LABEL_WIDTH_MUL = 1.45;
 
 // ============================================================================

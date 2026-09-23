@@ -14,9 +14,11 @@ single bubble's state.
 ## Files
 
 - `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
+- `LabeledBubble.tsx`: one bubble as one component — its label, then its glass pass
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
 - `BubbleLabel.tsx`: one intro bubble's text + icon, riding along inside it
-- `bubbleIcon.ts`: the glyph above a bubble's label — path, size, colour, gap
+- `bubbleIcon.ts`: the `BubbleIcon` spec (path, box, size, colour, gap, stroke) + defaults
+- `IconPaths.ts`: the glyphs themselves, and `INTRO_ICONS` — one per intro label
 - `TextTuningPanel.tsx`: live controls for the greeting and the bubbles' position
 - `IntroScrubBar.tsx`: drags the intro's `progress` value by hand, to choreograph it
 - `multiBubbleConfig.ts`: count, buffer size, spawn stagger, inflate spring, intro timeline
@@ -45,7 +47,7 @@ flowchart TD
     PHYS["useMultiBubblePhysics<br/>one frame callback"]
     BUF["paramBuffer<br/>8 slots x 12 floats"]
     OPTICS["useBubbleOptics<br/>shared look uniforms"]
-    PASS["BaselineBubble x 5<br/>one backdrop pass each"]
+    PASS["LabeledBubble x 5<br/>label + one backdrop pass each"]
 
     LBM --> SCENE --> INTRO --> PHYS --> BUF --> PASS
     SCENE --> GESTURE
@@ -73,12 +75,10 @@ flowchart TD
             direction TB
             BG["Background image<br/>cover, full bleed"]
             GREET["Greeting paragraph<br/>opacity = intro.textOpacity"]
-            LABELS["BubbleLabel x 4<br/>icon + text, one per bubble"]
-            TRIGLABEL["BubbleLabel<br/>trigger: Go"]
-            BG --> GREET --> LABELS --> TRIGLABEL
+            BG --> GREET
         end
-        PASSES["BaselineBubble x 4<br/>point uniforms x pd"]
-        TRIGPASS["BaselineBubble<br/>trigger, on top of everything"]
+        PASSES["LabeledBubble x 4<br/>each: label in its own pd group,<br/>then its pass (point uniforms x pd)"]
+        TRIGPASS["LabeledBubble<br/>trigger: Go, no icon, on top"]
         PTS --> PASSES --> TRIGPASS
     end
     CANVAS --> OVERLAY["Outside the canvas: FPS, tuning panels, Reset"]
@@ -94,8 +94,9 @@ flowchart TD
  tap the trigger bubble → GestureDetector worklet → scheduleOnRN(intro.play)
  drag IntroScrubBar     → cancelAnimation(progress) → writes progress directly
  draw     background image → greeting paragraph (× intro.textOpacity)
-                → labels (icon + text) → trigger label
-                → floaters → the four intro bubbles → the trigger bubble
+                → floaters
+                → the four intro bubbles, each label-then-glass
+                → the trigger bubble, label-then-glass
 ```
 
 - **Reuses the single bubble's look read-only:** `shaders.ts`,
@@ -160,6 +161,55 @@ flowchart TD
   instead of rebuilding the paragraph.
 - **Cosine film only**, no soap-film pass. The only gesture is the trigger
   tap; the floaters still have none.
+
+### LabeledBubble.tsx
+
+One bubble as one component: its `BubbleLabel` (icon + text), then its
+`BaselineBubble` pass. Everything a bubble needs is a prop — the `IntroBubble`,
+the buffer slot, the laid-out paragraph, and its **icon path**.
+
+- **The order inside is the point.** Label before pass, so the glass refracts
+  its own contents. A caller can't split the pair or get the order wrong.
+- **It carries its own half of the DPR sandwich.** The screen's outer group is
+  `1 / pd`; this component puts the LABEL back in points with its own `pd`
+  group, and leaves the PASS outside it so the filter still runs in device
+  pixels. That's why it can sit directly under `DPR_DOWN` with no `DPR_UP`
+  wrapper around it.
+- **Icons are per bubble.** `icon?: BubbleIcon` → `IconPaths.ts`. The four
+  intro bubbles take `INTRO_ICONS[i]`; the trigger passes `showIcon={false}`,
+  since "Go" is the whole label.
+- **Rendered off the SLOTS, not off `labels`:** the glass has to be on screen
+  from the first frame, while the paragraphs are still null until `fontMgr`
+  resolves. A null paragraph just skips the label.
+- Interleaving label/pass per bubble instead of "all labels, then all passes"
+  reads identically — the bubbles don't overlap — at the cost of one extra
+  `Group` per bubble and no `saveLayer`.
+
+### bubbleIcon.ts / IconPaths.ts
+
+`bubbleIcon.ts` is the SPEC: `{ path, box, size?, color?, gap?, strokeWidth? }`
+plus the defaults. `IconPaths.ts` is the glyph library.
+
+- **`box` is per icon**, and it matters: the X mark is authored in a 24
+  viewBox, the three hand-drawn ones in a 100 box. `BubbleLabel` scales
+  whatever it's handed by `size / box`, so the two mix freely.
+- **`strokeWidth` for open paths.** The book glyph is mostly open line
+  segments (spine, text rules); filled, they vanish and the covers blob. It
+  declares a stroke width in its OWN authoring units — the group is already
+  scaled to `size`.
+- **`BUBBLE_CONTENT_PAD` is the bubble-to-content padding knob.**
+  `BubbleLabel` centres the whole block — icon, gap, text — on the bubble's
+  centre and then nudges it down by this. Centring the block is the part that
+  matters: the paragraph alone used to be centred with the icon hanging off
+  its top, so the content reached `h/2 + gap + iconSize` upward but only
+  `h/2` down — the icon crowded the rim while the bottom of the bubble sat
+  empty. Raise the constant for more headroom over the icon, at the cost of
+  the slack underneath.
+- **Size relative to R is the other half of the padding**, via
+  `INTRO_LABEL_SIZE` and `BUBBLE_ICON_SIZE` (the label is scaled by
+  `r / rest` at draw time). Note `INTRO_LABEL_WIDTH_MUL` only bounds where a
+  line BREAKS — a single word wider than it ("Portuguese") overflows rather
+  than wrapping, so narrowing it past that word's width buys no side padding.
 
 ### BaselineBubble.tsx
 

@@ -92,8 +92,9 @@ import {
 } from "@/components/liquid-bubble-live/liveConfig";
 
 import { BaselineBubble } from "./BaselineBubble";
-import { BubbleLabel } from "./BubbleLabel";
 import { useIntroTimeline } from "./hooks/useIntroTimeline";
+import { INTRO_ICONS } from "./IconPaths";
+import { LabeledBubble } from "./LabeledBubble";
 import { IntroScrubBar } from "./IntroScrubBar";
 import { useMultiBubblePhysics } from "./hooks/useMultiBubblePhysics";
 import {
@@ -598,33 +599,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
                   width={width}
                 />
               </Group>
-
-              {/* Bubble labels: part of the backdrop too, so each bubble
-                  refracts its own text. */}
-              {labels.map((label, i) => (
-                <BubbleLabel
-                  key={i}
-                  bubble={intro.bubbles[i]}
-                  paragraph={label.paragraph}
-                  width={label.width}
-                  height={label.height}
-                  restRadius={label.rest}
-                />
-              ))}
-
-              {/* Trigger bubble's label, same treatment as the other four. */}
-              {triggerLabel && (
-                <BubbleLabel
-                  bubble={intro.trigger}
-                  paragraph={triggerLabel.paragraph}
-                  width={triggerLabel.width}
-                  height={triggerLabel.height}
-                  restRadius={TRIGGER_RADIUS}
-                />
-              )}
             </Group>
 
-            {/* ---- Bubbles: one backdrop pass each (phase 2 baseline). They
+            {/* ---- Floaters: one backdrop pass each (phase 2 baseline). They
                 sit OUTSIDE DPR_UP, so their filter space is device pixels;
                 BaselineBubble scales its point uniforms by the same PD. ---- */}
             {SLOTS.map((i) => (
@@ -638,24 +615,44 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
               />
             ))}
 
-            {/* ---- The four intro bubbles, drawn last so they are on top ---- */}
-            {INTRO_SLOTS.map((slot) => (
-              <BaselineBubble
+            {/* ---- The four intro bubbles. Each LabeledBubble draws its own
+                label (icon + text, back in points via its own pd group) and
+                then its glass pass, so a bubble always refracts its own
+                contents. Drawn after the floaters, so they sit on top. ---- */}
+            {/* Mapped over the SLOTS, not over `labels`: the glass has to be
+                there from the first frame, while `labels` is still empty
+                until the font manager resolves. A null paragraph just skips
+                the label. */}
+            {INTRO_SLOTS.map((slot, i) => (
+              <LabeledBubble
                 key={slot}
+                bubble={intro.bubbles[i]}
                 index={slot}
                 paramBuffer={paramBuffer}
                 uniforms={uniforms}
                 optics={optics}
+                paragraph={labels[i]?.paragraph ?? null}
+                labelWidth={labels[i]?.width ?? 0}
+                labelHeight={labels[i]?.height ?? 0}
+                restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
+                icon={INTRO_ICONS[i]}
                 pixelDensity={PD}
               />
             ))}
 
-            {/* ---- The trigger bubble, on top of everything else ---- */}
-            <BaselineBubble
+            {/* ---- The trigger bubble, on top of everything else. No icon:
+                "Go" is the whole label. ---- */}
+            <LabeledBubble
+              bubble={intro.trigger}
               index={TRIGGER_SLOT}
               paramBuffer={paramBuffer}
               uniforms={uniforms}
               optics={optics}
+              paragraph={triggerLabel?.paragraph ?? null}
+              labelWidth={triggerLabel?.width ?? 0}
+              labelHeight={triggerLabel?.height ?? 0}
+              restRadius={TRIGGER_RADIUS}
+              showIcon={false}
               pixelDensity={PD}
             />
           </Group>
