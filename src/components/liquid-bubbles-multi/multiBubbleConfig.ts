@@ -95,26 +95,36 @@ export const INTRO_DRIFT_X = 7;
 export const INTRO_DRIFT_Y = 10;
 export const INTRO_DRIFT_PERIOD = 3.4;
 
-/** Greeting: peak scale before it collapses, and the two spring legs (ms). */
-export const INTRO_TEXT_PEAK = 1.2;
-export const INTRO_TEXT_GROW_MS = 520;
-export const INTRO_TEXT_COLLAPSE_MS = 380;
-
-/** First bubble starts as the text finishes collapsing; the rest follow. */
-export const INTRO_BUBBLE_DELAY_MS = INTRO_TEXT_GROW_MS + INTRO_TEXT_COLLAPSE_MS - 120;
+/**
+ * Gap after the trigger's collapse finishes and before the first bubble
+ * starts blooming, ms. Before the scrubbable rework this was an absolute
+ * delay measured from `play()`; now every stage is a window of the single
+ * `progress` value, so it's just the gap after `TRIGGER_SWELL_MS +
+ * TRIGGER_COLLAPSE_MS`.
+ */
+export const INTRO_BUBBLE_DELAY_MS = 60;
 export const INTRO_BUBBLE_STAGGER_MS = 90;
 
-/** Inflate: bouncy, so the bubble arrives alive. */
+/** Inflate: gentle overshoot, so the bubble arrives alive. */
 export const INTRO_INFLATE_MS = 900;
 export const INTRO_INFLATE_DAMPING = 0.6;
 
 /**
- * Travel to the corner. Deliberately underdamped: the overshoot is what
- * `stepBubbleModes` reads as motion, so the glass wobbles on the way out
- * without any extra shape work.
+ * Travel to the corner. Shaped with a back-ease that overshoots 1 and settles
+ * — see `INTRO_TRAVEL_OVERSHOOT` — which reproduces the old underdamped
+ * spring's overshoot: `stepBubbleModes` reads that as motion, so the glass
+ * wobbles on the way out without any extra shape work.
  */
 export const INTRO_TRAVEL_MS = 1100;
 export const INTRO_TRAVEL_DAMPING = 0.52;
+
+/**
+ * Back-ease amplitude for the bubbles' travel-out (`Easing.back`'s `s`
+ * parameter). This IS the wobble drive — see `INTRO_TRAVEL_MS` above — so it
+ * isn't just a stylistic choice: too small and the glass barely deforms, too
+ * large and the bubble visibly backs up before settling.
+ */
+export const INTRO_TRAVEL_OVERSHOOT = 0.28;
 
 /** Label fade, after the bubble is most of the way to its corner. */
 export const INTRO_LABEL_DELAY_MS = 700;
@@ -123,6 +133,74 @@ export const INTRO_LABEL_MS = 420;
 /** Label type: size at `INTRO_BASE_RADIUS`, and the wrap width as a ×R. */
 export const INTRO_LABEL_SIZE = 15;
 export const INTRO_LABEL_WIDTH_MUL = 1.45;
+
+// ============================================================================
+// Trigger bubble (rest state — tap it to run the intro)
+// ============================================================================
+
+/** What the trigger bubble says. */
+export const TRIGGER_LABEL = "Explore thoughts";
+
+/** Trigger bubble's rest radius, pt (fixed — doesn't follow the Size slider). */
+export const TRIGGER_RADIUS = 46;
+
+/** Gap between the greeting paragraph's bottom edge and the trigger's top rim, pt. */
+export const TRIGGER_GAP = 28;
+
+/** Trigger label type size, pt. */
+export const TRIGGER_LABEL_SIZE = 11;
+
+/** Trigger label wrap width, as a × of `TRIGGER_RADIUS`. */
+export const TRIGGER_LABEL_WIDTH_MUL = 1.6;
+
+/**
+ * How long the trigger takes to swell before it collapses, ms — stage 1 of
+ * the intro (see `useIntroTimeline.ts`).
+ */
+export const TRIGGER_SWELL_MS = 620;
+
+/** How large the trigger grows, ×, before it collapses. */
+export const TRIGGER_SWELL_SCALE = 3;
+
+/**
+ * How long the trigger takes to collapse from `TRIGGER_SWELL_SCALE` to
+ * nothing, ms — stage 2, right after the swell. Its centre lerps from its
+ * rest position to the bloom point (the four bubbles' birth point) over the
+ * same window.
+ */
+export const TRIGGER_COLLAPSE_MS = 420;
+
+/**
+ * The trigger's scale at which the greeting is fully faded out. The
+ * greeting's opacity is `1 - (swell - 1) / (TEXT_FADE_END_SCALE - 1)`,
+ * clamped — a function of how far the trigger has SWOLLEN, not of time, so
+ * it's automatically correct at any scrub position. It reads the swell
+ * factor, not the drawn scale: the drawn scale comes back down through 2×
+ * during the collapse, which would fade the greeting back in.
+ */
+export const TEXT_FADE_END_SCALE = 2;
+
+/** How long `reset()` takes to bring `progress` back to 0, ms. */
+export const INTRO_RESET_MS = 420;
+
+/**
+ * Total intro duration, ms — the span `progress` (0 → 1) maps onto. DERIVED
+ * from the stage constants above: never hand-set it, because the scrub bar's
+ * tick marks and its progress ↔ ms mapping both depend on this being exactly
+ * right. If you change any stage's duration, this recomputes and the whole
+ * timeline restretches to match — that's the point of a single progress
+ * value.
+ */
+export const INTRO_TOTAL_MS =
+  TRIGGER_SWELL_MS +
+  TRIGGER_COLLAPSE_MS +
+  INTRO_BUBBLE_DELAY_MS +
+  (INTRO_COUNT - 1) * INTRO_BUBBLE_STAGGER_MS +
+  Math.max(
+    INTRO_INFLATE_MS,
+    INTRO_TRAVEL_MS,
+    INTRO_LABEL_DELAY_MS + INTRO_LABEL_MS,
+  );
 
 // ============================================================================
 // Inflate spring

@@ -1,8 +1,11 @@
 # Liquid Bubbles Multi
 
-A greeting that collapses into four labelled glass bubbles, heading toward
-one shader pass for all of them. Plan and cost comparison:
-`../liquid-bubble-live/multi_bubble.md`.
+A small "Explore thoughts" trigger bubble sits under the greeting. Tap it and
+the greeting collapses into four labelled glass bubbles, heading toward one
+shader pass for all of them.
+
+- Plan and cost comparison: [`../liquid-bubble-live/multi_bubble.md`](../liquid-bubble-live/multi_bubble.md)
+- The intro's timeline, curves and timing constants: [`animation_timeline.md`](animation_timeline.md)
 
 Separate from `liquid-bubble-live/`: it imports only that folder's pure
 modules (`bubbleModes.ts`, `hooks/bubbleModeMath.ts`) and never touches the
@@ -14,10 +17,12 @@ single bubble's state.
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
 - `BubbleLabel.tsx`: one intro bubble's text, riding along inside it
 - `TextTuningPanel.tsx`: live controls for the greeting and the bubbles' position
+- `IntroScrubBar.tsx`: drags the intro's `progress` value by hand, to choreograph it
 - `multiBubbleConfig.ts`: count, buffer size, spawn stagger, inflate spring, intro timeline
 - `hooks/multiBubbleMath.ts`: one bubble's float life cycle as a pure step (+ test)
 - `hooks/useMultiBubblePhysics.ts`: float + shape for every bubble in one frame callback
-- `hooks/useIntroTimeline.ts`: the greeting-collapse → four-bubbles intro
+- `hooks/useIntroTimeline.ts`: rest state ↔ intro, as one scrubbable `progress` value — the trigger bubble, and the swell/collapse → four-bubbles run it kicks off
+- `animation_timeline.md`: the intro's stages, curves, constants and the reasoning — the reference for changing how it feels
 
 Tests: `bun test src/components/liquid-bubbles-multi`
 
@@ -30,15 +35,23 @@ the sliders write SharedValues, so dragging one never re-renders React.
 flowchart TD
     LBM["LiquidBubblesMulti<br/>measures, keys the scene by size"]
     SCENE["MultiBubbleScene"]
-    CLOCK["useClock<br/>seconds, for the drift"]
+    CLOCK["useClock<br/>seconds, for the resting drift only"]
     PANELS["Text / Bubble panels<br/>sliders write SharedValues"]
-    INTRO["useIntroTimeline<br/>textScale + 4 PinnedBubble"]
+    GESTURE["GestureDetector + Gesture.Tap<br/>hit-test the trigger, worklet"]
+    SCRUB["IntroScrubBar<br/>Gesture.Pan writes progress directly"]
+    PROGRESS["progress: SharedValue 0..1<br/>the ONE master value"]
+    INTRO["useIntroTimeline<br/>every stage = interpolate(progress) + an easing shape<br/>textOpacity + 4 PinnedBubble + trigger"]
     PHYS["useMultiBubblePhysics<br/>one frame callback"]
     BUF["paramBuffer<br/>8 slots x 12 floats"]
     OPTICS["useBubbleOptics<br/>shared look uniforms"]
-    PASS["BaselineBubble x 4<br/>one backdrop pass each"]
+    PASS["BaselineBubble x 5<br/>one backdrop pass each"]
 
     LBM --> SCENE --> INTRO --> PHYS --> BUF --> PASS
+    SCENE --> GESTURE
+    SCENE --> SCRUB
+    GESTURE -- "scheduleOnRN(intro.play)" --> PROGRESS
+    SCRUB -- "drag: cancelAnimation + write<br/>Play/Pause: intro.play() / cancelAnimation" --> PROGRESS
+    PROGRESS --> INTRO
     CLOCK --> INTRO
     PANELS --> INTRO
     PANELS --> PHYS
@@ -58,14 +71,16 @@ flowchart TD
         subgraph PTS["Group scale pd - backdrop, authored in points"]
             direction TB
             BG["Background image<br/>cover, full bleed"]
-            GREET["Greeting + squiggle<br/>x intro textScale"]
+            GREET["Greeting + squiggle<br/>opacity = intro.textOpacity"]
             LABELS["BubbleLabel x 4<br/>one per bubble"]
-            BG --> GREET --> LABELS
+            TRIGLABEL["BubbleLabel<br/>trigger: Explore thoughts"]
+            BG --> GREET --> LABELS --> TRIGLABEL
         end
-        PASSES["BaselineBubble x 4<br/>point uniforms x pd, on top"]
-        PTS --> PASSES
+        PASSES["BaselineBubble x 4<br/>point uniforms x pd"]
+        TRIGPASS["BaselineBubble<br/>trigger, on top of everything"]
+        PTS --> PASSES --> TRIGPASS
     end
-    CANVAS --> OVERLAY["Outside the canvas: FPS, tuning panels, Replay"]
+    CANVAS --> OVERLAY["Outside the canvas: FPS, tuning panels, Reset"]
 ```
 
 ## Design notes
@@ -74,8 +89,12 @@ flowchart TD
 
 ```
  onLayout → size → scene (keyed by size: the physics captures the walls)
- draw     white → greeting paragraph + squiggle → labels → floaters
-                → the four intro bubbles
+ fontMgr ready → intro.reset() arms the rest state (progress → 0, no autoplay)
+ tap the trigger bubble → GestureDetector worklet → scheduleOnRN(intro.play)
+ drag IntroScrubBar     → cancelAnimation(progress) → writes progress directly
+ draw     white → greeting paragraph (× intro.textOpacity) + squiggle
+                → labels → trigger label
+                → floaters → the four intro bubbles → the trigger bubble
 ```
 
 - **Reuses the single bubble's look read-only:** `shaders.ts`,
@@ -85,11 +104,32 @@ flowchart TD
 - **Greeting:** a centered Skia `Paragraph` — "Good Morning" / the name on
   two lines — with a squiggle `Path` under the name, scaled to the name's
   measured width. It is drawn BEFORE the bubble, so the glass refracts it.
+- **No autoplay.** Once `fontMgr` resolves, the screen calls
+  `intro.reset()` — the same call the Reset button makes — which brings
+  `progress` back to 0: full-size (fully opaque) greeting, the four bubbles
+  gone, the trigger bubble inflated in under the paragraph.
+- **The trigger bubble** is a fifth pinned slot
+  (`FLOATER_COUNT + INTRO_COUNT`), centered under the greeting paragraph's
+  bottom edge (`TRIGGER_GAP` below it), labelled "Explore thoughts". It
+  doesn't float or drift — a still bubble until it's tapped. The `Canvas` is
+  wrapped in a `GestureDetector` with `Gesture.Tap()`; its `onEnd` worklet
+  hit-tests the tap against the trigger's live `x` / `y` / `r` (`r × 1.25`
+  slop) and, if it hits and the trigger is still inflated,
+  `scheduleOnRN`s `intro.play()`. Outside the bubble, or after it has
+  emptied, the tap does nothing.
 - **Intro bubbles:** slots `FLOATER_COUNT …  + INTRO_COUNT − 1`, all pinned
-  (no buoyancy float) and driven by `useIntroTimeline`. Drawn last, so they
-  are on top. Each one's label is drawn just before them, so the glass
-  refracts its own text.
-- **Replay** (top right) re-runs the intro from the greeting.
+  (no buoyancy float) and driven by `useIntroTimeline`. Drawn after the
+  trigger's label but before the trigger's own pass, so they sit under it.
+  Each one's label is drawn just before it, so the glass refracts its own
+  text.
+- **Reset** (top right, was "Replay") calls `intro.reset()`, running
+  `progress` back to 0 — which, because every value in `useIntroTimeline` is
+  a pure function of `progress`, reproduces the rest state (four bubbles
+  gone, greeting back, trigger reinflated) without any extra reset logic.
+- **`IntroScrubBar`** (`SHOW_SCRUB_BAR`, bottom of the screen): drags
+  `intro.progress` directly to choreograph the intro by hand, plus a
+  Play/Pause pair. See [`animation_timeline.md`](animation_timeline.md) and
+  the component's own header. Off it for an FPS run.
 - **`CRISP_BUBBLES` / the DPR sandwich:** Skia can't apply the canvas matrix
   to a `RuntimeShader` image filter, so it factors the scale out and
   snapshots the backdrop at **1 texel per local unit** — at logical size
@@ -107,7 +147,8 @@ flowchart TD
   wobble, inertia, strength + all the optics). Every slider writes a
   SharedValue — dragging never re-renders React; Size scales the text group
   instead of rebuilding the paragraph.
-- **Cosine film only**, no soap-film pass. No gestures yet.
+- **Cosine film only**, no soap-film pass. The only gesture is the trigger
+  tap; the floaters still have none.
 
 ### BaselineBubble.tsx
 
@@ -126,24 +167,29 @@ once per slot, so 5 bubbles cost ~15 pass breaks.
 
 ### hooks/useIntroTimeline.ts
 
-```
- textScale  1 → 1.2 (spring) → 0 (collapse)
- bubble i, after INTRO_BUBBLE_DELAY + i · STAGGER:
-   inflate  0 → 1   bouncy   → r  = Size slider × INTRO_RADIUS_MUL[i]
-   travel   0 → 1   springy  → xy = center → its corner of a tilted quad
-   label    0 → 1   fade, once it is nearly there
- forever:   x / y carry a sin drift, scaled by travel
-```
+The rest state ↔ intro run, as one scrubbable `progress` value. **The stage
+breakdown, the curves, the timing constants and the reasoning behind them all
+live in [`animation_timeline.md`](animation_timeline.md)** — read that to
+change how the intro looks or feels. What matters here is only its shape as a
+hook:
 
-- **The wobble on the way out is free:** the travel spring is underdamped
-  (ζ 0.52), and `stepBubbleModes` reads that velocity as motion, so the glass
-  deforms toward the corner and settles there. No extra shape work.
+- **One `progress: SharedValue<number>`, 0 → 1**, and every value it returns
+  (`textOpacity`, the four bubbles, the trigger) is a pure function of it.
+  `play()` runs it forward from wherever it is; `reset()` runs it to 0, which
+  reproduces the rest state with no separate teardown path.
 - **The quad is tilted** (`INTRO_TILT`) with per-corner reach jitter, so four
   bubbles never read as a grid; sizes and wobble vary per bubble too.
-- **Drift is gated by travel**, so a bubble still at the birth point is still.
-- **`play()` re-arms from zero** — it is both the autoplay and Replay.
-- One `PinnedBubble` per bubble: this hook says where and how big, the
-  physics hook owns the shape.
+- **Drift is gated by travel**, so a bubble still at the bloom point is still.
+- **The trigger is one more `IntroBubble`**, returned alongside `bubbles` as
+  `trigger`. `triggerX` / `triggerY` are its REST position (the screen
+  derives `triggerY` from the paragraph's height and the Text panel's
+  Vertical slider); the hook's own `trigger.x` / `trigger.y` are derived
+  values that lerp rest → the bloom point.
+- **No autoplay.** The screen calls `reset()` once fonts are ready — the
+  same call the Reset button makes — so mount and Reset share one code path.
+  `play()` is only ever reached from a tap on the trigger or the scrub bar.
+- One `PinnedBubble` per bubble (the four AND the trigger): this hook says
+  where and how big, the physics hook owns the shape.
 
 ### hooks/multiBubbleMath.ts
 
@@ -182,6 +228,7 @@ bubbles can share one frame callback and `bun test` can run it.
   uniform size is fixed; it starts zeroed so a pre-first-frame read has the
   right size.
 - **Zero per-frame allocation;** state is rebuilt once per mount.
-- **Pinned slots** take the indices after the floaters. Each re-anchors the
-  first frame its radius goes above 0 (so being placed, or a Replay, is never
-  read as motion) and carries its own `wobbleMul`.
+- **Pinned slots** take the indices after the floaters — the four intro
+  bubbles, then the trigger. Each re-anchors the first frame its radius goes
+  above 0 (so being placed, a `play()`, or a `reset()` is never read as
+  motion) and carries its own `wobbleMul`.
