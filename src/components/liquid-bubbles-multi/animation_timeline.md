@@ -54,10 +54,10 @@ gantt
     section Trigger
     swell  1 → 3x            :0, 620
     collapse  3 → 0          :620, 1040
-    drift  rest → bloom point :0, 1040
+    drift  rest → bloom point :0, 749
 
     section Greeting
-    fade out (driven by swell, gone at 2x) :0, 420
+    fade out (opens at full size) :620, 920
 
     section Bubble 0
     inflate :1100, 2000
@@ -84,9 +84,10 @@ As normalized `progress`, the boundaries worth knowing:
 
 | Moment | ms | progress |
 | --- | --- | --- |
-| Swell ends, collapse begins | 620 | 0.249 |
-| Greeting fully gone (trigger hits 2×) | ~420 | ~0.17 |
-| Trigger vanished, at the bloom point | 1040 | 0.418 |
+| Swell ends, collapse begins, greeting starts fading | 620 | 0.249 |
+| Trigger has landed on the bloom point | 749 | 0.301 |
+| Greeting fully gone | 920 | 0.369 |
+| Trigger vanished | 1040 | 0.418 |
 | First bubble starts | 1100 | 0.442 |
 | Last bubble starts | 1370 | 0.550 |
 | Everything settled | 2490 | 1.000 |
@@ -105,10 +106,31 @@ The drawn scale is the **product** of the two: `swell × (1 − collapse)`.
 
 ### Drift — spanning both
 
-The trigger's centre lerps from its rest position (under the paragraph) to the
-**bloom point** (the text centre, where the four bubbles are born) across
-*both* stages, ease-in-out. So it is travelling the whole time it grows, and
-lands exactly as it disappears — the bubbles then come out of where it went.
+The trigger's centre lerps from its rest position (centred under the
+paragraph) to the **bloom point** (the text centre, where the four bubbles are
+born), ease-in-out. So it is travelling the whole time it grows.
+
+The window is `TRIGGER_TRAVEL_FRACTION` (0.72) of the swell + collapse span —
+it ends at 749 ms, not 1040. That makes the move to the centre read as
+*quicker than the emptying*: the trigger arrives while it is still visibly
+there, then finishes collapsing in place, and the bubbles come out of where it
+settled. Set the fraction to 1 for the old behaviour, where it landed at the
+exact instant it disappeared.
+
+### The greeting's fade
+
+It opens the moment the trigger reaches **full size** — the end of the swell —
+and runs for `TEXT_FADE_MS` (300 ms), ease-in. So the paragraph stays fully
+readable for the whole swell and only gives way once the bubble has arrived at
+`TRIGGER_SWELL_SCALE`, overlapping the collapse and the drift.
+
+Keep `TEXT_FADE_MS ≤ TRIGGER_COLLAPSE_MS`: the fade rides on the collapse's
+window rather than adding to the timeline, so a longer one would still be
+running after the bubbles start blooming and `INTRO_TOTAL_MS` would no longer
+cover it.
+
+The trigger's **own label** fades differently — off the swell factor, via
+`TEXT_FADE_END_SCALE`; see "The text fade reads the swell" below.
 
 A consequence worth knowing: that drift is real per-frame position delta, so
 `stepBubbleModes` deforms the trigger's glass while it swells, not only at the
@@ -136,6 +158,7 @@ an `Easing` shape:
 | Trigger swell | `Easing.out(Easing.quad)` |
 | Trigger collapse | `Easing.in(Easing.cubic)` |
 | Trigger drift to centre | `Easing.inOut(Easing.cubic)` |
+| Greeting fade-out | `Easing.in(Easing.quad)` |
 | Bubble travel | `Easing.out(Easing.back(INTRO_TRAVEL_OVERSHOOT))` |
 | Bubble inflate | `Easing.out(Easing.back(0.15))` |
 | Labels | linear |
@@ -167,16 +190,25 @@ wobble dial.
 
 ### The text fade reads the swell, not the drawn scale
 
-`textOpacity = 1 − (swell − 1) / (TEXT_FADE_END_SCALE − 1)`, clamped. It is a
-function of **scale, not of time**, which is why it has no timing constant of
-its own and is automatically right at any scrub position.
+This now applies to the **trigger's own label**, which fades as the bubble
+grows because it goes illegible well before full size:
+`1 − (swell − 1) / (TEXT_FADE_END_SCALE − 1)`, clamped. It is a function of
+**scale, not of time**, which is why it has no timing constant of its own and
+is automatically right at any scrub position.
 
 But it must read the trigger's **swell factor**, not the scale the bubble is
 drawn at. The drawn scale is `swell × (1 − collapse)`, which is
 non-monotonic — it comes back *down* through 2× and 1× as the trigger
-empties. A fade driven off it fades the greeting **back in** just before the
+empties. A fade driven off it fades the label **back in** just before the
 bubbles bloom. The swell factor only ever rises, so the fade stays monotone in
 time while remaining a pure function of `progress`.
+
+The **greeting** used to fade this way too, and it is worth knowing why it
+stopped: reading the swell meant the paragraph was already gone by 2×, a third
+of the way into the swell, so the bubble finished growing over an empty
+screen. It now has its own window opening at the swell's end (above). The
+monotonicity trap is gone with it — a `progress` window can't run backwards —
+but the constant and the reasoning stay, because the label still needs them.
 
 ### Fading a Paragraph needs a layer, not `opacity`
 
@@ -213,7 +245,9 @@ All in `multiBubbleConfig.ts`.
 | Swell | `TRIGGER_SWELL_MS` | 620 ms |
 | Swell | `TRIGGER_SWELL_SCALE` | 3× |
 | Collapse | `TRIGGER_COLLAPSE_MS` | 420 ms |
-| Text fade | `TEXT_FADE_END_SCALE` | 2× |
+| Drift to centre | `TRIGGER_TRAVEL_FRACTION` | 0.72 of swell + collapse |
+| Greeting fade | `TEXT_FADE_MS` | 300 ms, from the swell's end |
+| Trigger label fade | `TEXT_FADE_END_SCALE` | 2× |
 | Gap before bloom | `INTRO_BUBBLE_DELAY_MS` | 60 ms |
 | Bloom | `INTRO_BUBBLE_STAGGER_MS` | 90 ms / bubble |
 | Bloom | `INTRO_INFLATE_MS` | 900 ms |

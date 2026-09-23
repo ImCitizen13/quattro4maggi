@@ -10,19 +10,20 @@
  *   useIntroTimeline → one `progress` value + textOpacity + four pinned
  *     bubbles + the trigger bubble, every one a pure function of progress
  *   useMultiBubblePhysics → one flat buffer (12 floats per bubble)
- *   draw: white → greeting (× intro.textOpacity) → labels → trigger
- *     → BaselineBubble × 4
+ *   draw: background image → greeting (× intro.textOpacity) → labels
+ *     → trigger → BaselineBubble × 4
  *
  * KEY FEATURES:
- * - No autoplay: the screen sits at rest — full-size greeting, a small
- *   "Explore thoughts" trigger bubble under it. Tapping the trigger runs the
- *   intro: the trigger swells, then collapses into the point under the text,
- *   the greeting fades out as it does, and four bubbles of slightly
- *   different sizes are born at that point and wobble out to the corners of
- *   a tilted quad, drifting there for good.
- * - Each bubble (the trigger included) carries its own label, drawn BEFORE
- *   the glass, so the bubble refracts its own text. "Reset" collapses back
- *   to the rest state instead of re-running the intro from a play.
+ * - No autoplay: the screen sits at rest — full-size greeting, a small "Go"
+ *   trigger bubble centred under it. Tapping the trigger runs the intro: the
+ *   trigger swells while drifting up to the text centre, the greeting fades
+ *   out once it reaches full size, the trigger collapses into that point, and
+ *   four bubbles of slightly different sizes are born there and wobble out to
+ *   the corners of a tilted quad, drifting there for good.
+ * - Each bubble (the trigger included) carries its own label — an icon over a
+ *   line of text — drawn BEFORE the glass, so the bubble refracts its own
+ *   contents. "Reset" collapses back to the rest state instead of re-running
+ *   the intro from a play.
  * - `IntroScrubBar` (`SHOW_SCRUB_BAR`) drags `intro.progress` by hand — see
  *   useIntroTimeline.ts's header for why the whole intro is a pure function
  *   of one scrubbable value.
@@ -44,6 +45,7 @@ import {
   Group,
   Paint,
   Paragraph,
+  RoundedRect,
   Skia,
   TextAlign,
   useFonts,
@@ -102,6 +104,10 @@ import {
   INTRO_LABEL_SIZE,
   INTRO_LABEL_WIDTH_MUL,
   INTRO_RADIUS_MUL,
+  NAME_HIGHLIGHT_COLOR,
+  NAME_HIGHLIGHT_PAD_X,
+  NAME_HIGHLIGHT_PAD_Y,
+  NAME_HIGHLIGHT_RADIUS,
   TEXT_BASE_SIZE,
   TEXT_BUBBLE_X_DEFAULT,
   TEXT_BUBBLE_Y_DEFAULT,
@@ -265,7 +271,6 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const togglePanel = (next: Panel) =>
     setPanel((current) => (current === next ? "none" : next));
 
-
   const greeting = TEXT + (isDay.value ? "Morning" : "Night");
   // Text panel levers (UI thread; no re-render while dragging).
   const textControls: TextControls = {
@@ -289,6 +294,10 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const fontMgr = useFonts({
     Boldonse: [require("../../assets/fonts/Boldonse-Regular.ttf")],
     Lexend: [require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf")],
+    PTSerif: [
+      require("../../assets/fonts/PTSerif-Regular.ttf"),
+      require("../../assets/fonts/PTSerif-Bold.ttf"),
+    ],
   });
 
   // "Good Morning" / name on two lines, center-aligned, laid out once at
@@ -298,16 +307,29 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     if (!fontMgr) {
       return null;
     }
+
+
     const p = Skia.ParagraphBuilder.Make(
       { textAlign: TextAlign.Center },
       fontMgr,
     )
       .pushStyle({
-        fontFamilies: ["Boldonse"],
+        fontFamilies: ["PTSerif"],
+        fontStyle: { weight: 200 },
         fontSize: TEXT_BASE_SIZE,
-        color: Skia.Color("#000000"),
+        letterSpacing: 0.1,
+        color: Skia.Color("#242424"),
       })
-      .addText(`${greeting}\n${name}`)
+      .addText(`${greeting}\n`)
+      .pop()
+      .pushStyle({
+        fontFamilies: ["PTSerif"],
+        fontStyle: { weight: 200 },
+        fontSize: TEXT_BASE_SIZE,
+        letterSpacing: 0.1,
+        color: Skia.Color("#1c4b62"),//#e8a519
+      })
+      .addText(name)
       .pop()
       .build();
     p.layout(width);
@@ -328,7 +350,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         fontMgr,
       )
         .pushStyle({
-          fontFamilies: ["Boldonse"],
+          fontFamilies: ["PTSerif"],
           fontSize: INTRO_LABEL_SIZE,
           color: Skia.Color("#0f1725"),
         })
@@ -351,7 +373,8 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       fontMgr,
     )
       .pushStyle({
-        fontFamilies: ["Boldonse"],
+        fontStyle: {weight: 600},
+        fontFamilies: ["PTSerif"],
         fontSize: TRIGGER_LABEL_SIZE,
         color: Skia.Color("#0f1725"),
       })
@@ -373,24 +396,32 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const underlineBaseline = paragraphY + (nameLine?.baseline ?? 0);
   const underlineW = nameLine?.width ?? 0;
 
+  const nameAscent = nameLine?.ascent ?? 0;
+  const nameDescent = nameLine?.descent ?? 0;
+
   // ==========================================================================
   // Intro timeline (text collapse → four bubbles out to the corners)
   // ==========================================================================
 
   const time = useClock();
 
-  // Trigger bubble: screen centre, just under the paragraph's bottom edge.
-  // Read as a derived value so dragging the Text panel's Vertical slider
-  // moves it along with the text without ever re-rendering.
+  // Trigger bubble: horizontally centred, `TRIGGER_GAP` under the paragraph's
+  // bottom edge. Derived, so dragging the Text panel's Size or Vertical slider
+  // carries it along without ever re-rendering. The paragraph's half-height is
+  // scaled by the same factor the text group uses — the bubble is drawn
+  // OUTSIDE that group, so it doesn't inherit the scale; the gap and the
+  // radius are left unscaled, so the bubble keeps its own size and spacing.
   const triggerX = useSharedValue(width / 2);
-  const triggerY = useDerivedValue(
-    () =>
+  const triggerY = useDerivedValue(() => {
+    const s = textControls.size.value / TEXT_BASE_SIZE;
+    return (
       height / 2 +
       textControls.y.value +
-      paragraphH / 2 +
+      (paragraphH / 2) * s +
       TRIGGER_GAP +
-      TRIGGER_RADIUS,
-  );
+      TRIGGER_RADIUS
+    );
+  });
 
   const intro = useIntroTimeline({
     centerX: width / 2,
@@ -462,7 +493,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   ]);
   // Undo the scale so Underline width stays the stroke's real thickness.
   const squiggleStroke = useDerivedValue(
-    () => textControls.underlineWidth.value ,
+    () => textControls.underlineWidth.value,
   );
 
   // ==========================================================================
@@ -505,7 +536,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     iGrid: [BG_GRID_DRIFT, BG_GRID_WIDTH, BG_GRID_STRENGTH, 0],
   }));
 
-  const bg_path = require("../../../assets/liquid-glass-bubble/3_bg.jpg");
+  const bg_path = require("../../../assets/liquid-glass-bubble/15_bg.jpg");
 
   // const imagePath1 = require("../../../assets/images/pedra.jpg");
   const image = useImage(bg_path);
@@ -566,16 +597,6 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
                   y={paragraphY}
                   width={width}
                 />
-                {/* Squiggle under the name, in place of a straight rule. */}
-                <Group transform={squiggleTransform}>
-                  <Path
-                    path={SQWIGGLE}
-                    color="lightblue"
-                    style="stroke"
-                    strokeJoin="round"
-                    strokeWidth={squiggleStroke}
-                  />
-                </Group>
               </Group>
 
               {/* Bubble labels: part of the backdrop too, so each bubble

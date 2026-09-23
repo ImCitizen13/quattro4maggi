@@ -20,10 +20,11 @@
  *       trigger scale  1 → TRIGGER_SWELL_SCALE, ease-out
  *     stage 2 "collapse" [+TRIGGER_COLLAPSE_MS]:
  *       trigger scale  TRIGGER_SWELL_SCALE → 0
- *     spanning BOTH of the above [0, collapse end]:
- *       trigger centre rest position → the bloom point (where the four
- *         bubbles are born), ease-in-out — so it is drifting up the whole
- *         time it swells, and lands there exactly as it vanishes
+ *     spanning BOTH of the above [0, collapse end × TRIGGER_TRAVEL_FRACTION]:
+ *       trigger centre rest position (under the paragraph) → the bloom point
+ *         (where the four bubbles are born), ease-in-out — so it is drifting
+ *         in the whole time it swells, and because the window stops short of
+ *         the collapse it arrives EARLY and empties in place
  *     stage 3 "bloom", starting INTRO_BUBBLE_DELAY_MS after the collapse
  *     ends, per bubble i offset by i · INTRO_BUBBLE_STAGGER_MS:
  *       inflate[i]  0 → 1  gentle back-ease  → r  = baseRadius · radiusMul
@@ -31,11 +32,14 @@
  *         bloom point → its corner of a tilted quad
  *       label[i]    0 → 1  linear fade, once it is most of the way there
  *     throughout: x/y carry a sin drift, scaled by travel[i]
- *     the greeting's opacity is a function of the TRIGGER'S SWELL (not of
- *       progress): `1 - (swell − 1) / (TEXT_FADE_END_SCALE − 1)`, clamped —
- *       gone by the time the trigger reaches 2×. It reads the swell factor
- *       alone, which only rises; the drawn scale falls back through 2× during
- *       the collapse and would fade the greeting back in.
+ *     the greeting fades over [swell end, +TEXT_FADE_MS]: it stays fully
+ *       opaque for the whole swell and only gives way once the trigger is at
+ *       FULL size, overlapping the collapse
+ *     the TRIGGER'S OWN label fades off the swell factor instead — `1 -
+ *       (swell − 1) / (TEXT_FADE_END_SCALE − 1)`, clamped — because it goes
+ *       illegible as the bubble grows. It reads the swell factor alone, which
+ *       only rises; the drawn scale falls back through 2× during the collapse
+ *       and would fade the label back in.
  *   reset() — the Reset button (and the mount call): a short `withTiming`
  *     brings `progress` back to 0. Because every quantity above is a pure
  *     function of `progress`, running it back to 0 reproduces the rest state
@@ -103,9 +107,11 @@ import {
   INTRO_TRAVEL_MS,
   INTRO_TRAVEL_OVERSHOOT,
   TEXT_FADE_END_SCALE,
+  TEXT_FADE_MS,
   TRIGGER_COLLAPSE_MS,
   TRIGGER_SWELL_MS,
   TRIGGER_SWELL_SCALE,
+  TRIGGER_TRAVEL_FRACTION,
 } from "../multiBubbleConfig";
 import type { PinnedBubble } from "./useMultiBubblePhysics";
 
@@ -139,7 +145,7 @@ export type UseIntroTimelineParams = {
 export type UseIntroTimelineReturn = {
   /** The one master value driving every stage below. 0 = rest, 1 = done. */
   progress: SharedValue<number>;
-  /** Multiplies the greeting's own opacity: 1 at rest, 0 once the trigger has swollen past `TEXT_FADE_END_SCALE`. */
+  /** Multiplies the greeting's own opacity: 1 at rest and for the whole swell, 0 `TEXT_FADE_MS` after the trigger reaches full size. */
   textOpacity: DerivedValue<number>;
   /** One per `INTRO_COUNT`, in slot order. */
   bubbles: IntroBubble[];
@@ -224,6 +230,20 @@ const SWELL_END_T = SWELL_END_MS / INTRO_TOTAL_MS;
 const COLLAPSE_START_T = SWELL_END_T;
 const COLLAPSE_END_T = COLLAPSE_END_MS / INTRO_TOTAL_MS;
 
+/**
+ * Greeting fade: opens the instant the trigger is at full size (the swell's
+ * end) and runs for `TEXT_FADE_MS`, overlapping the collapse.
+ */
+const TEXT_FADE_START_T = SWELL_END_T;
+const TEXT_FADE_END_T = (SWELL_END_MS + TEXT_FADE_MS) / INTRO_TOTAL_MS;
+
+/**
+ * The trigger's drift to the bloom point ends here — a FRACTION of the
+ * collapse's end, so it arrives at the centre before it has finished
+ * emptying. See `TRIGGER_TRAVEL_FRACTION`.
+ */
+const TRIGGER_TRAVEL_END_T = COLLAPSE_END_T * TRIGGER_TRAVEL_FRACTION;
+
 /** Per-bubble windows, indexed like `SPECS`. */
 const BUBBLE_WINDOWS: readonly BubbleWindow[] = Array.from(
   { length: INTRO_COUNT },
@@ -266,6 +286,13 @@ const travelToCenterEase = Easing.inOut(Easing.cubic);
  */
 const travelEase = Easing.out(Easing.back(INTRO_TRAVEL_OVERSHOOT));
 
+/**
+ * Greeting fade-out: ease-in, so it holds a moment at full opacity after the
+ * trigger hits full size and then drops away, rather than starting to dim the
+ * instant the window opens.
+ */
+const textFadeEase = Easing.in(Easing.quad);
+
 /** Inflate back-ease: a gentler overshoot than travel, so it still feels alive. */
 const INFLATE_OVERSHOOT = 0.15;
 const inflateEase = Easing.out(Easing.back(INFLATE_OVERSHOOT));
@@ -275,14 +302,15 @@ const inflateEase = Easing.out(Easing.back(INFLATE_OVERSHOOT));
 // ============================================================================
 
 /**
- * The greeting's (and the trigger's own label's) opacity, as a function of
- * how far the trigger has SWOLLEN — not of time or progress directly. At
- * scale 1 (rest) this is 1; by `TEXT_FADE_END_SCALE` it's 0. No separate
- * timing constant: it rides on the swell curve already computed.
+ * The trigger label's opacity, as a function of how far the trigger has
+ * SWOLLEN — not of time or progress directly. At scale 1 (rest) this is 1; by
+ * `TEXT_FADE_END_SCALE` it's 0. No separate timing constant: it rides on the
+ * swell curve already computed. The GREETING no longer uses this — it fades
+ * on its own window once the swell is complete (see `textOpacity`).
  *
  * Callers must pass the trigger's monotone SWELL factor, never its drawn
  * scale: the drawn scale falls back through 2× and 1× during the collapse,
- * which would fade the greeting back IN just before the bubbles bloom.
+ * which would fade the label back IN just before the bubbles bloom.
  */
 function fadeFromScale(scale: number): number {
   "worklet";
@@ -341,16 +369,18 @@ export function useIntroTimeline({
     () => triggerRadius * triggerScale.value,
   );
 
-  // How far the trigger has lerped from its rest position to the bloom point.
-  // Spans BOTH stages — it starts drifting up as it swells and arrives exactly
-  // as it vanishes, rather than sitting still under the text and then darting
-  // up during the collapse. Ease-in-out so the departure and the arrival are
-  // both soft; the swell's own scale curve is what carries the early motion.
+  // How far the trigger has lerped from its rest position (centred under the
+  // paragraph) to the bloom point. Spans the swell AND part of the collapse, so it
+  // is travelling the whole time it is scaling rather than sitting still and
+  // then darting. `TRIGGER_TRAVEL_FRACTION` cuts the window short of the
+  // collapse's end, which makes the move to the centre visibly quicker than
+  // the emptying — it lands, then finishes collapsing in place. Ease-in-out,
+  // so the departure and the arrival are both soft.
   const triggerCenterT = useDerivedValue(() =>
     travelToCenterEase(
       interpolate(
         progress.value,
-        [0, COLLAPSE_END_T],
+        [0, TRIGGER_TRAVEL_END_T],
         [0, 1],
         Extrapolation.CLAMP,
       ),
@@ -380,10 +410,23 @@ export function useIntroTimeline({
     wobbleMul: 1,
   };
 
-  // The greeting's opacity: a function of how far the trigger has SWOLLEN,
-  // not of time. Reading `triggerSwell` rather than `triggerScale` is what
-  // keeps it monotone — see the two comments above.
-  const textOpacity = useDerivedValue(() => fadeFromScale(triggerSwell.value));
+  // The greeting's opacity. Unlike the trigger's own label (which fades off
+  // the swell factor, above), this opens only once the trigger has reached
+  // FULL size: the paragraph stays solid for the whole swell, then gives way
+  // over `TEXT_FADE_MS` while the bubble collapses and heads for the centre.
+  // Still a pure function of `progress`, so the scrub bar seeks it correctly.
+  const textOpacity = useDerivedValue(
+    () =>
+      1 -
+      textFadeEase(
+        interpolate(
+          progress.value,
+          [TEXT_FADE_START_T, TEXT_FADE_END_T],
+          [0, 1],
+          Extrapolation.CLAMP,
+        ),
+      ),
+  );
 
   // ==========================================================================
   // The four bubbles: bloom out of the trigger's collapse point

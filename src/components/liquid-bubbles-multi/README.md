@@ -15,7 +15,8 @@ single bubble's state.
 
 - `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
-- `BubbleLabel.tsx`: one intro bubble's text, riding along inside it
+- `BubbleLabel.tsx`: one intro bubble's text + icon, riding along inside it
+- `bubbleIcon.ts`: the glyph above a bubble's label — path, size, colour, gap
 - `TextTuningPanel.tsx`: live controls for the greeting and the bubbles' position
 - `IntroScrubBar.tsx`: drags the intro's `progress` value by hand, to choreograph it
 - `multiBubbleConfig.ts`: count, buffer size, spawn stagger, inflate spring, intro timeline
@@ -71,9 +72,9 @@ flowchart TD
         subgraph PTS["Group scale pd - backdrop, authored in points"]
             direction TB
             BG["Background image<br/>cover, full bleed"]
-            GREET["Greeting + squiggle<br/>opacity = intro.textOpacity"]
-            LABELS["BubbleLabel x 4<br/>one per bubble"]
-            TRIGLABEL["BubbleLabel<br/>trigger: Explore thoughts"]
+            GREET["Greeting paragraph<br/>opacity = intro.textOpacity"]
+            LABELS["BubbleLabel x 4<br/>icon + text, one per bubble"]
+            TRIGLABEL["BubbleLabel<br/>trigger: Go"]
             BG --> GREET --> LABELS --> TRIGLABEL
         end
         PASSES["BaselineBubble x 4<br/>point uniforms x pd"]
@@ -92,8 +93,8 @@ flowchart TD
  fontMgr ready → intro.reset() arms the rest state (progress → 0, no autoplay)
  tap the trigger bubble → GestureDetector worklet → scheduleOnRN(intro.play)
  drag IntroScrubBar     → cancelAnimation(progress) → writes progress directly
- draw     white → greeting paragraph (× intro.textOpacity) + squiggle
-                → labels → trigger label
+ draw     background image → greeting paragraph (× intro.textOpacity)
+                → labels (icon + text) → trigger label
                 → floaters → the four intro bubbles → the trigger bubble
 ```
 
@@ -102,15 +103,25 @@ flowchart TD
   `backgroundShaders.ts` (currently unused: the backdrop is plain white).
   They hold no shared state, so the two demos can't interfere.
 - **Greeting:** a centered Skia `Paragraph` — "Good Morning" / the name on
-  two lines — with a squiggle `Path` under the name, scaled to the name's
-  measured width. It is drawn BEFORE the bubble, so the glass refracts it.
+  two lines — in PT Serif. It is **two styled runs**, not one: the builder's
+  style stack takes a `pushStyle` / `addText` / `pop` triple per run, so the
+  name gets its own colour (and could take its own family or size). Line
+  metrics still report the name as line 2, so anything measured off it — the
+  trigger's position, the squiggle — follows for free. It is drawn BEFORE the
+  bubble, so the glass refracts it.
+- **The squiggle** under the name is no longer drawn, but everything behind it
+  is still wired: the `SQWIGGLE` path, `squiggleTransform` / `squiggleStroke`,
+  and the Text panel's thickness and gap sliders. Re-add a `Group` with those
+  inside the greeting to bring it back.
 - **No autoplay.** Once `fontMgr` resolves, the screen calls
   `intro.reset()` — the same call the Reset button makes — which brings
   `progress` back to 0: full-size (fully opaque) greeting, the four bubbles
   gone, the trigger bubble inflated in under the paragraph.
 - **The trigger bubble** is a fifth pinned slot
-  (`FLOATER_COUNT + INTRO_COUNT`), centered under the greeting paragraph's
-  bottom edge (`TRIGGER_GAP` below it), labelled "Explore thoughts". It
+  (`FLOATER_COUNT + INTRO_COUNT`), centred under the greeting paragraph's
+  bottom edge (`TRIGGER_GAP` below it). The paragraph's half-height is scaled
+  by the Text panel's Size slider before the gap is added, since the bubble is
+  drawn outside the text group and doesn't inherit that scale. It
   doesn't float or drift — a still bubble until it's tapped. The `Canvas` is
   wrapped in a `GestureDetector` with `Gesture.Tap()`; its `onEnd` worklet
   hit-tests the tap against the trigger's live `x` / `y` / `r` (`r × 1.25`

@@ -9,14 +9,29 @@
  *
  * KEY FEATURES:
  * - Drawn BEFORE the bubble passes, so the glass refracts its own label.
+ * - An icon sits above the text, from `bubbleIcon.ts` — that file is the only
+ *   place to change its shape, size, colour or gap. `showIcon={false}` drops
+ *   it for one label.
  * - The paragraph is laid out once by the caller at the bubble's rest size;
  *   only the transform animates, so nothing re-renders or re-measures.
  */
 
-import { Group, Paragraph, type SkParagraph } from "@shopify/react-native-skia";
+import {
+  Group,
+  Paragraph,
+  Path,
+  type SkParagraph,
+} from "@shopify/react-native-skia";
 import React from "react";
 import { useDerivedValue } from "react-native-reanimated";
 
+import {
+  BUBBLE_ICON_BOX,
+  BUBBLE_ICON_COLOR,
+  BUBBLE_ICON_GAP,
+  BUBBLE_ICON_PATH,
+  BUBBLE_ICON_SIZE,
+} from "./bubbleIcon";
 import type { IntroBubble } from "./hooks/useIntroTimeline";
 
 // ============================================================================
@@ -34,6 +49,8 @@ export type BubbleLabelProps = {
   height: number;
   /** Radius the layout above corresponds to: scale = r / restRadius. */
   restRadius: number;
+  /** Draw the icon from `bubbleIcon.ts` above the text. Default: true. */
+  showIcon?: boolean;
 };
 
 // ============================================================================
@@ -46,12 +63,25 @@ export function BubbleLabel({
   width,
   height,
   restRadius,
+  showIcon = true,
 }: BubbleLabelProps) {
   const transform = useDerivedValue(() => [
     { translateX: bubble.x.value },
     { translateY: bubble.y.value },
     { scale: restRadius > 0 ? bubble.r.value / restRadius : 1 },
   ]);
+
+  // The icon is authored in a BUBBLE_ICON_BOX box from its own top-left
+  // origin, so it gets its own static transform: centred on x, sitting a
+  // BUBBLE_ICON_GAP above the paragraph's top edge, scaled to
+  // BUBBLE_ICON_SIZE. It is inside the group above, so it rides, scales and
+  // fades with the bubble for free.
+  const iconScale = BUBBLE_ICON_SIZE / BUBBLE_ICON_BOX;
+  const iconTransform = [
+    { translateX: -BUBBLE_ICON_SIZE / 2 },
+    { translateY: -height / 2 - BUBBLE_ICON_GAP - BUBBLE_ICON_SIZE },
+    { scale: iconScale },
+  ];
 
   if (!paragraph) {
     return null;
@@ -65,6 +95,12 @@ export function BubbleLabel({
         y={-height / 2}
         width={width}
       />
+      {/* Icon ABOVE the text — see bubbleIcon.ts to change it. */}
+      {showIcon && (
+        <Group transform={iconTransform}>
+          <Path path={BUBBLE_ICON_PATH} color={BUBBLE_ICON_COLOR} />
+        </Group>
+      )}
     </Group>
   );
 }

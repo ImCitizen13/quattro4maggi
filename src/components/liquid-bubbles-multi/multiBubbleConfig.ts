@@ -44,10 +44,20 @@ export const SPAWN_SPREAD = 40;
 // ============================================================================
 
 /** Size the font is loaded at, pt. The Size slider scales from this. */
-export const TEXT_BASE_SIZE = 32;
-export const TEXT_SIZE_DEFAULT = 32;
+export const TEXT_BASE_SIZE = 48;
+export const TEXT_SIZE_DEFAULT = 40;
 /** Vertical offset from the screen center, pt (+ = down). */
 export const TEXT_Y_DEFAULT = 0;
+/**
+ * Highlighter swatch behind the name. The rect is the name line's own glyph
+ * box (ascent above the baseline, descent below) grown by these pads — all in
+ * pt at `TEXT_BASE_SIZE`, so the Size slider scales it with the text.
+ */
+export const NAME_HIGHLIGHT_COLOR = "#e8a519";
+export const NAME_HIGHLIGHT_PAD_X = 12;
+export const NAME_HIGHLIGHT_PAD_Y = 2;
+export const NAME_HIGHLIGHT_RADIUS = 6;
+
 /** Squiggle under the name: stroke thickness and gap below the baseline, pt. */
 export const UNDERLINE_WIDTH_DEFAULT = 5;
 export const UNDERLINE_GAP_DEFAULT = 6;
@@ -71,10 +81,10 @@ export const INTRO_COUNT = 4;
 
 /** What each bubble says. One per `INTRO_COUNT`. */
 export const INTRO_LABELS: readonly string[] = [
-  "Exercise",
+  "Podcast",
   "Learn Portuguese",
   "Meeting @7",
-  "Read 20 min",
+  "Post on X",
 ];
 
 /** Mean bubble radius, pt. The Bubble panel's Size slider drives it. */
@@ -131,7 +141,7 @@ export const INTRO_LABEL_DELAY_MS = 700;
 export const INTRO_LABEL_MS = 420;
 
 /** Label type: size at `INTRO_BASE_RADIUS`, and the wrap width as a ×R. */
-export const INTRO_LABEL_SIZE = 15;
+export const INTRO_LABEL_SIZE = 32;
 export const INTRO_LABEL_WIDTH_MUL = 1.45;
 
 // ============================================================================
@@ -139,16 +149,21 @@ export const INTRO_LABEL_WIDTH_MUL = 1.45;
 // ============================================================================
 
 /** What the trigger bubble says. */
-export const TRIGGER_LABEL = "Explore thoughts";
+export const TRIGGER_LABEL = "Go";
 
 /** Trigger bubble's rest radius, pt (fixed — doesn't follow the Size slider). */
 export const TRIGGER_RADIUS = 46;
 
-/** Gap between the greeting paragraph's bottom edge and the trigger's top rim, pt. */
+/**
+ * Vertical gap between the greeting paragraph's bottom edge and the trigger's
+ * top rim, pt. The trigger sits centred UNDER the paragraph. It is NOT scaled
+ * by the Text panel's Size slider, so the bubble keeps the same breathing room
+ * whatever size the text is.
+ */
 export const TRIGGER_GAP = 28;
 
 /** Trigger label type size, pt. */
-export const TRIGGER_LABEL_SIZE = 11;
+export const TRIGGER_LABEL_SIZE = 16;
 
 /** Trigger label wrap width, as a × of `TRIGGER_RADIUS`. */
 export const TRIGGER_LABEL_WIDTH_MUL = 1.6;
@@ -179,6 +194,31 @@ export const TRIGGER_COLLAPSE_MS = 420;
  * during the collapse, which would fade the greeting back in.
  */
 export const TEXT_FADE_END_SCALE = 2;
+
+/**
+ * How long the GREETING takes to fade out, ms, starting the instant the
+ * trigger reaches full size (the end of the swell) — so the paragraph stays
+ * fully readable for the whole swell and only gives way once the bubble has
+ * arrived at `TRIGGER_SWELL_SCALE`.
+ *
+ * It rides on the collapse window rather than adding to the timeline, so keep
+ * it ≤ `TRIGGER_COLLAPSE_MS` — longer and the fade would still be running
+ * after the bubbles have started to bloom, and `INTRO_TOTAL_MS` would no
+ * longer cover it.
+ *
+ * `TEXT_FADE_END_SCALE` above no longer drives the greeting: it now only
+ * fades the TRIGGER'S OWN label, which goes illegible as the bubble swells.
+ */
+export const TEXT_FADE_MS = 300;
+
+/**
+ * How much of the swell + collapse window the trigger uses to drift from its
+ * rest spot (under the paragraph) to the bloom point at the centre. 1 = it
+ * lands exactly as it vanishes; < 1 = it gets there EARLY and finishes
+ * collapsing in place, which reads as a faster, more deliberate move to the
+ * centre while it is still scaling.
+ */
+export const TRIGGER_TRAVEL_FRACTION = 0.72;
 
 /** How long `reset()` takes to bring `progress` back to 0, ms. */
 export const INTRO_RESET_MS = 420;
