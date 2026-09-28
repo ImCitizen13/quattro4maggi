@@ -222,13 +222,48 @@ the *re-imported* layout is a different identity, so the pipeline rejects it.
 **Cause.** `perf` and `frameSampler` are JS-runtime singletons holding closures
 and a `Set`. Neither can be ticked from a worklet.
 
-### 5.8 Stale Metro cache after worklet regeneration
+### 5.8 Generated worklet files do not exist when Metro looks for them
 
-**Symptom.** `Unable to resolve module react-native-worklets/.worklets/<id>.js`,
-or *"file is not watched / may have been deleted"*.
+> **Corrected 2026-09-27.** This section previously called the failure a stale
+> Metro cache fixed by re-running. That diagnosis was wrong in a way that only
+> showed up on EAS, where there is no second pass. Kept visible because the wrong
+> version cost an iOS build.
 
-**Cause.** Generated worklet filenames are content hashes. Editing a worklet
-changes them, and Metro's cache still points at the old ones.
+**Symptom.** One of three, depending on how far the build gets:
+
+| Symptom | Cause |
+|---|---|
+| `Unable to resolve module react-native-worklets/.worklets/<id>.js` | No `metro.config.js` — the resolver does not know the path (§4). |
+| `[Worklets] Babel plugin exception: ENOENT … .worklets/<id>.js` | The `.worklets` directory does not exist. The plugin writes into it but never creates it. |
+| `Failed to get the SHA-1 for: … .worklets/<id>.js` | Directory exists; the file was written *after* Metro crawled the filesystem. |
+
+**Cause.** The files are **real files on disk**, not virtual — the plugin calls
+`writeFileSync` into `.worklets/` during transform (`plugin/index.js`). Metro
+builds its file map by crawling the filesystem *before* transform runs, so a file
+created during transform has no file-map entry and `getSha1` throws.
+
+Re-running works only because pass 1 leaves the files on disk for pass 2's crawl
+to find. Nothing is being invalidated — the local machine simply accumulates the
+files over time and stops seeing the bug. A clean checkout has an empty directory
+and exactly one pass, which is why this surfaced first as an EAS iOS build
+failure (`/Users/expo/workingdir/build/…`) long after it was "fixed" locally.
+
+**Blast radius.** `bundleMode` is global, so this affects every worklet in the
+app — 58 files across 15 demo areas — not only the WebGPU scenes. The first
+module to fail is whichever Metro reaches first, which is why the reported error
+named `src/app/text-flyin/index.tsx`. Deleting that demo moves the error; it does
+not fix it.
+
+**Measured 2026-09-27.** For a given platform, dev and production transforms
+produce an **identical filename set** (1347 files for iOS); only file *contents*
+differ. So a prewarm in either mode satisfies the real build, which rewrites
+contents for its own mode. Verified: prewarm in dev → production export succeeds,
+its `.worklets` output is byte-identical to a production baseline, and the `.hbc`
+bundle hash is unchanged.
+
+Platform *does* change the set — `--platform all` yields 2298 files, a strict
+superset of the iOS 1347. `prewarm-worklets` therefore uses `--platform all` so
+one hook covers both iOS and Android builds.
 
 ---
 
@@ -243,7 +278,7 @@ changes them, and Metro's cache still points at the old ones.
 | **5.5** Stale resize state | In `ui-worklet` mode, resize **rebuilds** the scene rather than mutating in place, re-serializing the closure with fresh resources. Resize is rare (nav bar settling, rotation), and `skDataCache` means assets are re-uploaded but not re-fetched. `js-raf` keeps in-place resize. |
 | **5.6** Duplicated layouts | Bind the imported layout to a **local const inside the scene factory** and use that in the render closure, so it is *captured* (and routed through TypeGPU's identity cache) rather than re-imported. See the footnote. |
 | **5.7** Host singletons | Gate both to `js-raf`. In `ui-worklet` the overlay's `ui` row already measures this loop, so the `gpu` row is dropped as redundant rather than reported wrong. |
-| **5.8** Metro cache | Re-run the bundle; the second pass always succeeds. Use `--clear` after touching `babel.config.js` or `metro.config.js`. |
+| **5.8** Missing generated files | Run `bun run prewarm-worklets` — it creates the directory and does the throwaway pass that puts the files on disk. On EAS this runs automatically via the `eas-build-post-install` script, which is **required** for any build using `bundleMode`. Still use `--clear` after touching `babel.config.js` or `metro.config.js`. |
 
 **Diagnostic tip.** Once §5.4 is fixed, TypeGPU's serializer throws *descriptive*
 errors (`register-serializables.js`) — it names the unsupported resource type, or

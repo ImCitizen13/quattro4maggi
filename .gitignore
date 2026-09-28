@@ -54,3 +54,5 @@ DEBUG/
 src/components/premuim/shaders.ts
 
 .DS_Store
+
+*.local

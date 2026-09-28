@@ -1,0 +1,34 @@
+name: Android → Firebase App Distribution
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_android:
+    name: Build Android (preview)
+    type: build
+    params:
+      platform: android
+      profile: preview
+
+  distribute_firebase:
+    name: Distribute to Firebase
+    needs: [build_android]
+    environment: preview
+    steps:
+      - uses: eas/download_build
+        id: download_build
+        with:
+          build_id: ${{ needs.build_android.outputs.build_id }}
+          extensions: [apk]
+      - name: Upload to Firebase App Distribution
+        # Requires EAS env vars (preview environment):
+        #   GOOGLE_APPLICATION_CREDENTIALS — file-type secret, service account JSON
+        #   FIREBASE_ANDROID_APP_ID        — e.g. 1:1234567890:android:abc123
+        #   FIREBASE_TESTER_GROUPS         — comma-separated group aliases
+        run: |
+          npx -y firebase-tools@latest appdistribution:distribute \
+            "${{ steps.download_build.outputs.artifact_path }}" \
+            --app "$FIREBASE_ANDROID_APP_ID" \
+            --groups "$FIREBASE_TESTER_GROUPS" \
+            --release-notes "EAS build ${{ needs.build_android.outputs.build_id }}"
