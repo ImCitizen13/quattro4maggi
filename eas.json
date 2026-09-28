@@ -36,6 +36,18 @@
         "APP_ENV": "production"
       }
     },
+    "android_firebase_preview": {
+      "distribution": "internal",
+      "environment": "production",
+      "autoIncrement": true,
+      "channel": "production",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "production"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "channel": "production",

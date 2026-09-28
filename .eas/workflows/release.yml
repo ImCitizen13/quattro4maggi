@@ -1,9 +1,30 @@
-name: Android → Firebase App Distribution
+name: Release → TestFlight (iOS) + Firebase (Android)
 
 on:
   workflow_dispatch: {}
 
 jobs:
+  # ==========================================================================
+  # iOS → TestFlight
+  # ==========================================================================
+  build_ios:
+    name: Build iOS (testflight_1.0.0)
+    type: build
+    params:
+      platform: ios
+      profile: testflight_1.0.0
+
+  testflight_ios:
+    name: Submit to TestFlight
+    needs: [build_ios]
+    type: testflight
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: testflight_1.0.0
+
+  # ==========================================================================
+  # Android → Firebase App Distribution
+  # ==========================================================================
   build_android:
     name: Build Android (android_firebase_preview)
     type: build
@@ -11,7 +32,7 @@ jobs:
       platform: android
       profile: android_firebase_preview
 
-  distribute_firebase:
+  distribute_android:
     name: Distribute to Firebase
     needs: [build_android]
     environment: production
