@@ -173,7 +173,7 @@ export const SPRING_BUBBLE_RECENTER = {
  * overshoot, so the card and the bubble settle into place together.
  */
 export const SPRING_BUBBLE_SELECT = {
-  duration: 1100,
+  duration: 1690, // 0.65× the original 1100 ms speed
   dampingRatio: 0.82,
   overshootClamping: false,
   energyThreshold: 6e-9,

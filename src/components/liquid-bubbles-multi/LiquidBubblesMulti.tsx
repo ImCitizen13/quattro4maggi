@@ -126,7 +126,6 @@ import {
   SELECT_CARD_WIDTH,
   SELECT_DESCRIPTIONS,
   SELECT_POINT_SIZE,
-  SELECT_TITLE_SIZE,
   INTRO_LABEL_SIZE,
   INTRO_LABEL_WIDTH_MUL,
   INTRO_RADIUS_MUL,
@@ -482,40 +481,39 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     return { paragraph: p, width: labelWidth, height: p.getHeight() };
   }, [fontMgr]);
 
-  // One card paragraph per intro bubble: its title, then its points. Laid
-  // out once at the card's inner width; the card only moves it.
+  // One card paragraph per intro bubble: its points only — the chosen
+  // bubble above the card, grown to SELECT_SCALE, is the title. Laid out
+  // once at the card's inner width; the card only moves it. The card's
+  // height is the paragraph's measured height + the padding, top and bottom.
   const cardParagraphs = useMemo(() => {
     if (!fontMgr) {
       return [];
     }
     const innerW = width * SELECT_CARD_WIDTH - 2 * SELECT_CARD_PAD;
-    return INTRO_LABELS.slice(0, INTRO_COUNT).map((title, i) => {
-      const b = Skia.ParagraphBuilder.Make(
+    return INTRO_LABELS.slice(0, INTRO_COUNT).map((_, i) => {
+      const points = (SELECT_DESCRIPTIONS[i] ?? []).map((pt) => `•  ${pt}`);
+      const p = Skia.ParagraphBuilder.Make(
         { textAlign: TextAlign.Left },
         fontMgr,
       )
         .pushStyle({
           fontFamilies: ["PTSerif"],
-          fontStyle: { weight: 700 },
-          fontSize: SELECT_TITLE_SIZE,
-          color: Skia.Color("#0f1725"),
-        })
-        .addText(`${title}\n\n`)
-        .pop()
-        .pushStyle({
-          fontFamilies: ["PTSerif"],
           fontSize: SELECT_POINT_SIZE,
           heightMultiplier: 1.6,
           color: Skia.Color("#1f2a3a"),
-        });
-      for (const point of SELECT_DESCRIPTIONS[i] ?? []) {
-        b.addText(`•  ${point}\n`);
-      }
-      const p = b.pop().build();
+        })
+        // Joined, not "\n"-terminated: a trailing newline adds an empty line.
+        .addText(points.join("\n"))
+        .pop()
+        .build();
       p.layout(innerW);
       return p;
     });
   }, [fontMgr, width]);
+  const cardHeights = useMemo(
+    () => cardParagraphs.map((p) => p.getHeight() + 2 * SELECT_CARD_PAD),
+    [cardParagraphs],
+  );
 
   // Paragraph drawn centered on (0, 0); the group moves it to the screen
   // center. The underline sits under line 2 (the name), from its measured
@@ -574,6 +572,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     bubbles: intro.bubbles,
     width,
     height,
+    cardHeights,
   });
 
   // Rest state once the font is in, so the greeting is never drawn unstyled:
@@ -922,7 +921,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       {selection.activeIndex !== null && (
         <SelectCard
           width={width}
-          height={height}
+          cardHeight={cardHeights[selection.activeIndex] ?? 0}
           top={selection.cardTop}
           paragraph={cardParagraphs[selection.activeIndex] ?? null}
           pixelDensity={PD}

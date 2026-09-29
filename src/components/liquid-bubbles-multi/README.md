@@ -16,7 +16,7 @@ single bubble's state.
 - `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
 - `LabeledBubble.tsx`: one bubble as one component — its label, then its glass pass
 - `BubbleFilmOverlay.tsx`: the optional soap film over a labeled bubble's glass (liquid-bubble-live's overlay pass, per buffer slot)
-- `SelectCard.tsx`: the frosted squircle card that slides up under a pressed bubble, with its title and points
+- `SelectCard.tsx`: the frosted squircle card that slides up under a pressed bubble, with its points
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
 - `bubbleClipPad.ts`: the backdrop clip's padding math, shared by `BaselineBubble` and the birth-optics crossover
 - `BubbleLabel.tsx`: one intro bubble's text + icon, riding along inside it
@@ -30,7 +30,7 @@ single bubble's state.
 - `hooks/useIntroTimeline.ts`: rest state ↔ intro, as one scrubbable `progress` value — the trigger bubble, and the swell/collapse → four-bubbles run it kicks off
 - `hooks/useSceneRipple.ts`: one water ripple over the whole scene, fired off `progress` just before the bubbles bloom
 - `hooks/useBirthOptics.ts`: an intro bubble's exaggerated "birth" glass, crossing over to the live optics as it inflates
-- `hooks/useBubbleSelect.ts`: press an intro bubble — it rises to the top centre, the others scroll off, the card slides up (one spring)
+- `hooks/useBubbleSelect.ts`: press an intro bubble — it and its card centre on screen, the others scroll off, the card slides up (one spring)
 - `animation_timeline.md`: the intro's stages, curves, constants and the reasoning — the reference for changing how it feels
 
 Tests: `bun test src/components/liquid-bubbles-multi`
@@ -419,9 +419,9 @@ bubble's OWN inflate curve triggers the crossover at `BIRTH_SWAP_START`.
 
 ### hooks/useBubbleSelect.ts
 
-Press an intro bubble once the intro has finished: it rises to the top
-centre, the other three scroll up off the screen, and `SelectCard` slides up
-from below to stop under it. Any tap while one is open (or Reset) runs it back.
+Press an intro bubble once the intro has finished: it moves to the centre,
+the other three scroll up off the screen, and `SelectCard` slides up from
+below to stop under it — bubble and card centred on screen together. Any tap while one is open (or Reset) runs it back.
 
 - **One `withSpring` value, `select` 0 → 1** (`SPRING_BUBBLE_SELECT`), drives
   all of it — bubble, scroll and card move as one gesture and settle
@@ -429,7 +429,13 @@ from below to stop under it. Any tap while one is open (or Reset) runs it back.
   needs to scrub it, so the project's `withSpring` rule applies again.
 - **It wraps the intro's bubbles, it doesn't replace them.** Each wrapped
   `x`/`y` reads the intro's own value and adds the selection on top:
-  - the chosen one lerps to `(width / 2, SELECT_TOP_GAP + r)` by `select`
+  - the chosen one lerps to `(width / 2, restY)` by `select`, and grows to
+    `SELECT_SCALE` (1.2) × its radius on the same spring — its label scales
+    with it (`r / restRadius`), so the bubble IS the card's title
+  - **bubble + gap + card are centred as one block.** The block is
+    `2r + SELECT_CARD_GAP + cardH` tall and the bubble's centre sits `r`
+    below its top, so `restY = (height − gap − cardH) / 2` — the grown radius
+    cancels out. `cardH` is per bubble (`cardHeights`, from the screen)
   - the others move up by `height × SELECT_SCROLL_MUL[i] × select` — all ≥ 1,
     so every bubble clears the top wherever it started, and slightly
     different per bubble, so they leave as a parallax scroll, not one block
@@ -439,7 +445,7 @@ from below to stop under it. Any tap while one is open (or Reset) runs it back.
   glass wobbles off the motion with no extra shape work, the same trick the
   intro's travel curve uses. The labels read the same wrapped values.
 - **`cardTop`** lerps from the canvas bottom (off-screen) to
-  `SELECT_TOP_GAP + 2r + SELECT_CARD_GAP` — just under the chosen bubble's
+  `restY + r + SELECT_CARD_GAP` (grown `r`) — just under the chosen bubble's
   resting spot — on the same `select`.
 - **Close order:** `close()` springs `select` to 0 and only clears
   `selected` (and React's `activeIndex`, which unmounts the card) in the
@@ -451,9 +457,16 @@ from below to stop under it. Any tap while one is open (or Reset) runs it back.
 
 ### SelectCard.tsx
 
-The card: a squircle `SELECT_CARD_WIDTH × SELECT_CARD_HEIGHT` of the canvas
-(0.8 × 0.65), frosted — a `BackdropBlur` clipped to the squircle, then a white
-wash and a rim — with the bubble's title and `SELECT_DESCRIPTIONS` points on it.
+The card: a squircle `SELECT_CARD_WIDTH` (0.8) of the canvas wide, frosted —
+a `BackdropBlur` clipped to the squircle, then a white wash and a rim — with
+the bubble's `SELECT_DESCRIPTIONS` points on it. No title: the grown bubble
+just above it already says it.
+
+- **Height follows the content:** the points paragraph's measured height +
+  `SELECT_CARD_PAD` top and bottom, computed once per bubble in the screen
+  (`cardHeights`) and passed as `cardHeight`. The points are joined with
+  `"\n"`, not each terminated by one — a trailing newline would add an empty
+  line and pad the bottom.
 
 - **Device-pixel space, like the glass.** It sits directly under `DPR_DOWN`,
   so the blur snapshots at full resolution. The path, the blur sigma and the

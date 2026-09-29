@@ -360,11 +360,11 @@ export const MULTI_OPTICS: Partial<BubbleOpticsValues> = {
 export const BUBBLE_SOAP_FILM = true;
 
 // ============================================================================
-// Select: press an intro bubble → it rises to the top, the card slides up
+// Select: press an intro bubble → it and its card centre on screen
 // ============================================================================
 
-/** Gap between the chosen bubble's top rim and the canvas top, pt. */
-export const SELECT_TOP_GAP = 24;
+/** The chosen bubble grows to this × its size (its label scales with it). */
+export const SELECT_SCALE = 1.2;
 
 /** Gap between the chosen bubble's bottom rim and the card's top edge, pt. */
 export const SELECT_CARD_GAP = 20;
@@ -376,22 +376,23 @@ export const SELECT_CARD_GAP = 20;
  */
 export const SELECT_SCROLL_MUL: readonly number[] = [1.05, 1.18, 1.1, 1.26];
 
-/** Card size, × screen width / height. */
+/**
+ * Card width, × screen width. Its height follows the content: the points'
+ * measured height + `SELECT_CARD_PAD` above and below.
+ */
 export const SELECT_CARD_WIDTH = 0.8;
-export const SELECT_CARD_HEIGHT = 0.65;
 
 /** Card corner size, pt, and superellipse exponent (higher = squarer). */
 export const SELECT_CARD_CORNER = 44;
 export const SELECT_CARD_CORNER_EXP = 4;
 
 /** Backdrop blur sigma, pt, and the white wash drawn over it. */
-export const SELECT_CARD_BLUR = 18;
-export const SELECT_CARD_FILL = "rgba(255, 255, 255, 0.55)";
-export const SELECT_CARD_RIM = "rgba(255, 255, 255, 0.8)";
+export const SELECT_CARD_BLUR = 60;
+export const SELECT_CARD_FILL = "rgba(255, 255, 255, 0.35)";
+export const SELECT_CARD_RIM = "rgba(255, 255, 255, 0.7)";
 
-/** Card text inset, pt, and type sizes. */
+/** Card text inset, pt, and the points' type size. */
 export const SELECT_CARD_PAD = 24;
-export const SELECT_TITLE_SIZE = 28;
 export const SELECT_POINT_SIZE = 17;
 
 /** Placeholder points for each intro bubble's card, in `INTRO_LABELS` order. */

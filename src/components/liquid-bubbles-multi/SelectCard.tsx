@@ -1,6 +1,6 @@
 /**
  * SelectCard — the frosted squircle that slides up under a chosen bubble,
- * with that bubble's title and points on it.
+ * with that bubble's points on it (the grown bubble above is the title).
  * Design notes: README.md → "SelectCard.tsx".
  *
  * FLOW:
@@ -36,7 +36,6 @@ import {
   SELECT_CARD_CORNER,
   SELECT_CARD_CORNER_EXP,
   SELECT_CARD_FILL,
-  SELECT_CARD_HEIGHT,
   SELECT_CARD_PAD,
   SELECT_CARD_RIM,
   SELECT_CARD_WIDTH,
@@ -47,12 +46,13 @@ import {
 // ============================================================================
 
 export type SelectCardProps = {
-  /** Canvas size, pt — the card is a fraction of it. */
+  /** Canvas width, pt — the card is `SELECT_CARD_WIDTH` of it. */
   width: number;
-  height: number;
+  /** Card height, pt: the paragraph's height + `SELECT_CARD_PAD` × 2. */
+  cardHeight: number;
   /** The card's top edge, pt. */
   top: DerivedValue<number>;
-  /** Title + points, laid out by the caller at the card's inner width. */
+  /** The points, laid out by the caller at the card's inner width. */
   paragraph: SkParagraph | null;
   /** Local units per point (the screen's `PD`). @default 1 */
   pixelDensity?: number;
@@ -110,13 +110,13 @@ export function makeSquirclePath(
 
 export function SelectCard({
   width,
-  height,
+  cardHeight,
   top,
   paragraph,
   pixelDensity = 1,
 }: SelectCardProps) {
   const cardW = width * SELECT_CARD_WIDTH;
-  const cardH = height * SELECT_CARD_HEIGHT;
+  const cardH = cardHeight;
   const left = (width - cardW) / 2;
   const pd = pixelDensity;
 

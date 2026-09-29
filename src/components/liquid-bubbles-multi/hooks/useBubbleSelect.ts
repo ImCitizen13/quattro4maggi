@@ -1,14 +1,19 @@
 /**
- * useBubbleSelect — press an intro bubble: it rises to the top centre, the
+ * useBubbleSelect — press an intro bubble: it moves to the centre, the
  * others scroll off the top, and the detail card slides up under it.
  * Design notes: README.md → "hooks/useBubbleSelect.ts".
  *
  * FLOW:
  *   open(i)  — selected = i, `select` springs 0 → 1, React learns `i`
+ *   bubble (grown), SELECT_CARD_GAP and card are ONE block, centred on the
+ *   canvas: block height = 2r + gap + cardH, so
+ *     bubble centre = (height − gap − cardH) / 2   (independent of r)
+ *     card top      = bubble centre + r + gap
  *   every wrapped bubble reads its intro position, then:
- *     the chosen one  → lerp to (width / 2, SELECT_TOP_GAP + r) by `select`
+ *     the chosen one  → lerp to (width / 2, bubble centre) by `select`,
+ *                       growing to SELECT_SCALE × its radius
  *     the others      → up by height × SELECT_SCROLL_MUL[i] × `select`
- *   cardTop → lerp from the canvas bottom to just under the chosen bubble
+ *   cardTop → lerp from the canvas bottom to its spot under the bubble
  *   close()  — `select` springs back to 0; only once it lands does
  *     `selected` clear (so the bubbles lerp home along the same path) and
  *     React unmount the card
@@ -37,8 +42,8 @@ import { SPRING_BUBBLE_SELECT } from "@/lib/animations/constants";
 
 import {
   SELECT_CARD_GAP,
+  SELECT_SCALE,
   SELECT_SCROLL_MUL,
-  SELECT_TOP_GAP,
 } from "../multiBubbleConfig";
 import type { IntroBubble } from "./useIntroTimeline";
 
@@ -52,6 +57,11 @@ export type UseBubbleSelectParams = {
   /** Canvas size, pt. */
   width: number;
   height: number;
+  /**
+   * Each bubble's card height, pt (content + padding), in slot order. Empty
+   * until the font loads — nothing can be pressed before then anyway.
+   */
+  cardHeights: readonly number[];
 };
 
 export type UseBubbleSelectReturn = {
@@ -79,6 +89,7 @@ export function useBubbleSelect({
   bubbles,
   width,
   height,
+  cardHeights,
 }: UseBubbleSelectParams): UseBubbleSelectReturn {
   const select = useSharedValue(0);
   const selected = useSharedValue(-1);
@@ -86,12 +97,29 @@ export function useBubbleSelect({
 
   const centerX = width / 2;
 
+  // Where the chosen bubble's centre rests: bubble + gap + card centred as
+  // one block. The grown radius cancels out: the block is 2r + gap + cardH
+  // tall and the centre sits r below its top, so r never appears.
+  const restY = (i: number) => {
+    "worklet";
+    return (height - SELECT_CARD_GAP - (cardHeights[i] ?? 0)) / 2;
+  };
+
   const wrapped: IntroBubble[] = [];
   for (let i = 0; i < bubbles.length; i++) {
     const b = bubbles[i];
     const scroll = height * SELECT_SCROLL_MUL[i % SELECT_SCROLL_MUL.length];
 
     /* eslint-disable react-hooks/rules-of-hooks */
+    // The chosen one grows to SELECT_SCALE × on the same spring; the label
+    // scales by r / restRadius, so it grows with it.
+    const r = useDerivedValue(() => {
+      const base = b.r.value;
+      if (selected.value !== i) {
+        return base;
+      }
+      return base * (1 + (SELECT_SCALE - 1) * select.value);
+    });
     const x = useDerivedValue(() => {
       const base = b.x.value;
       if (selected.value !== i) {
@@ -108,20 +136,22 @@ export function useBubbleSelect({
       if (sel !== i) {
         return base - scroll * select.value;
       }
-      const targetY = SELECT_TOP_GAP + b.r.value;
-      return base + (targetY - base) * select.value;
+      return base + (restY(i) - base) * select.value;
     });
     /* eslint-enable react-hooks/rules-of-hooks */
 
-    wrapped.push({ ...b, x, y });
+    wrapped.push({ ...b, x, y, r });
   }
 
-  // Resting top edge: just under the chosen bubble at its final spot. Starts
-  // at the canvas bottom, so the card rises in from off-screen.
+  // Resting top edge: the gap under the chosen bubble's rim, using its
+  // GROWN radius. Starts at the canvas bottom, so the card rises in.
+  const grownR = wrapped.map((b) => b.r);
   const cardTop = useDerivedValue(() => {
     const sel = selected.value;
-    const r = sel >= 0 ? bubbles[sel].r.value : 0;
-    const restTop = SELECT_TOP_GAP + 2 * r + SELECT_CARD_GAP;
+    if (sel < 0) {
+      return height;
+    }
+    const restTop = restY(sel) + grownR[sel].value + SELECT_CARD_GAP;
     return height + (restTop - height) * select.value;
   });
 
