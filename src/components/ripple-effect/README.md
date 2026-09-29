@@ -104,7 +104,14 @@ The `BouncyRippleShader` uses these internal parameters:
 ```
 src/components/ripple-effect/
 ├── RippleEffect.tsx   # Main component
-├── shaders.ts         # Skia shader definitions
+├── shaders.ts         # BouncyRippleShader (Basic mode)
 └── README.md          # This file
+```
+
+The folder is not self-contained — the component also pulls in:
+
+```
+src/components/premium/shaders.ts   # BouncyRipplePrismShader (Advanced mode)
+src/components/ui/LabeledSwitch.tsx # the Basic/Advanced toggle
 ```
 
