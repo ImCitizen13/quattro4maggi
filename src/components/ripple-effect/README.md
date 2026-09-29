@@ -26,6 +26,32 @@ preset fires without its sound.
 4. **Refraction applied** -> UV coordinates distorted based on wave amplitude
 5. **Decay** -> Both waves fade exponentially for natural damping
 
+Both shaders share that pipeline. The tap writes `u_center` and `u_tapTime`;
+everything after is a pure function of `u_time`, so nothing re-renders per
+frame.
+
+---
+
+## Two modes
+
+A `LabeledSwitch` at the top of the component picks the shader. It is
+internal state, not a prop — there is no way to preselect a mode from
+outside.
+
+| Mode | Shader | Source |
+|------|--------|--------|
+| Basic | `BouncyRippleShader` | `./shaders.ts` |
+| Advanced | `BouncyRipplePrismShader` | `../premium/shaders.ts` |
+
+**Advanced** adds prismatic dispersion on top of the same wave: it sharpens
+the crest (`pow(crest, 1.8)`), derives a crest-energy term that falls off
+with radius, then samples the image three times — R, G and B each at a
+slightly different refraction offset — and adds a thin specular highlight on
+the crest. Basic samples once and only refracts.
+
+The switch is rendered with `earlyBadge="right"`, so Advanced carries the
+early-access badge.
+
 ---
 
 ## Usage
@@ -82,8 +108,3 @@ src/components/ripple-effect/
 └── README.md          # This file
 ```
 
----
-
-## Coming Soon
-
-**Prism Effect Shader** - A prismatic light dispersion effect with RGB channel separation and touch-reactive positioning. Available for early access members.
