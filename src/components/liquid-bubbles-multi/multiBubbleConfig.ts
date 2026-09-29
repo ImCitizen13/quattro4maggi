@@ -358,3 +358,66 @@ export const MULTI_OPTICS: Partial<BubbleOpticsValues> = {
  * built-in cosine film. Off = the built-in film, and no overlay passes.
  */
 export const BUBBLE_SOAP_FILM = true;
+
+// ============================================================================
+// Select: press an intro bubble → it rises to the top, the card slides up
+// ============================================================================
+
+/** Gap between the chosen bubble's top rim and the canvas top, pt. */
+export const SELECT_TOP_GAP = 24;
+
+/** Gap between the chosen bubble's bottom rim and the card's top edge, pt. */
+export const SELECT_CARD_GAP = 20;
+
+/**
+ * How far each of the OTHER bubbles scrolls up, × screen height. Slightly
+ * different per bubble so they leave as a parallax scroll, not one block.
+ * All ≥ 1, so every one clears the top whatever its start height.
+ */
+export const SELECT_SCROLL_MUL: readonly number[] = [1.05, 1.18, 1.1, 1.26];
+
+/** Card size, × screen width / height. */
+export const SELECT_CARD_WIDTH = 0.8;
+export const SELECT_CARD_HEIGHT = 0.65;
+
+/** Card corner size, pt, and superellipse exponent (higher = squarer). */
+export const SELECT_CARD_CORNER = 44;
+export const SELECT_CARD_CORNER_EXP = 4;
+
+/** Backdrop blur sigma, pt, and the white wash drawn over it. */
+export const SELECT_CARD_BLUR = 18;
+export const SELECT_CARD_FILL = "rgba(255, 255, 255, 0.55)";
+export const SELECT_CARD_RIM = "rgba(255, 255, 255, 0.8)";
+
+/** Card text inset, pt, and type sizes. */
+export const SELECT_CARD_PAD = 24;
+export const SELECT_TITLE_SIZE = 28;
+export const SELECT_POINT_SIZE = 17;
+
+/** Placeholder points for each intro bubble's card, in `INTRO_LABELS` order. */
+export const SELECT_DESCRIPTIONS: readonly (readonly string[])[] = [
+  [
+    "Episode 42 — Designing for motion",
+    "38 min left, resume at 12:05",
+    "New episodes every Friday",
+    "3 unplayed in your queue",
+  ],
+  [
+    "Lesson 7 — Ordering at a café",
+    "12-day streak, keep it going",
+    "20 flashcards due for review",
+    "Today's verb: ter (to have)",
+  ],
+  [
+    "Weekly sync with the design team",
+    "7:00 PM, video link in the invite",
+    "Agenda: Q4 roadmap and demos",
+    "Bring the prototype notes",
+  ],
+  [
+    "Draft: morning light series",
+    "Best time to post: 9:00 AM",
+    "3 comments waiting for a reply",
+    "Tags: #daily #film #light",
+  ],
+];

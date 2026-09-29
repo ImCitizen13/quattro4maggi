@@ -16,6 +16,7 @@ single bubble's state.
 - `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
 - `LabeledBubble.tsx`: one bubble as one component — its label, then its glass pass
 - `BubbleFilmOverlay.tsx`: the optional soap film over a labeled bubble's glass (liquid-bubble-live's overlay pass, per buffer slot)
+- `SelectCard.tsx`: the frosted squircle card that slides up under a pressed bubble, with its title and points
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
 - `bubbleClipPad.ts`: the backdrop clip's padding math, shared by `BaselineBubble` and the birth-optics crossover
 - `BubbleLabel.tsx`: one intro bubble's text + icon, riding along inside it
@@ -29,6 +30,7 @@ single bubble's state.
 - `hooks/useIntroTimeline.ts`: rest state ↔ intro, as one scrubbable `progress` value — the trigger bubble, and the swell/collapse → four-bubbles run it kicks off
 - `hooks/useSceneRipple.ts`: one water ripple over the whole scene, fired off `progress` just before the bubbles bloom
 - `hooks/useBirthOptics.ts`: an intro bubble's exaggerated "birth" glass, crossing over to the live optics as it inflates
+- `hooks/useBubbleSelect.ts`: press an intro bubble — it rises to the top centre, the others scroll off, the card slides up (one spring)
 - `animation_timeline.md`: the intro's stages, curves, constants and the reasoning — the reference for changing how it feels
 
 Tests: `bun test src/components/liquid-bubbles-multi`
@@ -44,7 +46,8 @@ flowchart TD
     SCENE["MultiBubbleScene"]
     CLOCK["useClock<br/>seconds, for the resting drift only"]
     PANELS["Text / Bubble panels<br/>sliders write SharedValues"]
-    GESTURE["GestureDetector + Gesture.Tap<br/>hit-test the trigger, worklet"]
+    GESTURE["GestureDetector + Gesture.Tap<br/>hit-test the trigger, then the 4 bubbles, worklet"]
+    SELECT["useBubbleSelect<br/>select: withSpring 0..1<br/>wraps the 4 bubbles' x/y + cardTop"]
     SCRUB["IntroScrubBar<br/>Gesture.Pan writes progress directly"]
     PROGRESS["progress: SharedValue 0..1<br/>the ONE master value"]
     INTRO["useIntroTimeline<br/>every stage = interpolate(progress) + an easing shape<br/>textOpacity + 4 PinnedBubble + trigger"]
@@ -53,8 +56,10 @@ flowchart TD
     OPTICS["useBubbleOptics<br/>shared look uniforms"]
     PASS["LabeledBubble x 5<br/>label + one backdrop pass each"]
 
-    LBM --> SCENE --> INTRO --> PHYS --> BUF --> PASS
+    LBM --> SCENE --> INTRO --> SELECT --> PHYS --> BUF --> PASS
     SCENE --> GESTURE
+    GESTURE -- "open(i) / close()" --> SELECT
+    SELECT -- "cardTop" --> CARD["SelectCard<br/>BackdropBlur squircle + text"]
     SCENE --> SCRUB
     GESTURE -- "scheduleOnRN(intro.play)" --> PROGRESS
     SCRUB -- "drag: cancelAnimation + write<br/>Play/Pause: intro.play() / cancelAnimation" --> PROGRESS
@@ -91,7 +96,8 @@ flowchart TD
         end
         PASSES["LabeledBubble x 4<br/>each: label in its own pd group,<br/>then its pass (point uniforms x pd)"]
         TRIGPASS["LabeledBubble<br/>trigger: Go, no icon, on top"]
-        PTS --> PASSES --> TRIGPASS
+        CARDPASS["SelectCard - only while a bubble is chosen<br/>BackdropBlur + white wash + text, last"]
+        PTS --> PASSES --> TRIGPASS --> CARDPASS
         end
     end
     CANVAS --> OVERLAY["Outside the canvas: FPS, tuning panels, Reset"]
@@ -410,6 +416,58 @@ bubble's OWN inflate curve triggers the crossover at `BIRTH_SWAP_START`.
   caller's own object, `clipPad` is `undefined` so `BaselineBubble` falls back
   to computing its own live pad. Every `useDerivedValue` above still runs
   unconditionally — only the returned pair branches.
+
+### hooks/useBubbleSelect.ts
+
+Press an intro bubble once the intro has finished: it rises to the top
+centre, the other three scroll up off the screen, and `SelectCard` slides up
+from below to stop under it. Any tap while one is open (or Reset) runs it back.
+
+- **One `withSpring` value, `select` 0 → 1** (`SPRING_BUBBLE_SELECT`), drives
+  all of it — bubble, scroll and card move as one gesture and settle
+  together. It is a spring, not a `progress` curve like the intro: nothing
+  needs to scrub it, so the project's `withSpring` rule applies again.
+- **It wraps the intro's bubbles, it doesn't replace them.** Each wrapped
+  `x`/`y` reads the intro's own value and adds the selection on top:
+  - the chosen one lerps to `(width / 2, SELECT_TOP_GAP + r)` by `select`
+  - the others move up by `height × SELECT_SCROLL_MUL[i] × select` — all ≥ 1,
+    so every bubble clears the top wherever it started, and slightly
+    different per bubble, so they leave as a parallax scroll, not one block
+  - with nothing chosen (`selected = -1`) it's an exact pass-through, so the
+    intro, the scrub bar and the resting drift are untouched
+- **The wrapped bubbles go to the physics**, like any `PinnedBubble` — the
+  glass wobbles off the motion with no extra shape work, the same trick the
+  intro's travel curve uses. The labels read the same wrapped values.
+- **`cardTop`** lerps from the canvas bottom (off-screen) to
+  `SELECT_TOP_GAP + 2r + SELECT_CARD_GAP` — just under the chosen bubble's
+  resting spot — on the same `select`.
+- **Close order:** `close()` springs `select` to 0 and only clears
+  `selected` (and React's `activeIndex`, which unmounts the card) in the
+  spring's completion callback — the bubbles have to lerp home along the same
+  path first. A re-open mid-flight cancels that spring (`finished = false`),
+  so the callback never clears a selection made since.
+- **Hit test** is in the screen's `Gesture.Tap` worklet: open → any tap
+  closes; `progress ≥ 1` → the four bubbles' circles; otherwise the trigger.
+
+### SelectCard.tsx
+
+The card: a squircle `SELECT_CARD_WIDTH × SELECT_CARD_HEIGHT` of the canvas
+(0.8 × 0.65), frosted — a `BackdropBlur` clipped to the squircle, then a white
+wash and a rim — with the bubble's title and `SELECT_DESCRIPTIONS` points on it.
+
+- **Device-pixel space, like the glass.** It sits directly under `DPR_DOWN`,
+  so the blur snapshots at full resolution. The path, the blur sigma and the
+  translate are × `pd`; the paragraph goes back to points in its own `pd`
+  group. Only the translate animates — the path is built once per size.
+- **Squircle** = straight edges joined by quarter superellipses
+  (`SELECT_CARD_CORNER` radius, `SELECT_CARD_CORNER_EXP` exponent), sampled
+  32 points per corner — not an RRect's circular arcs.
+- **Drawn last**, after the trigger, so its blur frosts the bubbles scrolling
+  past behind it on the way up.
+- **Mounted only while a bubble is chosen.** A `BackdropBlur` is a pass break
+  (a full backdrop snapshot) even when the card is off-screen.
+- The paragraphs (one per intro bubble) are laid out once in the screen at
+  the card's inner width; picking a bubble only swaps which one is drawn.
 
 ### hooks/multiBubbleMath.ts
 

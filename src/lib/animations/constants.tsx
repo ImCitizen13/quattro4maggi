@@ -167,6 +167,20 @@ export const SPRING_BUBBLE_RECENTER = {
   reduceMotion: ReduceMotion.System,
 };
 
+/**
+ * Liquid Bubbles Multi: a pressed bubble rising to the top centre while the
+ * others scroll off and the detail card slides up under it. One soft
+ * overshoot, so the card and the bubble settle into place together.
+ */
+export const SPRING_BUBBLE_SELECT = {
+  duration: 1100,
+  dampingRatio: 0.82,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,

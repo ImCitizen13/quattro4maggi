@@ -76,7 +76,7 @@ import {
   useDerivedValue,
   useSharedValue,
 } from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { backgroundEffect } from "@/components/liquid-bubble-live/backgroundShaders";
@@ -108,10 +108,12 @@ import { BouncyRipplePrismShader } from "@/components/premium/shaders";
 
 import { BaselineBubble } from "./BaselineBubble";
 import type { BubbleFilm } from "./BubbleFilmOverlay";
+import { useBubbleSelect } from "./hooks/useBubbleSelect";
 import { useIntroTimeline } from "./hooks/useIntroTimeline";
 import { useSceneRipple } from "./hooks/useSceneRipple";
 import { INTRO_ICONS } from "./IconPaths";
 import { LabeledBubble } from "./LabeledBubble";
+import { SelectCard } from "./SelectCard";
 import { IntroScrubBar } from "./IntroScrubBar";
 import { useMultiBubblePhysics } from "./hooks/useMultiBubblePhysics";
 import {
@@ -120,6 +122,11 @@ import {
   INTRO_BASE_RADIUS,
   INTRO_COUNT,
   INTRO_LABELS,
+  SELECT_CARD_PAD,
+  SELECT_CARD_WIDTH,
+  SELECT_DESCRIPTIONS,
+  SELECT_POINT_SIZE,
+  SELECT_TITLE_SIZE,
   INTRO_LABEL_SIZE,
   INTRO_LABEL_WIDTH_MUL,
   INTRO_RADIUS_MUL,
@@ -475,6 +482,41 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     return { paragraph: p, width: labelWidth, height: p.getHeight() };
   }, [fontMgr]);
 
+  // One card paragraph per intro bubble: its title, then its points. Laid
+  // out once at the card's inner width; the card only moves it.
+  const cardParagraphs = useMemo(() => {
+    if (!fontMgr) {
+      return [];
+    }
+    const innerW = width * SELECT_CARD_WIDTH - 2 * SELECT_CARD_PAD;
+    return INTRO_LABELS.slice(0, INTRO_COUNT).map((title, i) => {
+      const b = Skia.ParagraphBuilder.Make(
+        { textAlign: TextAlign.Left },
+        fontMgr,
+      )
+        .pushStyle({
+          fontFamilies: ["PTSerif"],
+          fontStyle: { weight: 700 },
+          fontSize: SELECT_TITLE_SIZE,
+          color: Skia.Color("#0f1725"),
+        })
+        .addText(`${title}\n\n`)
+        .pop()
+        .pushStyle({
+          fontFamilies: ["PTSerif"],
+          fontSize: SELECT_POINT_SIZE,
+          heightMultiplier: 1.6,
+          color: Skia.Color("#1f2a3a"),
+        });
+      for (const point of SELECT_DESCRIPTIONS[i] ?? []) {
+        b.addText(`•  ${point}\n`);
+      }
+      const p = b.pop().build();
+      p.layout(innerW);
+      return p;
+    });
+  }, [fontMgr, width]);
+
   // Paragraph drawn centered on (0, 0); the group moves it to the screen
   // center. The underline sits under line 2 (the name), from its measured
   // left edge and width, `gap` below its baseline.
@@ -525,6 +567,15 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     triggerRadius: TRIGGER_RADIUS,
   });
 
+  // Press an intro bubble: it rises to the top, the rest scroll off, the
+  // card slides up under it. Wraps the intro's bubbles — pass-through until
+  // one is pressed.
+  const selection = useBubbleSelect({
+    bubbles: intro.bubbles,
+    width,
+    height,
+  });
+
   // Rest state once the font is in, so the greeting is never drawn unstyled:
   // full-size text, four bubbles gone, the trigger inflated in. Also what
   // "Reset" runs — one code path for first paint and for the button.
@@ -539,6 +590,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // (the canvas view isn't scaled — the DPR sandwich is internal to it), so
   // no pixelDensity conversion is needed here.
   const { play } = intro;
+  const { open: openBubble, close: closeBubble } = selection;
+  const selectBubbles = selection.bubbles;
+  const selectedIndex = selection.selected;
   const tapGesture = useMemo(
     () =>
       Gesture.Tap().onEnd((e, success) => {
@@ -547,6 +601,28 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         if (!success) {
           return;
         }
+
+        // A bubble is open: any tap sends it back.
+        if (selectedIndex.value >= 0) {
+          closeBubble();
+          return;
+        }
+
+        // The intro has finished: the four bubbles are pressable.
+        if (intro.progress.value >= 1) {
+          for (let i = 0; i < selectBubbles.length; i++) {
+            const b = selectBubbles[i];
+            const bx = e.x - b.x.value;
+            const by = e.y - b.y.value;
+            const br = b.r.value;
+            if (br > 0 && bx * bx + by * by <= br * br) {
+              openBubble(i);
+              return;
+            }
+          }
+          return;
+        }
+
         const dx = e.x - intro.trigger.x.value;
         const dy = e.y - intro.trigger.y.value;
         const r = intro.trigger.r.value;
@@ -606,7 +682,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     inertia,
     strength,
     pinned:
-      SOLO_BUBBLE !== null ? [soloBubble] : [...intro.bubbles, intro.trigger],
+      SOLO_BUBBLE !== null
+        ? [soloBubble]
+        : [...selection.bubbles, intro.trigger],
   });
 
   // ==========================================================================
@@ -803,7 +881,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       {INTRO_SLOTS.map((slot, i) => (
         <LabeledBubble
           key={slot}
-          bubble={intro.bubbles[i]}
+          bubble={selection.bubbles[i]}
           index={slot}
           paramBuffer={paramBuffer}
           uniforms={uniforms}
@@ -815,7 +893,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           icon={INTRO_ICONS[i]}
           pixelDensity={PD}
           birthOptics={BIRTH_OPTICS_ON ? BIRTH_OPTICS : undefined}
-          film={bubbleFilm}
+          // film={bubbleFilm}
         />
       ))}
 
@@ -837,6 +915,19 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         pixelDensity={PD}
         film={bubbleFilm}
       />
+
+      {/* ---- The detail card for a pressed bubble. Last, so its blur
+          frosts the bubbles scrolling past behind it. Mounted only while a
+          bubble is chosen — a BackdropBlur is a pass break even off-screen. ---- */}
+      {selection.activeIndex !== null && (
+        <SelectCard
+          width={width}
+          height={height}
+          top={selection.cardTop}
+          paragraph={cardParagraphs[selection.activeIndex] ?? null}
+          pixelDensity={PD}
+        />
+      )}
     </>
   );
 
@@ -922,7 +1013,13 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         </PressableScale>
         {showControls && (
           <>
-            <PressableScale style={styles.toggle} onPress={intro.reset}>
+            <PressableScale
+              style={styles.toggle}
+              onPress={() => {
+                scheduleOnUI(selection.close);
+                intro.reset();
+              }}
+            >
               <Text style={styles.toggleText}>Reset</Text>
             </PressableScale>
             <PressableScale
