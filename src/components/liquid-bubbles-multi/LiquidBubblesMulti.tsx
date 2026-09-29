@@ -37,6 +37,10 @@
  * - `SCENE_RIPPLE`: the whole frame runs through the bouncy-ripple prism
  *   shader, fired from the centre just before the bubbles bloom.
  * - Top-right panels: Text and Bubble. FPS readout top-left.
+ * - Every overlay — the button row, whichever panel is open, the scrub bar —
+ *   sits behind one "Controls" button (top-right, always shown), so the
+ *   scene can be watched or recorded with nothing drawn over it. The FPS
+ *   readout is exempt: it's a readout, not a control.
  */
 
 import {
@@ -313,6 +317,11 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const inertia = useSharedValue(INERTIA_DEFAULT);
   const strength = useSharedValue(STRENGTH_DEFAULT);
   const isDay = useSharedValue(true);
+
+  // Every overlay (button row, tuning panel, scrub bar) hides behind this —
+  // default false so the scene opens on an unobstructed view, fit for
+  // watching or recording. The "Controls" button itself always renders.
+  const [showControls, setShowControls] = useState(false);
 
   // One panel open at a time (React state — changes only on tap).
   const [panel, setPanel] = useState<Panel>("none");
@@ -825,7 +834,11 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
 
       <FpsOverlay dark />
 
-      {panel === "text" && (
+      {/* Everything below "Controls" is gated on `showControls` — the whole
+          point is to be able to watch or record the scene with nothing
+          drawn over it. `panel` is left untouched while hidden, so
+          reopening Controls restores whichever panel was open. */}
+      {showControls && panel === "text" && (
         <TextTuningPanel
           controls={textControls}
           width={width}
@@ -835,7 +848,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
 
       {/* The bubble's own levers: Shape (size, wobble, inertia, strength),
           Refraction, Surface, Rim. No float / soap-film toggles here. */}
-      {panel === "bubble" && (
+      {showControls && panel === "bubble" && (
         <BubbleTuningPanel
           wobble={wobble}
           wobbleDefault={WOBBLE_DEFAULT}
@@ -855,45 +868,68 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       )}
 
       <View style={styles.toggles}>
-        <PressableScale style={styles.toggle} onPress={intro.reset}>
-          <Text style={styles.toggleText}>Reset</Text>
-        </PressableScale>
         <PressableScale
-          style={[styles.toggle, panel === "text" && styles.toggleActive]}
-          onPress={() => togglePanel("text")}
+          style={[styles.toggle, showControls && styles.toggleActive]}
+          onPress={() => setShowControls((v) => !v)}
         >
           <Text
             style={[
               styles.toggleText,
-              panel === "text" && styles.toggleTextActive,
+              showControls && styles.toggleTextActive,
             ]}
           >
-            Text
+            Controls
           </Text>
         </PressableScale>
-        <PressableScale
-          style={[styles.toggle, panel === "bubble" && styles.toggleActive]}
-          onPress={() => togglePanel("bubble")}
-        >
-          <Text
-            style={[
-              styles.toggleText,
-              panel === "bubble" && styles.toggleTextActive,
-            ]}
-          >
-            Bubble
-          </Text>
-        </PressableScale>
-        {SHOW_FLOATERS && (
-          <PressableScale style={styles.toggle} onPress={toggleFloat}>
-            <Text style={styles.toggleText}>
-              {floatOn ? "Float: On" : "Float: Off"}
-            </Text>
-          </PressableScale>
+        {showControls && (
+          <>
+            <PressableScale style={styles.toggle} onPress={intro.reset}>
+              <Text style={styles.toggleText}>Reset</Text>
+            </PressableScale>
+            <PressableScale
+              style={[
+                styles.toggle,
+                panel === "text" && styles.toggleActive,
+              ]}
+              onPress={() => togglePanel("text")}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  panel === "text" && styles.toggleTextActive,
+                ]}
+              >
+                Text
+              </Text>
+            </PressableScale>
+            <PressableScale
+              style={[
+                styles.toggle,
+                panel === "bubble" && styles.toggleActive,
+              ]}
+              onPress={() => togglePanel("bubble")}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  panel === "bubble" && styles.toggleTextActive,
+                ]}
+              >
+                Bubble
+              </Text>
+            </PressableScale>
+            {SHOW_FLOATERS && (
+              <PressableScale style={styles.toggle} onPress={toggleFloat}>
+                <Text style={styles.toggleText}>
+                  {floatOn ? "Float: On" : "Float: Off"}
+                </Text>
+              </PressableScale>
+            )}
+          </>
         )}
       </View>
 
-      {SHOW_SCRUB_BAR && (
+      {showControls && SHOW_SCRUB_BAR && (
         <IntroScrubBar progress={intro.progress} play={intro.play} />
       )}
     </>

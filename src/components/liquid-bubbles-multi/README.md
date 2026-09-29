@@ -189,6 +189,12 @@ flowchart TD
   its `LabeledBubble` is the label's LAYOUT radius (`labels[i].rest`), not the
   live slider value — same rule the four intro bubbles and the trigger
   already follow, since the label scales by `r / restRadius`.
+- **One "Controls" button gates every overlay** — the button row, whichever
+  tuning panel is open, and the scrub bar — behind a single top-right toggle,
+  defaulting to hidden, so the scene can be watched or recorded clean. The FPS
+  readout is deliberately exempt: it's a readout, not a control. `SHOW_SCRUB_BAR`
+  still applies on top of it, so the scrub bar needs both `showControls` and
+  the flag to show.
 - **`BIRTH_OPTICS_ON`:** the four intro bubbles' glass, exaggerated while they
   inflate and blended back to the live optics by `useBirthOptics` — see that
   hook's section below. Off = every intro `LabeledBubble` gets
