@@ -44,7 +44,7 @@ import {
   TRIGGER_COLLAPSE_MS,
   TRIGGER_SWELL_MS,
 } from "./multiBubbleConfig";
-import SquircleView from 'react-native-fast-squircle';
+import FastSquircleView from "react-native-fast-squircle";
 
 // ============================================================================
 // Types
@@ -127,7 +127,7 @@ export function IntroScrubBar({ progress, play }: IntroScrubBarProps) {
   });
 
   return (
-    <SquircleView style={styles.panel} cornerSmoothing={0.6}>
+    <FastSquircleView style={styles.panel} cornerSmoothing={0.6}>
       <View style={styles.row}>
         <PressableScale style={styles.playButton} onPress={play}>
           <Text style={styles.playButtonText}>Play</Text>
@@ -158,7 +158,7 @@ export function IntroScrubBar({ progress, play }: IntroScrubBarProps) {
           <Animated.View style={[styles.thumb, thumbStyle]} />
         </View>
       </GestureDetector>
-    </SquircleView>
+    </FastSquircleView>
   );
 }
 
