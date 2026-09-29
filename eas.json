@@ -7,28 +7,62 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "APP_ENV": "development"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "preview"
+      }
     },
     "testflight": {
       "autoIncrement": true,
-      "channel": "testflight"
+      "channel": "testflight",
+      "env": {
+        "APP_ENV": "production"
+      }
     },
     "testflight_1.0.0": {
       "autoIncrement": true,
-      "channel": "testflight_1.0.0"
+      "channel": "testflight_1.0.0",
+      "env": {
+        "APP_ENV": "production"
+      }
+    },
+    "android_firebase_preview": {
+      "distribution": "internal",
+      "environment": "production",
+      "autoIncrement": true,
+      "channel": "production",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_ENV": "production"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "APP_ENV": "production"
+      }
     }
   },
   "submit": {
     "production": {},
     "testflight": {},
-    "testflight_1.0.0": {}
+    "testflight_1.0.0": {
+      "ios": {
+        "ascAppId": "6762098692"
+      }
+    }
   }
 }
