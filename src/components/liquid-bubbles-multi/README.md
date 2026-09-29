@@ -16,6 +16,7 @@ single bubble's state.
 - `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
 - `LabeledBubble.tsx`: one bubble as one component — its label, then its glass pass
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
+- `bubbleClipPad.ts`: the backdrop clip's padding math, shared by `BaselineBubble` and the birth-optics crossover
 - `BubbleLabel.tsx`: one intro bubble's text + icon, riding along inside it
 - `bubbleIcon.ts`: the `BubbleIcon` spec (path, box, size, colour, gap, stroke) + defaults
 - `IconPaths.ts`: the glyphs themselves, and `INTRO_ICONS` — one per intro label
@@ -26,6 +27,7 @@ single bubble's state.
 - `hooks/useMultiBubblePhysics.ts`: float + shape for every bubble in one frame callback
 - `hooks/useIntroTimeline.ts`: rest state ↔ intro, as one scrubbable `progress` value — the trigger bubble, and the swell/collapse → four-bubbles run it kicks off
 - `hooks/useSceneRipple.ts`: one water ripple over the whole scene, fired off `progress` just before the bubbles bloom
+- `hooks/useBirthOptics.ts`: an intro bubble's exaggerated "birth" glass, crossing over to the live optics as it inflates
 - `animation_timeline.md`: the intro's stages, curves, constants and the reasoning — the reference for changing how it feels
 
 Tests: `bun test src/components/liquid-bubbles-multi`
@@ -187,6 +189,12 @@ flowchart TD
   its `LabeledBubble` is the label's LAYOUT radius (`labels[i].rest`), not the
   live slider value — same rule the four intro bubbles and the trigger
   already follow, since the label scales by `r / restRadius`.
+- **`BIRTH_OPTICS_ON`:** the four intro bubbles' glass, exaggerated while they
+  inflate and blended back to the live optics by `useBirthOptics` — see that
+  hook's section below. Off = every intro `LabeledBubble` gets
+  `birthOptics={undefined}`, the hook's pass-through, at no cost. The trigger
+  and the solo bubble never get `birthOptics` at all, since neither has an
+  `inflate` curve to cross over from.
 
 ### hooks/useSceneRipple.ts
 
@@ -313,6 +321,41 @@ hook:
   `play()` is only ever reached from a tap on the trigger or the scrub bar.
 - One `PinnedBubble` per bubble (the four AND the trigger): this hook says
   where and how big, the physics hook owns the shape.
+
+### hooks/useBirthOptics.ts
+
+The four intro bubbles' exaggerated "birth" glass — `BIRTH_OPTICS` in
+`multiBubbleConfig.ts` — blended toward the screen's live optics once each
+bubble's OWN inflate curve triggers the crossover at `BIRTH_SWAP_START`.
+
+- **Triggered by `inflate`, timed on its own clock.** Every OTHER stage in this
+  demo is a pure function of the intro's one scrubbable `progress`, but this
+  one isn't: `inflate` crossing `BIRTH_SWAP_START` fires a `withTiming` over
+  `BIRTH_SWAP_MS`, independent of how long the rest of the inflate takes. This
+  is a deliberate, accepted trade — the crossover is the one stage that does
+  NOT scrub smoothly: dragging `progress` backwards past the trigger re-arms
+  the birth look, and dragging forward past it replays the crossover from the
+  top rather than seeking into the middle of it. In exchange, the dial always
+  reads at the same steady pace regardless of how the inflate curve is timed.
+- **`t >= 1` is a fast path, not just tidiness.** At that point the hook hands
+  back the caller's OWN `uniforms` object, unchanged — no lerp, no new object.
+  That matters twice: the tuning-panel sliders keep driving the settled bubble
+  directly (nothing sits between them), and a bubble at rest allocates
+  nothing every frame.
+- **The clip-pad trap.** `BaselineBubble`'s clip is grown by a pad computed
+  from the live optics — at this demo's defaults, `refract 18, lens 0,
+  dispersion 0` → roughly 20pt. The birth look's `refract 31, lens 0.7,
+  dispersion 0.6` needs roughly `31 + 0.6·R + 2` ≈ 70pt at `R = 62`. Blending
+  the UNIFORMS without also blending the PAD leaves the old, narrower clip in
+  place — the birth look renders correctly and is then invisibly cropped at
+  the clip rect. `clipPad` runs `bubblePadPt` (shared with `BaselineBubble` via
+  `bubbleClipPad.ts`) on the SAME blended values every frame, so it always
+  matches what's actually being drawn and lands exactly on the live pad at
+  `t = 1`.
+- `birth` or `inflate` missing → pass through on both fronts: `uniforms` is the
+  caller's own object, `clipPad` is `undefined` so `BaselineBubble` falls back
+  to computing its own live pad. Every `useDerivedValue` above still runs
+  unconditionally — only the returned pair branches.
 
 ### hooks/multiBubbleMath.ts
 

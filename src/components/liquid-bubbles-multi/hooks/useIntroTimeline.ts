@@ -122,6 +122,14 @@ import type { PinnedBubble } from "./useMultiBubblePhysics";
 export type IntroBubble = PinnedBubble & {
   /** 0 → 1 once the bubble has nearly arrived: fades its label in. */
   labelOpacity: DerivedValue<number>;
+  /**
+   * The bubble's own scale curve, 0 -> 1 (it overshoots past 1 and settles —
+   * see INTRO_TRAVEL_OVERSHOOT's sibling, the inflate back-ease). Exposed so a
+   * consumer can key off how far the bubble has inflated rather than
+   * re-deriving it from `r`, which is also scaled by the live Size slider.
+   * Absent on the trigger, which has no bloom inflate.
+   */
+  inflate?: DerivedValue<number>;
 };
 
 export type UseIntroTimelineParams = {
@@ -489,7 +497,14 @@ export function useIntroTimeline({
     const labelOpacity = useDerivedValue(() => labelT.value);
     /* eslint-enable react-hooks/rules-of-hooks */
 
-    bubbles.push({ x, y, r, labelOpacity, wobbleMul: spec.wobbleMul });
+    bubbles.push({
+      x,
+      y,
+      r,
+      labelOpacity,
+      inflate: inflateT,
+      wobbleMul: spec.wobbleMul,
+    });
   }
 
   // ==========================================================================

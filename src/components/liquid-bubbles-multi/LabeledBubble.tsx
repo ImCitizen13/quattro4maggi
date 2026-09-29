@@ -20,6 +20,11 @@
  * - Bubbles do not overlap, so interleaving label/pass per bubble reads the
  *   same as the old "all labels, then all passes" — with one Group more per
  *   bubble and no `saveLayer`.
+ * - **`birthOptics` is glass-only.** `useBirthOptics` blends the bubble's
+ *   uniforms (and the clip pad they imply) from this exaggerated "birth" look
+ *   toward the live optics once `bubble.inflate` crosses `BIRTH_SWAP_START`,
+ *   over a fixed `BIRTH_SWAP_MS` on its own clock (not scrubbable — see the
+ *   hook). The label is untouched either way.
  */
 
 import { Group, type SkParagraph } from "@shopify/react-native-skia";
@@ -28,12 +33,14 @@ import type { DerivedValue, SharedValue } from "react-native-reanimated";
 
 import type {
   BubbleOptics,
+  BubbleOpticsValues,
   BubbleUniforms,
 } from "@/components/liquid-bubble-live/hooks/useBubbleOptics";
 
 import { BaselineBubble } from "./BaselineBubble";
 import type { BubbleIcon } from "./bubbleIcon";
 import { BubbleLabel } from "./BubbleLabel";
+import { useBirthOptics } from "./hooks/useBirthOptics";
 import type { IntroBubble } from "./hooks/useIntroTimeline";
 
 // ============================================================================
@@ -69,6 +76,13 @@ export type LabeledBubbleProps = {
    * @default 1
    */
   pixelDensity?: number;
+  /**
+   * The exaggerated glass this bubble wears while it inflates, crossing over
+   * to the live optics once its own scale curve reaches `BIRTH_SWAP_START` —
+   * then over a fixed `BIRTH_SWAP_MS`, not the rest of the inflate curve.
+   * Needs `bubble.inflate`; undefined = the live look throughout.
+   */
+  birthOptics?: Partial<BubbleOpticsValues>;
 };
 
 // ============================================================================
@@ -88,6 +102,7 @@ export function LabeledBubble({
   icon,
   showIcon = true,
   pixelDensity = 1,
+  birthOptics,
 }: LabeledBubbleProps) {
   // Undo the screen's `1 / pd`, so the label is authored in points like the
   // rest of the backdrop. Static — built once per pixelDensity.
@@ -95,6 +110,14 @@ export function LabeledBubble({
     () => [{ scale: pixelDensity }],
     [pixelDensity],
   );
+
+  const born = useBirthOptics({
+    uniforms,
+    optics,
+    radius: bubble.r,
+    inflate: bubble.inflate,
+    birth: birthOptics,
+  });
 
   return (
     <>
@@ -112,9 +135,10 @@ export function LabeledBubble({
       <BaselineBubble
         index={index}
         paramBuffer={paramBuffer}
-        uniforms={uniforms}
+        uniforms={born.uniforms}
         optics={optics}
         pixelDensity={pixelDensity}
+        padOverride={born.clipPad}
       />
     </>
   );

@@ -20,6 +20,12 @@
  *   the glass — comes out at full resolution. Everything this component
  *   feeds the shader in points is multiplied by `pd` to match that space;
  *   the shader's other levers are fractions of R, so they follow for free.
+ * - **`padOverride`**: the clip's own pad expression lives in `bubbleClipPad.ts`
+ *   (`bubblePadPt`) so a second caller — `useBirthOptics`, for the intro
+ *   bubbles' birth look — can compute the SAME pad from a different set of
+ *   lever values (the birth optics read much further past the rim than the
+ *   live levers). Passing `padOverride` swaps in that caller's pad; omitting
+ *   it keeps this component computing its own from the live `optics`.
  */
 
 import {
@@ -42,8 +48,9 @@ import type {
   BubbleOptics,
   BubbleUniforms,
 } from "@/components/liquid-bubble-live/hooks/useBubbleOptics";
-import { CLIP_SLACK } from "@/components/liquid-bubble-live/liveConfig";
 import { liveBubbleEffect } from "@/components/liquid-bubble-live/shaders";
+
+import { bubblePadPt } from "./bubbleClipPad";
 
 // ============================================================================
 // Types
@@ -64,6 +71,12 @@ export type BaselineBubbleProps = {
    * @default 1
    */
   pixelDensity?: number;
+  /**
+   * Replaces the pad the clip is grown by, pt. The birth optics read further
+   * past the rim than the live levers do — without this the birth look is
+   * chopped off at the clip edge.
+   */
+  padOverride?: DerivedValue<number>;
 };
 
 // ============================================================================
@@ -76,6 +89,7 @@ export function BaselineBubble({
   uniforms,
   optics,
   pixelDensity = 1,
+  padOverride,
 }: BaselineBubbleProps) {
   const base = index * PARAM_FLOATS;
 
@@ -117,12 +131,16 @@ export function BaselineBubble({
           Math.abs(p[base + 8])) +
       AA_PAD;
     const pad =
-      optics.refract.value +
-      R *
-        (Math.max(0, -optics.lens.value) +
-          optics.dispersion.value +
-          (optics.haloOpacity.value !== 0 ? optics.haloSpread.value : 0)) +
-      CLIP_SLACK;
+      padOverride !== undefined
+        ? padOverride.value
+        : bubblePadPt(
+            optics.refract.value,
+            optics.lens.value,
+            optics.dispersion.value,
+            optics.haloOpacity.value,
+            optics.haloSpread.value,
+            R,
+          );
     // The clip lives in the same space as the filter, so it scales too.
     const h = (reach + pad) * pixelDensity;
     const cx = p[base] * pixelDensity;

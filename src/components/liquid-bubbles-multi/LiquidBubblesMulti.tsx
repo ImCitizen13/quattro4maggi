@@ -107,6 +107,7 @@ import { LabeledBubble } from "./LabeledBubble";
 import { IntroScrubBar } from "./IntroScrubBar";
 import { useMultiBubblePhysics } from "./hooks/useMultiBubblePhysics";
 import {
+  BIRTH_OPTICS,
   BUBBLE_COUNT,
   INTRO_BASE_RADIUS,
   INTRO_COUNT,
@@ -185,7 +186,7 @@ const SHOW_FLOATERS = false;
  * intro to get there. The Bubble panel's Size slider still drives it, so the
  * whole optics stack is live.
  */
-const SOLO_BUBBLE: number | null = 1;
+const SOLO_BUBBLE: number | null = null;
 
 /** The intro's hand-scrub bar. Off for an FPS run — it costs a gesture + a few derived reads. */
 const SHOW_SCRUB_BAR = true;
@@ -202,6 +203,17 @@ const SHOW_SCRUB_BAR = true;
  * Flip it off to compare FPS, the same way `CRISP_BUBBLES` works.
  */
 const SCENE_RIPPLE = true;
+
+/**
+ * The four intro bubbles wear an exaggerated "birth" glass while they
+ * inflate, crossing over to the screen's live optics once each bubble's own
+ * inflate curve reaches `BIRTH_SWAP_START` — the crossover then runs over a
+ * fixed `BIRTH_SWAP_MS` on its own clock, not the rest of the inflate curve
+ * (see `useBirthOptics`). Off = `birthOptics={undefined}` on every intro
+ * bubble, a pass-through at no cost — `useBirthOptics` returns the caller's
+ * own `uniforms` unchanged and allocates nothing.
+ */
+const BIRTH_OPTICS_ON = true;
 
 /** Floating bubbles actually run. Solo mode always forces them off. */
 const FLOATER_COUNT = SHOW_FLOATERS && SOLO_BUBBLE === null ? BUBBLE_COUNT : 0;
@@ -649,6 +661,8 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           />
         )}
       </Group>
+      {/* No `birthOptics`: the solo bubble is pinned permanently inflated
+          with no `inflate` curve, so there is no crossover to run. */}
       <LabeledBubble
         bubble={soloBubble}
         index={SOLO_SLOT}
@@ -754,11 +768,14 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
           icon={INTRO_ICONS[i]}
           pixelDensity={PD}
+          birthOptics={BIRTH_OPTICS_ON ? BIRTH_OPTICS : undefined}
         />
       ))}
 
       {/* ---- The trigger bubble, on top of everything else. No icon:
-          "Go" is the whole label. ---- */}
+          "Go" is the whole label. No `birthOptics`: it has no `inflate`
+          curve (it isn't one of the four bloomed bubbles), so there is
+          nothing for the birth look to cross over from. ---- */}
       <LabeledBubble
         bubble={intro.trigger}
         index={TRIGGER_SLOT}

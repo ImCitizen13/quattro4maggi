@@ -8,6 +8,8 @@
  * safe to read from a worklet.
  */
 
+import type { BubbleOpticsValues } from "../liquid-bubble-live/hooks/useBubbleOptics";
+
 import { BIRTH_TIME, PARAM_FLOATS } from "../liquid-bubble-live/bubbleModes";
 
 // ============================================================================
@@ -287,3 +289,41 @@ export const RIPPLE_REARM_SLOP = 0.02;
  */
 export const INFLATE_ZETA = 0.6;
 export const INFLATE_OMEGA = 4 / (INFLATE_ZETA * BIRTH_TIME);
+
+// ============================================================================
+// Birth optics (the intro bubbles' exaggerated glass while they inflate)
+// ============================================================================
+
+/**
+ * The glass an intro bubble wears while it inflates, before it crosses over
+ * to the screen's live optics. Same look for every bubble. Any lever not
+ * named here is at its live value the whole time.
+ */
+export const BIRTH_OPTICS: Partial<BubbleOpticsValues> = {
+  refract: 31,
+  falloff: 1.83,
+  lens: 0.7,
+  dispersion: 0.6,
+  edgeWidth: 0.43,
+};
+
+/**
+ * Where on the bubble's INFLATE curve the crossover to the live optics FIRES.
+ * Once `inflate` reaches this, the crossover runs on its OWN clock
+ * (`BIRTH_SWAP_MS`) rather than finishing with the rest of the inflate curve
+ * — so this is a trigger point, not the start of a range.
+ *
+ * Because of that, this is the one stage of this intro that does NOT seek
+ * with the scrub bar: dragging `progress` backwards past the trigger re-arms
+ * the birth look, and dragging forward past it replays the crossover from the
+ * top, rather than scrubbing smoothly through it like every other stage.
+ */
+export const BIRTH_SWAP_START = 0.8;
+
+/**
+ * How long the crossover from `BIRTH_OPTICS` to the live optics takes once it
+ * has been triggered, ms. It runs on its OWN clock rather than finishing with
+ * the inflate curve, so the dial reads at a steady pace regardless of how
+ * long the remaining inflate takes.
+ */
+export const BIRTH_SWAP_MS = 1800;
