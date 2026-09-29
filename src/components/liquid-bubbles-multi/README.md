@@ -176,6 +176,17 @@ flowchart TD
 - **`SCENE_RIPPLE`:** wraps the whole canvas in one ripple layer, fired just
   before the bubbles bloom — see `hooks/useSceneRipple.ts` for the timing,
   the DPR constraint and the cost.
+- **`SOLO_BUBBLE`:** previews ONE bubble — centred, permanently inflated, no
+  intro — for tuning a label/icon/optics without playing through the whole
+  bloom to get there. It's an index into `INTRO_LABELS`/`INTRO_ICONS`, built
+  the same shape as an `IntroBubble` so it drops straight into the pinned
+  slot the physics hook already knows how to draw; `null` gives back the full
+  scene. Forces `FLOATER_COUNT` to 0 (solo takes pinned slot 0, there's
+  nothing to share it with) rather than adding a slot, so the physics buffer
+  layout doesn't change shape between the two modes. `restRadius` passed to
+  its `LabeledBubble` is the label's LAYOUT radius (`labels[i].rest`), not the
+  live slider value — same rule the four intro bubbles and the trigger
+  already follow, since the label scales by `r / restRadius`.
 
 ### hooks/useSceneRipple.ts
 

@@ -177,6 +177,16 @@ const DPR_UP = [{ scale: PD }];
 /** Floating bubbles on/off. Off = only the bubble pinned over the text. */
 const SHOW_FLOATERS = false;
 
+/**
+ * Preview ONE bubble — centred, permanently inflated, no intro. It is an
+ * index into `INTRO_LABELS` / `INTRO_ICONS`; `null` renders the full scene.
+ *
+ * For tuning a bubble's label, icon, padding and optics without playing the
+ * intro to get there. The Bubble panel's Size slider still drives it, so the
+ * whole optics stack is live.
+ */
+const SOLO_BUBBLE: number | null = 1;
+
 /** The intro's hand-scrub bar. Off for an FPS run — it costs a gesture + a few derived reads. */
 const SHOW_SCRUB_BAR = true;
 
@@ -193,8 +203,8 @@ const SHOW_SCRUB_BAR = true;
  */
 const SCENE_RIPPLE = true;
 
-/** Floating bubbles actually run. */
-const FLOATER_COUNT = SHOW_FLOATERS ? BUBBLE_COUNT : 0;
+/** Floating bubbles actually run. Solo mode always forces them off. */
+const FLOATER_COUNT = SHOW_FLOATERS && SOLO_BUBBLE === null ? BUBBLE_COUNT : 0;
 
 /** Slot indices, built once. */
 const SLOTS = Array.from({ length: FLOATER_COUNT }, (_, i) => i);
@@ -207,6 +217,9 @@ const INTRO_SLOTS = Array.from(
 
 /** The trigger bubble's slot: right after the four intro bubbles. */
 const TRIGGER_SLOT = FLOATER_COUNT + INTRO_COUNT;
+
+/** Solo mode's one bubble takes pinned slot 0 — there are no floaters to share it with. */
+const SOLO_SLOT = 0;
 
 /** Tap slop on the trigger bubble, as a × of its radius — comfortable to hit. */
 const TRIGGER_TAP_SLOP = 1.25;
@@ -307,6 +320,28 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // Mean bubble radius: the Bubble panel's Shape → Size slider. Each intro
   // bubble multiplies it by its own `INTRO_RADIUS_MUL`.
   const bubbleSize = useSharedValue(INTRO_BASE_RADIUS);
+
+  // ==========================================================================
+  // Solo bubble preview (SOLO_BUBBLE) — built unconditionally so hooks never
+  // run conditionally; only the JSX and `pinned` below branch on the flag.
+  // Pinned dead centre, permanently inflated. `r` reads the Bubble panel's
+  // Size slider so the optics stay tunable; labelOpacity is 1 because there
+  // is no intro to fade it in.
+  // ==========================================================================
+
+  const soloIndex = SOLO_BUBBLE ?? 0;
+  const soloX = useDerivedValue(() => width / 2);
+  const soloY = useDerivedValue(() => height / 2);
+  const soloR = useDerivedValue(
+    () => bubbleSize.value * INTRO_RADIUS_MUL[soloIndex],
+  );
+  const soloOpacity = useDerivedValue(() => 1);
+  const soloBubble = useMemo(
+    () => ({ x: soloX, y: soloY, r: soloR, labelOpacity: soloOpacity }),
+    // the derived values are stable for the mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // ==========================================================================
   // Greeting text (before the physics: the bubble is placed off its height)
@@ -538,7 +573,8 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     wobble,
     inertia,
     strength,
-    pinned: [...intro.bubbles, intro.trigger],
+    pinned:
+      SOLO_BUBBLE !== null ? [soloBubble] : [...intro.bubbles, intro.trigger],
   });
 
   // ==========================================================================
@@ -593,6 +629,152 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       </Paint>
     ) : undefined;
 
+  // ---- Solo mode content: background only (no greeting), one LabeledBubble
+  // dead centre. `restRadius` MUST be the label's LAYOUT radius (what its
+  // paragraph was measured at), not the live `soloR` — the label scales by
+  // `r / restRadius` inside BubbleLabel. ----
+  const soloSceneContent = (
+    <>
+      <Group transform={DPR_UP}>
+        {image && (
+          <Image
+            image={image}
+            fit="cover"
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            opacity={1}
+            blendMode="plus"
+          />
+        )}
+      </Group>
+      <LabeledBubble
+        bubble={soloBubble}
+        index={SOLO_SLOT}
+        paramBuffer={paramBuffer}
+        uniforms={uniforms}
+        optics={optics}
+        paragraph={labels[soloIndex]?.paragraph ?? null}
+        labelWidth={labels[soloIndex]?.width ?? 0}
+        labelHeight={labels[soloIndex]?.height ?? 0}
+        restRadius={labels[soloIndex]?.rest ?? INTRO_BASE_RADIUS}
+        icon={INTRO_ICONS[soloIndex]}
+        pixelDensity={PD}
+      />
+    </>
+  );
+
+  // ---- Full scene content: exactly what the committed file renders — the
+  // backdrop, the floaters, the four intro bubbles, then the trigger. ----
+  const fullSceneContent = (
+    <>
+      {/* DPR_UP puts the backdrop back in logical points, so everything
+          inside it is authored in pt exactly as before. */}
+      <Group transform={DPR_UP}>
+        {/* ---- Backdrop: drawn first so the bubbles refract it ---- */}
+        {/* Base fill under the background image. */}
+        {/*<Fill color="#ffffff" />*/}
+
+        {/* Background image, centered, 2× screen width. */}
+        {image && (
+          <Image
+            image={image}
+            fit="cover"
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            opacity={1}
+            blendMode="plus"
+          />
+        )}
+
+        {/* Greeting: centered paragraph, name on line 2, underlined.
+            Part of the backdrop, so the bubble refracts it. Opacity is
+            the intro's textOpacity — a function of how far the trigger
+            has swollen, not of time (see useIntroTimeline.ts).
+
+            The fade MUST be a `layer`, not a plain `opacity` prop: a
+            Group's opacity is applied to the paint its children
+            inherit, and the renderer draws a Paragraph with
+            `paragraph.paint(canvas, x, y)` using the text's OWN baked
+            paint — so the inherited alpha never reaches it. With
+            `opacity` the squiggle (a Path, which does use the paint)
+            faded while the text stayed solid. A layer composites the
+            whole group through one alpha instead, which catches both.
+            It costs a saveLayer over the greeting's bounds per frame. */}
+        <Group
+          transform={textTransform}
+          layer={<Paint opacity={intro.textOpacity} />}
+        >
+          <Paragraph
+            paragraph={paragraph}
+            x={paragraphX}
+            y={paragraphY}
+            width={width}
+          />
+        </Group>
+      </Group>
+
+      {/* ---- Floaters: one backdrop pass each (phase 2 baseline).
+          They sit OUTSIDE DPR_UP, so their filter space is device
+          pixels; BaselineBubble scales its point uniforms by PD. ---- */}
+      {SLOTS.map((i) => (
+        <BaselineBubble
+          key={i}
+          index={i}
+          paramBuffer={paramBuffer}
+          uniforms={uniforms}
+          optics={optics}
+          pixelDensity={PD}
+        />
+      ))}
+
+      {/* ---- The four intro bubbles. Each LabeledBubble draws its own
+          label (icon + text, back in points via its own pd group) and
+          then its glass pass, so a bubble always refracts its own
+          contents. Drawn after the floaters, so they sit on top.
+
+          Mapped over the SLOTS, not over `labels`: the glass has to be
+          there from the first frame, while `labels` is still empty
+          until the font manager resolves. A null paragraph just skips
+          the label. ---- */}
+      {INTRO_SLOTS.map((slot, i) => (
+        <LabeledBubble
+          key={slot}
+          bubble={intro.bubbles[i]}
+          index={slot}
+          paramBuffer={paramBuffer}
+          uniforms={uniforms}
+          optics={optics}
+          paragraph={labels[i]?.paragraph ?? null}
+          labelWidth={labels[i]?.width ?? 0}
+          labelHeight={labels[i]?.height ?? 0}
+          restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
+          icon={INTRO_ICONS[i]}
+          pixelDensity={PD}
+        />
+      ))}
+
+      {/* ---- The trigger bubble, on top of everything else. No icon:
+          "Go" is the whole label. ---- */}
+      <LabeledBubble
+        bubble={intro.trigger}
+        index={TRIGGER_SLOT}
+        paramBuffer={paramBuffer}
+        uniforms={uniforms}
+        optics={optics}
+        paragraph={triggerLabel?.paragraph ?? null}
+        labelWidth={triggerLabel?.width ?? 0}
+        labelHeight={triggerLabel?.height ?? 0}
+        restRadius={TRIGGER_RADIUS}
+        showIcon={false}
+        pixelDensity={PD}
+      />
+    </>
+  );
+
   return (
     <>
       {/* The tap that starts the intro: the trigger bubble is a Skia circle,
@@ -618,109 +800,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
                 `layer={undefined}` when SCENE_RIPPLE is off = no saveLayer
                 at all, not an identity one. ---- */}
             <Group layer={rippleLayer}>
-              {/* DPR_UP puts the backdrop back in logical points, so everything
-                  inside it is authored in pt exactly as before. */}
-              <Group transform={DPR_UP}>
-                {/* ---- Backdrop: drawn first so the bubbles refract it ---- */}
-                {/* Base fill under the background image. */}
-                {/*<Fill color="#ffffff" />*/}
-
-                {/* Background image, centered, 2× screen width. */}
-                {image && (
-                  <Image
-                    image={image}
-                    fit="cover"
-                    x={0}
-                    y={0}
-                    width={width}
-                    height={height}
-                    opacity={1}
-                    blendMode="plus"
-                  />
-                )}
-
-                {/* Greeting: centered paragraph, name on line 2, underlined.
-                    Part of the backdrop, so the bubble refracts it. Opacity is
-                    the intro's textOpacity — a function of how far the trigger
-                    has swollen, not of time (see useIntroTimeline.ts).
-
-                    The fade MUST be a `layer`, not a plain `opacity` prop: a
-                    Group's opacity is applied to the paint its children
-                    inherit, and the renderer draws a Paragraph with
-                    `paragraph.paint(canvas, x, y)` using the text's OWN baked
-                    paint — so the inherited alpha never reaches it. With
-                    `opacity` the squiggle (a Path, which does use the paint)
-                    faded while the text stayed solid. A layer composites the
-                    whole group through one alpha instead, which catches both.
-                    It costs a saveLayer over the greeting's bounds per frame. */}
-                <Group
-                  transform={textTransform}
-                  layer={<Paint opacity={intro.textOpacity} />}
-                >
-                  <Paragraph
-                    paragraph={paragraph}
-                    x={paragraphX}
-                    y={paragraphY}
-                    width={width}
-                  />
-                </Group>
-              </Group>
-
-              {/* ---- Floaters: one backdrop pass each (phase 2 baseline).
-                  They sit OUTSIDE DPR_UP, so their filter space is device
-                  pixels; BaselineBubble scales its point uniforms by PD. ---- */}
-              {SLOTS.map((i) => (
-                <BaselineBubble
-                  key={i}
-                  index={i}
-                  paramBuffer={paramBuffer}
-                  uniforms={uniforms}
-                  optics={optics}
-                  pixelDensity={PD}
-                />
-              ))}
-
-              {/* ---- The four intro bubbles. Each LabeledBubble draws its own
-                  label (icon + text, back in points via its own pd group) and
-                  then its glass pass, so a bubble always refracts its own
-                  contents. Drawn after the floaters, so they sit on top.
-
-                  Mapped over the SLOTS, not over `labels`: the glass has to be
-                  there from the first frame, while `labels` is still empty
-                  until the font manager resolves. A null paragraph just skips
-                  the label. ---- */}
-              {INTRO_SLOTS.map((slot, i) => (
-                <LabeledBubble
-                  key={slot}
-                  bubble={intro.bubbles[i]}
-                  index={slot}
-                  paramBuffer={paramBuffer}
-                  uniforms={uniforms}
-                  optics={optics}
-                  paragraph={labels[i]?.paragraph ?? null}
-                  labelWidth={labels[i]?.width ?? 0}
-                  labelHeight={labels[i]?.height ?? 0}
-                  restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
-                  icon={INTRO_ICONS[i]}
-                  pixelDensity={PD}
-                />
-              ))}
-
-              {/* ---- The trigger bubble, on top of everything else. No icon:
-                  "Go" is the whole label. ---- */}
-              <LabeledBubble
-                bubble={intro.trigger}
-                index={TRIGGER_SLOT}
-                paramBuffer={paramBuffer}
-                uniforms={uniforms}
-                optics={optics}
-                paragraph={triggerLabel?.paragraph ?? null}
-                labelWidth={triggerLabel?.width ?? 0}
-                labelHeight={triggerLabel?.height ?? 0}
-                restRadius={TRIGGER_RADIUS}
-                showIcon={false}
-                pixelDensity={PD}
-              />
+              {SOLO_BUBBLE !== null ? soloSceneContent : fullSceneContent}
             </Group>
           </Group>
         </Canvas>
