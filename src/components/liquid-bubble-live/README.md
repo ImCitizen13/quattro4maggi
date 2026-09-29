@@ -515,7 +515,8 @@ in the still-image shader.
 
 1. One `SharedValue` per lever, seeded from the `bubbleModes.ts` defaults
    (every Gargantua-derived lever defaults OFF, so the untouched panel
-   renders the pre-lever look).
+   renders the pre-lever look), or from the optional `overrides` for any
+   lever a demo names there.
 2. `BubbleTuningPanel` sliders write those values on the UI thread; resets
    write back `defaults`, the preset button writes `GARGANTUA_PRESET`.
 3. `uniforms` reads them plus `paramBuffer` → `iParams`, `iColor`,
@@ -529,6 +530,17 @@ in the still-image shader.
   "Incorrect uniform size for: iParams".
 - `refract` default is per demo (still image caps at `REFRACT`, live uses
   `LIVE_REFRACT`), so it is a parameter.
+- **`overrides` generalises that to every lever.** A demo tuned differently
+  from the rest passes `overrides: Partial<BubbleOpticsValues>` instead of
+  editing `bubbleModes.ts`, whose constants are shared by all of these
+  demos — changing them there restyles every one at once.
+  `liquid-bubbles-multi` uses it (`MULTI_OPTICS`); the four callers here
+  do not, and are unaffected, since an omitted `overrides` resolves every
+  lever to exactly the constant it used before.
+- It seeds the returned `defaults` as well as the live values, which is the
+  point: otherwise the panel's Reset would throw a demo back to the global
+  look rather than its own. `overrides.refract` wins over the standalone
+  `refract` parameter when both are given.
 
 ### hooks/useBubbleFloat.ts
 
