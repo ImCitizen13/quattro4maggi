@@ -15,6 +15,7 @@ single bubble's state.
 
 - `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
 - `LabeledBubble.tsx`: one bubble as one component — its label, then its glass pass
+- `BubbleFilmOverlay.tsx`: the optional soap film over a labeled bubble's glass (liquid-bubble-live's overlay pass, per buffer slot)
 - `BaselineBubble.tsx`: one of today's single-bubble passes for one buffer slot (phase 2 baseline)
 - `bubbleClipPad.ts`: the backdrop clip's padding math, shared by `BaselineBubble` and the birth-optics crossover
 - `BubbleLabel.tsx`: one intro bubble's text + icon, riding along inside it
@@ -203,6 +204,14 @@ flowchart TD
   `birthOptics={undefined}`, the hook's pass-through, at no cost. The trigger
   and the solo bubble never get `birthOptics` at all, since neither has an
   `inflate` curve to cross over from.
+- **`BUBBLE_SOAP_FILM`:** the soap film over every labeled bubble (the four
+  intro bubbles, the trigger, the solo bubble) instead of the glass's built-in
+  cosine film — see `BubbleFilmOverlay.tsx` below. Off = every `LabeledBubble`
+  gets `film={undefined}`: no overlay pass, and the built-in film is back. The
+  floaters never get it; they keep the built-in film either way. One
+  `useSoapFilmUniforms` film is shared by all of them, with an empty touch
+  buffer (every slot aged out), so it flows on its own — liquid-bubble-live's
+  `useBubbleFilmMotion` is built for one dragged bubble and isn't wired here.
 - **This demo carries its own lever defaults** (`MULTI_WOBBLE`,
   `MULTI_INERTIA`, `MULTI_STRENGTH`, `MULTI_OPTICS`) in `multiBubbleConfig.ts`
   rather than editing the shared `bubbleModes.ts` — those constants are also
@@ -270,6 +279,35 @@ the buffer slot, the laid-out paragraph, and its **icon path**.
 - Interleaving label/pass per bubble instead of "all labels, then all passes"
   reads identically — the bubbles don't overlap — at the cost of one extra
   `Group` per bubble and no `saveLayer`.
+- **`film?: BubbleFilm`** adds a third step: the soap-film overlay, drawn
+  AFTER the glass (in its own `pd` group, back in points). With it set, the
+  glass's uniforms get `iFilm: 0` so the two films don't stack; the overlay
+  reads `iFilm` from the un-zeroed uniforms, so the Film lever — and the
+  birth-look blend — still set its weight.
+
+### BubbleFilmOverlay.tsx
+
+liquid-bubble-live's second pass (`filmOverlayShader.ts`, unmodified), for one
+slot of the multi buffer. The glass is a `BackdropFilter`, whose only child
+shader slot is the backdrop, so the film can't be a `uniform shader` of it —
+it's drawn on top instead, re-deriving the same harmonic shape from the same
+12 floats and compositing with the weight the glass uses for its own film.
+
+- **`BubbleFilm`** = `{ flow, color, ramp }`: `useSoapFilmUniforms`' two
+  groups plus `getSoapFilmRampImage()`. The screen builds it once;
+  `flow.size` is the virtual film canvas (`FILM_OVERLAY_SIZE`, square), which
+  each bubble maps its rest disk onto — so the rings centre on every bubble.
+- **Drawn in points, no `pd` scaling.** Unlike the glass (an image filter,
+  which can't take the canvas matrix), this is a plain paint shader — Skia
+  applies the matrix itself, so `iParams` goes in exactly as the buffer holds it.
+- **Rect** = the same circle bound as `BaselineBubble`'s clip,
+  `R·(1 + |a2| + |a3| + |a4|) + AA_PAD`, but with no refraction pad: the
+  overlay only draws inside the rim. A waiting slot (R = 0) gets an empty rect.
+- **Reads:** `iFilm` and falloff (`iOptics.w`) from the glass's uniforms,
+  `filmReach` from the live optics, and mode / thickness / intensity / opacity
+  from the film's color group.
+- **Cost:** one extra fill per labeled bubble, over its disk — five draws on
+  the full scene (four intro + trigger), none of them a pass break.
 
 ### bubbleIcon.ts / IconPaths.ts
 

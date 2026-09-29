@@ -351,3 +351,10 @@ export const MULTI_OPTICS: Partial<BubbleOpticsValues> = {
   filmScale: 3.9,
   tint: 0.55,
 };
+
+/**
+ * Soap film over the labeled bubbles (the four intro bubbles, the trigger,
+ * the solo bubble) — liquid-bubble-live's overlay pass, replacing the glass's
+ * built-in cosine film. Off = the built-in film, and no overlay passes.
+ */
+export const BUBBLE_SOAP_FILM = true;

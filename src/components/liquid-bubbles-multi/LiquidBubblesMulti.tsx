@@ -96,10 +96,18 @@ import {
   BG_GRID_WIDTH,
   BG_SCROLL_RATE,
 } from "@/components/liquid-bubble-live/liveConfig";
+import { FILM_OVERLAY_SIZE } from "@/components/liquid-bubble-live/filmOverlayShader";
+import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
+import {
+  FILM_TOUCH_AGE_INACTIVE,
+  FILM_TOUCH_SLOTS,
+} from "@/components/soap-film/soapFilmConfig";
+import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
 import { BouncyRipplePrismShader } from "@/components/premium/shaders";
 
 import { BaselineBubble } from "./BaselineBubble";
+import type { BubbleFilm } from "./BubbleFilmOverlay";
 import { useIntroTimeline } from "./hooks/useIntroTimeline";
 import { useSceneRipple } from "./hooks/useSceneRipple";
 import { INTRO_ICONS } from "./IconPaths";
@@ -117,6 +125,7 @@ import {
   INTRO_RADIUS_MUL,
   MULTI_INERTIA,
   MULTI_OPTICS,
+  BUBBLE_SOAP_FILM,
   MULTI_STRENGTH,
   MULTI_WOBBLE,
   NAME_HIGHLIGHT_COLOR,
@@ -623,6 +632,31 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   });
 
   // ==========================================================================
+  // Soap film over the labeled bubbles (liquid-bubble-live's overlay pass)
+  // ==========================================================================
+
+  // One film shared by every labeled bubble; each maps its own disk onto it.
+  // No touches: the ring buffer stays empty (every slot aged out), so the
+  // film flows on its own rather than trailing the bubble's motion.
+  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
+  const filmTouch = useSharedValue<number[]>(
+    new Array(FILM_TOUCH_SLOTS * 4).fill(0),
+  );
+  const filmTouchAge = useSharedValue<number[]>(
+    new Array(FILM_TOUCH_SLOTS).fill(FILM_TOUCH_AGE_INACTIVE),
+  );
+  const soapFilm = useSoapFilmUniforms({
+    time,
+    size: filmSize,
+    touch: filmTouch,
+    touchAge: filmTouchAge,
+  });
+  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
+  const bubbleFilm: BubbleFilm | undefined = BUBBLE_SOAP_FILM
+    ? { flow: soapFilm.flow, color: soapFilm.color, ramp: filmRamp }
+    : undefined;
+
+  // ==========================================================================
   // Live background
   // ==========================================================================
 
@@ -686,6 +720,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         restRadius={labels[soloIndex]?.rest ?? INTRO_BASE_RADIUS}
         icon={INTRO_ICONS[soloIndex]}
         pixelDensity={PD}
+        film={bubbleFilm}
       />
     </>
   );
@@ -780,6 +815,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           icon={INTRO_ICONS[i]}
           pixelDensity={PD}
           birthOptics={BIRTH_OPTICS_ON ? BIRTH_OPTICS : undefined}
+          film={bubbleFilm}
         />
       ))}
 
@@ -799,6 +835,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         restRadius={TRIGGER_RADIUS}
         showIcon={false}
         pixelDensity={PD}
+        film={bubbleFilm}
       />
     </>
   );

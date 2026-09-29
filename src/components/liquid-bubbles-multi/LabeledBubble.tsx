@@ -6,6 +6,8 @@
  *   <Group pd>  BubbleLabel   ← backdrop, authored in points
  *   </Group>
  *   BaselineBubble            ← the pass, in device pixels, on top
+ *   <Group pd>  BubbleFilmOverlay  ← optional soap film over the glass
+ *   </Group>
  *
  * KEY FEATURES:
  * - **The order inside is the point.** The label is drawn BEFORE the pass, so
@@ -29,7 +31,11 @@
 
 import { Group, type SkParagraph } from "@shopify/react-native-skia";
 import React, { useMemo } from "react";
-import type { DerivedValue, SharedValue } from "react-native-reanimated";
+import {
+  useDerivedValue,
+  type DerivedValue,
+  type SharedValue,
+} from "react-native-reanimated";
 
 import type {
   BubbleOptics,
@@ -38,6 +44,7 @@ import type {
 } from "@/components/liquid-bubble-live/hooks/useBubbleOptics";
 
 import { BaselineBubble } from "./BaselineBubble";
+import { BubbleFilmOverlay, type BubbleFilm } from "./BubbleFilmOverlay";
 import type { BubbleIcon } from "./bubbleIcon";
 import { BubbleLabel } from "./BubbleLabel";
 import { useBirthOptics } from "./hooks/useBirthOptics";
@@ -83,6 +90,12 @@ export type LabeledBubbleProps = {
    * Needs `bubble.inflate`; undefined = the live look throughout.
    */
   birthOptics?: Partial<BubbleOpticsValues>;
+  /**
+   * Soap film drawn over the glass (liquid-bubble-live's overlay pass). When
+   * set, the glass's own cosine film is zeroed — the overlay replaces it.
+   * Undefined = the built-in film only.
+   */
+  film?: BubbleFilm;
 };
 
 // ============================================================================
@@ -103,6 +116,7 @@ export function LabeledBubble({
   showIcon = true,
   pixelDensity = 1,
   birthOptics,
+  film,
 }: LabeledBubbleProps) {
   // Undo the screen's `1 / pd`, so the label is authored in points like the
   // rest of the backdrop. Static — built once per pixelDensity.
@@ -118,6 +132,13 @@ export function LabeledBubble({
     inflate: bubble.inflate,
     birth: birthOptics,
   });
+
+  // With the overlay on, the glass drops its built-in film (as in
+  // liquid-bubble-live). Fixed for the mount, so a plain boolean capture.
+  const hasFilm = film !== undefined;
+  const glassUniforms = useDerivedValue(() =>
+    hasFilm ? { ...born.uniforms.value, iFilm: 0 } : born.uniforms.value,
+  );
 
   return (
     <>
@@ -135,11 +156,22 @@ export function LabeledBubble({
       <BaselineBubble
         index={index}
         paramBuffer={paramBuffer}
-        uniforms={born.uniforms}
+        uniforms={glassUniforms}
         optics={optics}
         pixelDensity={pixelDensity}
         padOverride={born.clipPad}
       />
+      {film && (
+        <Group transform={toPoints}>
+          <BubbleFilmOverlay
+            index={index}
+            paramBuffer={paramBuffer}
+            uniforms={born.uniforms}
+            optics={optics}
+            film={film}
+          />
+        </Group>
+      )}
     </>
   );
 }
