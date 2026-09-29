@@ -83,9 +83,6 @@ import { backgroundEffect } from "@/components/liquid-bubble-live/backgroundShad
 import {
   FLOAT_BUOYANCY_LEVER_DEFAULT,
   FLOAT_ON_DEFAULT,
-  INERTIA_DEFAULT,
-  STRENGTH_DEFAULT,
-  WOBBLE_DEFAULT,
 } from "@/components/liquid-bubble-live/bubbleModes";
 import { BubbleTuningPanel } from "@/components/liquid-bubble-live/BubbleTuningPanel";
 import { useBubbleOptics } from "@/components/liquid-bubble-live/hooks/useBubbleOptics";
@@ -98,7 +95,6 @@ import {
   BG_GRID_STRENGTH,
   BG_GRID_WIDTH,
   BG_SCROLL_RATE,
-  LIVE_REFRACT,
 } from "@/components/liquid-bubble-live/liveConfig";
 
 import { BouncyRipplePrismShader } from "@/components/premium/shaders";
@@ -119,6 +115,10 @@ import {
   INTRO_LABEL_SIZE,
   INTRO_LABEL_WIDTH_MUL,
   INTRO_RADIUS_MUL,
+  MULTI_INERTIA,
+  MULTI_OPTICS,
+  MULTI_STRENGTH,
+  MULTI_WOBBLE,
   NAME_HIGHLIGHT_COLOR,
   NAME_HIGHLIGHT_PAD_X,
   NAME_HIGHLIGHT_PAD_Y,
@@ -313,9 +313,11 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     floatOnValue.value = next ? 1 : 0;
   };
   const buoyancy = useSharedValue(FLOAT_BUOYANCY_LEVER_DEFAULT);
-  const wobble = useSharedValue(WOBBLE_DEFAULT);
-  const inertia = useSharedValue(INERTIA_DEFAULT);
-  const strength = useSharedValue(STRENGTH_DEFAULT);
+  // This demo's own shape defaults (multiBubbleConfig.ts), not the shared
+  // liquid-bubble-live ones — see the README's LiquidBubblesMulti.tsx section.
+  const wobble = useSharedValue(MULTI_WOBBLE);
+  const inertia = useSharedValue(MULTI_INERTIA);
+  const strength = useSharedValue(MULTI_STRENGTH);
   const isDay = useSharedValue(true);
 
   // Every overlay (button row, tuning panel, scrub bar) hides behind this —
@@ -617,7 +619,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const { optics, defaults, uniforms } = useBubbleOptics({
     paramBuffer,
     tintColor: BUBBLE_TINT,
-    refract: LIVE_REFRACT,
+    overrides: MULTI_OPTICS,
   });
 
   // ==========================================================================
@@ -851,11 +853,11 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       {showControls && panel === "bubble" && (
         <BubbleTuningPanel
           wobble={wobble}
-          wobbleDefault={WOBBLE_DEFAULT}
+          wobbleDefault={MULTI_WOBBLE}
           inertia={inertia}
-          inertiaDefault={INERTIA_DEFAULT}
+          inertiaDefault={MULTI_INERTIA}
           strength={strength}
-          strengthDefault={STRENGTH_DEFAULT}
+          strengthDefault={MULTI_STRENGTH}
           size={bubbleSize}
           sizeDefault={INTRO_BASE_RADIUS}
           sizeMin={0}
@@ -929,7 +931,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         )}
       </View>
 
-      {showControls && SHOW_SCRUB_BAR && (
+      {/* Hidden whenever a tuning panel is open: the panel and the bar fight
+          for the same screen space (both pinned near the bottom). */}
+      {showControls && SHOW_SCRUB_BAR && panel === "none" && (
         <IntroScrubBar progress={intro.progress} play={intro.play} />
       )}
     </>

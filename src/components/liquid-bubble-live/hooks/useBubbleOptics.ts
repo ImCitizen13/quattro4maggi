@@ -83,6 +83,14 @@ export type UseBubbleOpticsParams = {
   tintColor: readonly [number, number, number];
   /** Starting `iRefract`, pt. @default REFRACT */
   refract?: number;
+  /**
+   * Per-demo starting values, overriding the shared `bubbleModes` defaults for
+   * the levers named. They seed BOTH the live shared values AND the returned
+   * `defaults`, so a tuning panel's Reset returns to THIS demo's look rather
+   * than the global one. Omit it and nothing changes. `overrides.refract`
+   * WINS over the standalone `refract` param when both are given.
+   */
+  overrides?: Partial<BubbleOpticsValues>;
 };
 
 /** Uniforms the Live bubble shader declares (see its `UNIFORM_NAMES`). */
@@ -134,24 +142,43 @@ export function useBubbleOptics({
   paramBuffer,
   tintColor,
   refract: refractDefault = REFRACT,
+  overrides,
 }: UseBubbleOpticsParams): UseBubbleOpticsResult {
-  const refract = useSharedValue(refractDefault);
-  const falloff = useSharedValue(OPTICS_FALLOFF);
-  const lens = useSharedValue(LENS);
-  const dispersion = useSharedValue(DISPERSION);
-  const edgeWidth = useSharedValue(EDGE_WIDTH);
-  const film = useSharedValue(FILM);
-  const filmReach = useSharedValue(FILM_REACH);
-  const filmScale = useSharedValue(FILM_SCALE);
-  const tint = useSharedValue(TINT);
-  const specular = useSharedValue(SPECULAR);
-  const rimDark = useSharedValue(RIM_DARK);
-  const rimWidth = useSharedValue(RIM_WIDTH);
-  const rainbowMix = useSharedValue(RAINBOW_MIX);
-  const rainbowGlow = useSharedValue(RAINBOW_GLOW);
-  const haloSpread = useSharedValue(HALO_SPREAD);
-  const haloOpacity = useSharedValue(HALO_OPACITY);
-  const palette = useSharedValue(PRISM_PALETTE);
+  const refractInitial = overrides?.refract ?? refractDefault;
+  const falloffInitial = overrides?.falloff ?? OPTICS_FALLOFF;
+  const lensInitial = overrides?.lens ?? LENS;
+  const dispersionInitial = overrides?.dispersion ?? DISPERSION;
+  const edgeWidthInitial = overrides?.edgeWidth ?? EDGE_WIDTH;
+  const filmInitial = overrides?.film ?? FILM;
+  const filmReachInitial = overrides?.filmReach ?? FILM_REACH;
+  const filmScaleInitial = overrides?.filmScale ?? FILM_SCALE;
+  const tintInitial = overrides?.tint ?? TINT;
+  const specularInitial = overrides?.specular ?? SPECULAR;
+  const rimDarkInitial = overrides?.rimDark ?? RIM_DARK;
+  const rimWidthInitial = overrides?.rimWidth ?? RIM_WIDTH;
+  const rainbowMixInitial = overrides?.rainbowMix ?? RAINBOW_MIX;
+  const rainbowGlowInitial = overrides?.rainbowGlow ?? RAINBOW_GLOW;
+  const haloSpreadInitial = overrides?.haloSpread ?? HALO_SPREAD;
+  const haloOpacityInitial = overrides?.haloOpacity ?? HALO_OPACITY;
+  const paletteInitial = overrides?.palette ?? PRISM_PALETTE;
+
+  const refract = useSharedValue(refractInitial);
+  const falloff = useSharedValue(falloffInitial);
+  const lens = useSharedValue(lensInitial);
+  const dispersion = useSharedValue(dispersionInitial);
+  const edgeWidth = useSharedValue(edgeWidthInitial);
+  const film = useSharedValue(filmInitial);
+  const filmReach = useSharedValue(filmReachInitial);
+  const filmScale = useSharedValue(filmScaleInitial);
+  const tint = useSharedValue(tintInitial);
+  const specular = useSharedValue(specularInitial);
+  const rimDark = useSharedValue(rimDarkInitial);
+  const rimWidth = useSharedValue(rimWidthInitial);
+  const rainbowMix = useSharedValue(rainbowMixInitial);
+  const rainbowGlow = useSharedValue(rainbowGlowInitial);
+  const haloSpread = useSharedValue(haloSpreadInitial);
+  const haloOpacity = useSharedValue(haloOpacityInitial);
+  const palette = useSharedValue(paletteInitial);
 
   const [red, green, blue] = tintColor;
 
@@ -195,23 +222,23 @@ export function useBubbleOptics({
       palette,
     },
     defaults: {
-      refract: refractDefault,
-      falloff: OPTICS_FALLOFF,
-      lens: LENS,
-      dispersion: DISPERSION,
-      edgeWidth: EDGE_WIDTH,
-      film: FILM,
-      filmReach: FILM_REACH,
-      filmScale: FILM_SCALE,
-      tint: TINT,
-      specular: SPECULAR,
-      rimDark: RIM_DARK,
-      rimWidth: RIM_WIDTH,
-      rainbowMix: RAINBOW_MIX,
-      rainbowGlow: RAINBOW_GLOW,
-      haloSpread: HALO_SPREAD,
-      haloOpacity: HALO_OPACITY,
-      palette: PRISM_PALETTE,
+      refract: refractInitial,
+      falloff: falloffInitial,
+      lens: lensInitial,
+      dispersion: dispersionInitial,
+      edgeWidth: edgeWidthInitial,
+      film: filmInitial,
+      filmReach: filmReachInitial,
+      filmScale: filmScaleInitial,
+      tint: tintInitial,
+      specular: specularInitial,
+      rimDark: rimDarkInitial,
+      rimWidth: rimWidthInitial,
+      rainbowMix: rainbowMixInitial,
+      rainbowGlow: rainbowGlowInitial,
+      haloSpread: haloSpreadInitial,
+      haloOpacity: haloOpacityInitial,
+      palette: paletteInitial,
     },
     uniforms,
   };

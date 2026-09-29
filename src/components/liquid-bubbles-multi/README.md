@@ -155,7 +155,9 @@ flowchart TD
 - **`IntroScrubBar`** (`SHOW_SCRUB_BAR`, bottom of the screen): drags
   `intro.progress` directly to choreograph the intro by hand, plus a
   Play/Pause pair. See [`animation_timeline.md`](animation_timeline.md) and
-  the component's own header. Off it for an FPS run.
+  the component's own header. Off it for an FPS run. Hidden whenever a
+  tuning panel (Text or Bubble) is open — both are pinned near the bottom
+  and would otherwise overlap.
 - **`CRISP_BUBBLES` / the DPR sandwich:** Skia can't apply the canvas matrix
   to a `RuntimeShader` image filter, so it factors the scale out and
   snapshots the backdrop at **1 texel per local unit** — at logical size
@@ -201,6 +203,14 @@ flowchart TD
   `birthOptics={undefined}`, the hook's pass-through, at no cost. The trigger
   and the solo bubble never get `birthOptics` at all, since neither has an
   `inflate` curve to cross over from.
+- **This demo carries its own lever defaults** (`MULTI_WOBBLE`,
+  `MULTI_INERTIA`, `MULTI_STRENGTH`, `MULTI_OPTICS`) in `multiBubbleConfig.ts`
+  rather than editing the shared `bubbleModes.ts` — those constants are also
+  tuned for the four single-bubble demos, and changing them there would
+  silently restyle all of them. They seed the panel's Reset too, not just the
+  initial look: `useBubbleOptics`'s `overrides` param feeds `MULTI_OPTICS`
+  into both the live shared values AND the returned `defaults`, so "Reset all"
+  in the Bubble panel returns to this demo's own look, not the global one.
 
 ### hooks/useSceneRipple.ts
 

@@ -327,3 +327,27 @@ export const BIRTH_SWAP_START = 0.8;
  * long the remaining inflate takes.
  */
 export const BIRTH_SWAP_MS = 1800;
+
+// ============================================================================
+// This demo's own lever defaults (shape + optics)
+// ============================================================================
+
+/**
+ * This demo's own shape levers, overriding the shared `bubbleModes` defaults.
+ * Kept here rather than in `bubbleModes.ts` because those constants are shared
+ * with the single-bubble demos, which are tuned differently.
+ */
+export const MULTI_WOBBLE = 2.7;
+export const MULTI_INERTIA = 1.88;
+export const MULTI_STRENGTH = 2.0;
+
+/** This demo's own optics, same reasoning — fed to `useBubbleOptics`'s `overrides`. */
+export const MULTI_OPTICS: Partial<BubbleOpticsValues> = {
+  refract: 33.2,
+  falloff: 1.18,
+  lens: 0.03,
+  dispersion: 0.67,
+  film: 0.64,
+  filmScale: 3.9,
+  tint: 0.55,
+};
