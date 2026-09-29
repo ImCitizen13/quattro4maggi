@@ -47,9 +47,9 @@ export const SPAWN_SPREAD = 40;
 
 /** Size the font is loaded at, pt. The Size slider scales from this. */
 export const TEXT_BASE_SIZE = 48;
-export const TEXT_SIZE_DEFAULT = 40;
+export const TEXT_SIZE_DEFAULT = 48;
 /** Vertical offset from the screen center, pt (+ = down). */
-export const TEXT_Y_DEFAULT = 0;
+export const TEXT_Y_DEFAULT = -35;
 /**
  * Highlighter swatch behind the name. The rect is the name line's own glyph
  * box (ascent above the baseline, descent below) grown by these pads — all in
