@@ -154,7 +154,7 @@ export const INTRO_LABEL_WIDTH_MUL = 1.45;
 export const TRIGGER_LABEL = "Go";
 
 /** Trigger bubble's rest radius, pt (fixed — doesn't follow the Size slider). */
-export const TRIGGER_RADIUS = 46;
+export const TRIGGER_RADIUS = 64;
 
 /**
  * Vertical gap between the greeting paragraph's bottom edge and the trigger's
@@ -165,7 +165,7 @@ export const TRIGGER_RADIUS = 46;
 export const TRIGGER_GAP = 28;
 
 /** Trigger label type size, pt. */
-export const TRIGGER_LABEL_SIZE = 16;
+export const TRIGGER_LABEL_SIZE = 22;
 
 /** Trigger label wrap width, as a × of `TRIGGER_RADIUS`. */
 export const TRIGGER_LABEL_WIDTH_MUL = 1.6;
