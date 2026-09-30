@@ -36,7 +36,7 @@
  * - Built-in cosine film only (no soap-film overlay pass).
  * - `SCENE_RIPPLE`: the whole frame runs through the bouncy-ripple prism
  *   shader, fired from the centre just before the bubbles bloom.
- * - Top-right panels: Text and Bubble. FPS readout top-left.
+ * - Top-right panels: Text and Bubble. FPS pill just below the Dynamic Island.
  * - Every overlay — the button row, whichever panel is open, the scrub bar —
  *   sits behind one "Controls" button (top-right, always shown), so the
  *   scene can be watched or recorded with nothing drawn over it. The FPS
@@ -78,7 +78,7 @@ import {
 } from "react-native-reanimated";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
-import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { IslandFps } from "@/components/common/IslandFps";
 import { backgroundEffect } from "@/components/liquid-bubble-live/backgroundShaders";
 import {
   FLOAT_BUOYANCY_LEVER_DEFAULT,
@@ -961,7 +961,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         </Canvas>
       </GestureDetector>
 
-      <FpsOverlay dark />
+      <IslandFps />
 
       {/* Everything below "Controls" is gated on `showControls` — the whole
           point is to be able to watch or record the scene with nothing
