@@ -101,6 +101,86 @@ export const SPRING_REFRESH_SETTLE = {
   reduceMotion: ReduceMotion.System,
 };
 
+/** Soap Film: squircle scale slider/pinch → size. Snappy, minimal overshoot. */
+export const SPRING_SQUIRCLE_SCALE = {
+  stiffness: 260,
+  damping: 26,
+  mass: 1,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
+/** Soap Film: film on/off crossfade opacity. */
+export const SPRING_FILM_CROSSFADE = {
+  stiffness: 180,
+  damping: 24,
+  mass: 1,
+  overshootClamping: true,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
+/**
+ * Liquid Bubble Live: bubble inflating out of the spawn box, R ≈ 1 → target.
+ * dampingRatio 0.6 gives one soft overshoot (a "pop" to size). `duration`
+ * is a fallback: useBubbleFloat overrides it with `BIRTH_TIME` so inflation
+ * and the motion ease-in share one time factor.
+ */
+export const SPRING_BUBBLE_INFLATE = {
+  duration: 1500,
+  dampingRatio: 0.6,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
+/**
+ * Liquid Bubble Arc: carousel snapping to the nearest image after a drag or
+ * flick. Physics-based (stiffness/damping, no duration) so the release
+ * velocity carries into the snap. Slightly underdamped: one small settle.
+ */
+export const SPRING_ARC_SNAP = {
+  stiffness: 170, // TUNE: higher = snappier settle
+  damping: 22, // TUNE: lower = more overshoot past the slot
+  mass: 1,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
+/**
+ * Liquid Bubble Stack: the bubble pair springing back to the screen center
+ * after a drag. Physics-based so the release velocity carries into the return.
+ */
+export const SPRING_BUBBLE_RECENTER = {
+  stiffness: 120, // TUNE: higher = faster return
+  damping: 14, // TUNE: lower = more overshoot past the center
+  mass: 1,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
+/**
+ * Liquid Bubbles Multi: a pressed bubble rising to the top centre while the
+ * others scroll off and the detail card slides up under it. One soft
+ * overshoot, so the card and the bubble settle into place together.
+ */
+export const SPRING_BUBBLE_SELECT = {
+  duration: 1690, // 0.65× the original 1100 ms speed
+  dampingRatio: 0.82,
+  overshootClamping: false,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
+
 export const SPRING_BOUNCE_ANIMATION = {
   duration: 1000,
   dampingRatio: 0.5,

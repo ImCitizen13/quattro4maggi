@@ -1,0 +1,1122 @@
+/**
+ * LiquidBubblesMulti — a trigger bubble that, tapped, blooms the greeting
+ * into four labelled bubbles. Design notes: README.md → "LiquidBubblesMulti.tsx".
+ *
+ * FLOW:
+ *   onLayout → size → MultiBubbleScene (physics needs the real bounds)
+ *   fontMgr ready → intro.reset() arms rest state (progress → 0)
+ *   tap the trigger (GestureDetector + Gesture.Tap, hit-test in a worklet)
+ *     → scheduleOnRN(intro.play), which runs `progress` 0 → 1
+ *   useIntroTimeline → one `progress` value + textOpacity + four pinned
+ *     bubbles + the trigger bubble, every one a pure function of progress
+ *   useMultiBubblePhysics → one flat buffer (12 floats per bubble)
+ *   useSceneRipple → fires a ripple when `progress` crosses just before the
+ *     bubbles bloom; it is a layer over the whole canvas
+ *   draw: background image → greeting (× intro.textOpacity)
+ *     → LabeledBubble × 4 (label then glass) → the trigger
+ *     → all of it through the ripple layer
+ *
+ * KEY FEATURES:
+ * - No autoplay: the screen sits at rest — full-size greeting, a small "Go"
+ *   trigger bubble centred under it. Tapping the trigger runs the intro: the
+ *   trigger swells while drifting up to the text centre, the greeting fades
+ *   out once it reaches full size, the trigger collapses into that point, and
+ *   four bubbles of slightly different sizes are born there and wobble out to
+ *   the corners of a tilted quad, drifting there for good.
+ * - Each bubble (the trigger included) carries its own label — an icon over a
+ *   line of text — drawn BEFORE the glass, so the bubble refracts its own
+ *   contents. "Reset" collapses back to the rest state instead of re-running
+ *   the intro from a play.
+ * - `IntroScrubBar` (`SHOW_SCRUB_BAR`) drags `intro.progress` by hand — see
+ *   useIntroTimeline.ts's header for why the whole intro is a pure function
+ *   of one scrubbable value.
+ * - Phase 2: every bubble is today's single-bubble pass (the stress
+ *   baseline) — five of them now, ~15 pass breaks. Phase 3 swaps them for
+ *   one looping pass.
+ * - Built-in cosine film only (no soap-film overlay pass).
+ * - `SCENE_RIPPLE`: the whole frame runs through the bouncy-ripple prism
+ *   shader, fired from the centre just before the bubbles bloom.
+ * - Top-right panels: Text and Bubble. FPS pill just below the Dynamic Island.
+ * - No navigation header: a back arrow top-left (as in the Wabi demo), level
+ *   with the Controls row.
+ * - Every overlay — the button row, whichever panel is open, the scrub bar —
+ *   sits behind one "Controls" button (top-right, always shown), so the
+ *   scene can be watched or recorded with nothing drawn over it. The FPS
+ *   readout is exempt: it's a readout, not a control.
+ */
+
+import {
+  Canvas,
+  Fill,
+  Rect,
+  RuntimeShader,
+  Shader,
+  rect,
+  useImage,
+  Image,
+  Group,
+  Paint,
+  Paragraph,
+  RoundedRect,
+  Skia,
+  TextAlign,
+  useFonts,
+  Path,
+} from "@shopify/react-native-skia";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { PressableScale } from "pressto";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  PixelRatio,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
+import {
+  interpolate,
+  useDerivedValue,
+  useSharedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
+
+import { IslandFps } from "@/components/common/IslandFps";
+import { backgroundEffect } from "@/components/liquid-bubble-live/backgroundShaders";
+import {
+  FLOAT_BUOYANCY_LEVER_DEFAULT,
+  FLOAT_ON_DEFAULT,
+} from "@/components/liquid-bubble-live/bubbleModes";
+import { BubbleTuningPanel } from "@/components/liquid-bubble-live/BubbleTuningPanel";
+import { useBubbleOptics } from "@/components/liquid-bubble-live/hooks/useBubbleOptics";
+import { useClock } from "@/components/liquid-bubble-live/hooks/useClock";
+import {
+  BG_BAND_DIR_X,
+  BG_BAND_DIR_Y,
+  BG_GRID_DENSITY,
+  BG_GRID_DRIFT,
+  BG_GRID_STRENGTH,
+  BG_GRID_WIDTH,
+  BG_SCROLL_RATE,
+} from "@/components/liquid-bubble-live/liveConfig";
+import { FILM_OVERLAY_SIZE } from "@/components/liquid-bubble-live/filmOverlayShader";
+import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
+import {
+  FILM_TOUCH_AGE_INACTIVE,
+  FILM_TOUCH_SLOTS,
+} from "@/components/soap-film/soapFilmConfig";
+import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
+
+import { BouncyRipplePrismShader } from "@/components/premium/shaders";
+
+import { BaselineBubble } from "./BaselineBubble";
+import type { BubbleFilm } from "./BubbleFilmOverlay";
+import { useBubbleSelect } from "./hooks/useBubbleSelect";
+import { useIntroTimeline } from "./hooks/useIntroTimeline";
+import { useSceneRipple } from "./hooks/useSceneRipple";
+import { INTRO_ICONS } from "./IconPaths";
+import { LabeledBubble } from "./LabeledBubble";
+import { SelectCard } from "./SelectCard";
+import { IntroScrubBar } from "./IntroScrubBar";
+import { useMultiBubblePhysics } from "./hooks/useMultiBubblePhysics";
+import {
+  BIRTH_OPTICS,
+  BUBBLE_COUNT,
+  INTRO_BASE_RADIUS,
+  INTRO_COUNT,
+  INTRO_LABELS,
+  SELECT_CARD_PAD,
+  SELECT_CARD_WIDTH,
+  SELECT_DESCRIPTIONS,
+  SELECT_POINT_SIZE,
+  INTRO_LABEL_SIZE,
+  INTRO_LABEL_WIDTH_MUL,
+  INTRO_RADIUS_MUL,
+  MULTI_INERTIA,
+  MULTI_OPTICS,
+  BUBBLE_SOAP_FILM,
+  MULTI_STRENGTH,
+  MULTI_WOBBLE,
+  NAME_HIGHLIGHT_COLOR,
+  NAME_HIGHLIGHT_PAD_X,
+  NAME_HIGHLIGHT_PAD_Y,
+  NAME_HIGHLIGHT_RADIUS,
+  TEXT_BASE_SIZE,
+  TEXT_BUBBLE_X_DEFAULT,
+  TEXT_BUBBLE_Y_DEFAULT,
+  TEXT_SIZE_DEFAULT,
+  TEXT_Y_DEFAULT,
+  TRIGGER_GAP,
+  TRIGGER_LABEL,
+  TRIGGER_LABEL_SIZE,
+  TRIGGER_LABEL_WIDTH_MUL,
+  TRIGGER_RADIUS,
+  UNDERLINE_GAP_DEFAULT,
+  UNDERLINE_WIDTH_DEFAULT,
+} from "./multiBubbleConfig";
+import { TextTuningPanel, type TextControls } from "./TextTuningPanel";
+
+// ============================================================================
+// Config
+// ============================================================================
+
+/** Spawn area size, pt (no box is drawn). Bubbles inflate out of its top edge. */
+const BOX_SIZE = 120;
+
+/** Gap between the spawn area and the bottom edge, pt. */
+const BOX_BOTTOM_OFFSET = 40;
+
+/** Upper bound of the Bubble panel's Refract slider, pt (same as the single bubble). */
+const LIVE_REFRACT_SLIDER_MAX = 40;
+
+/** Tint hue, rgb 0..1 (same as the single bubble). */
+const BUBBLE_TINT: [number, number, number] = [0.85, 0.93, 1.0];
+
+/**
+ * Render the bubbles' backdrop at device resolution instead of at logical
+ * points. Skia can't apply the canvas matrix to a `RuntimeShader` image
+ * filter, so it factors the scale out and snapshots the backdrop at 1 texel
+ * per local unit — at logical size, every texel is then blown up `pd`× and
+ * the text seen through the glass looks pixelated.
+ *
+ * The fix is to make one local unit = one device pixel: draw everything
+ * inside a `1 / pd` group (so the bubbles' local space is device pixels) and
+ * put the backdrop content back in points with a matching `pd` group.
+ *
+ * It costs `pd²` (≈ 9×) the texels per pass, so it is a flag: set it false
+ * to compare FPS.
+ */
+const CRISP_BUBBLES = true;
+
+/** Local units per point inside the canvas. 1 = the old, logical-res look. */
+const PD = CRISP_BUBBLES ? PixelRatio.get() : 1;
+
+/** Outer group: puts the canvas in device pixels for the bubble passes. */
+const DPR_DOWN = [{ scale: 1 / PD }];
+
+/** Inner group: backdrop content stays authored in logical points. */
+const DPR_UP = [{ scale: PD }];
+
+/** Floating bubbles on/off. Off = only the bubble pinned over the text. */
+const SHOW_FLOATERS = false;
+
+/**
+ * Preview ONE bubble — centred, permanently inflated, no intro. It is an
+ * index into `INTRO_LABELS` / `INTRO_ICONS`; `null` renders the full scene.
+ *
+ * For tuning a bubble's label, icon, padding and optics without playing the
+ * intro to get there. The Bubble panel's Size slider still drives it, so the
+ * whole optics stack is live.
+ */
+const SOLO_BUBBLE: number | null = null;
+
+/** The intro's hand-scrub bar. Off for an FPS run — it costs a gesture + a few derived reads. */
+const SHOW_SCRUB_BAR = true;
+
+/**
+ * Run the whole scene through the bouncy-ripple prism shader, fired just
+ * before the bubbles bloom (`useSceneRipple`).
+ *
+ * It is a flag because it is not free even at rest: the layer is a
+ * FULL-SCREEN `saveLayer` at device resolution every frame, and the shader
+ * samples the image three times per pixel (one per colour channel, for the
+ * dispersion). When no ripple is running the wave term is exactly 0, so it
+ * reads as a pass-through — but the layer and the resampling are still paid.
+ * Flip it off to compare FPS, the same way `CRISP_BUBBLES` works.
+ */
+const SCENE_RIPPLE = true;
+
+/**
+ * The four intro bubbles wear an exaggerated "birth" glass while they
+ * inflate, crossing over to the screen's live optics once each bubble's own
+ * inflate curve reaches `BIRTH_SWAP_START` — the crossover then runs over a
+ * fixed `BIRTH_SWAP_MS` on its own clock, not the rest of the inflate curve
+ * (see `useBirthOptics`). Off = `birthOptics={undefined}` on every intro
+ * bubble, a pass-through at no cost — `useBirthOptics` returns the caller's
+ * own `uniforms` unchanged and allocates nothing.
+ */
+const BIRTH_OPTICS_ON = true;
+
+/** Floating bubbles actually run. Solo mode always forces them off. */
+const FLOATER_COUNT = SHOW_FLOATERS && SOLO_BUBBLE === null ? BUBBLE_COUNT : 0;
+
+/** Slot indices, built once. */
+const SLOTS = Array.from({ length: FLOATER_COUNT }, (_, i) => i);
+
+/** Intro bubble slots: right after the floaters. */
+const INTRO_SLOTS = Array.from(
+  { length: INTRO_COUNT },
+  (_, i) => FLOATER_COUNT + i,
+);
+
+/** The trigger bubble's slot: right after the four intro bubbles. */
+const TRIGGER_SLOT = FLOATER_COUNT + INTRO_COUNT;
+
+/** Solo mode's one bubble takes pinned slot 0 — there are no floaters to share it with. */
+const SOLO_SLOT = 0;
+
+/** Tap slop on the trigger bubble, as a × of its radius — comfortable to hit. */
+const TRIGGER_TAP_SLOP = 1.25;
+
+const TEXT = "Good ";
+const NAME_TEXT = ["Mohamed", "Jack", "Lily", "Marco"];
+
+/** Hand-drawn squiggle used as the rule under the name. */
+const SQWIGGLE =
+  "M1.5 20.4978C12.5 20.4978 10.1182 1.42341 16.4164 1.50038C22.6549 1.57662 24.9291 20.2673 31.1671 20.4978C37.4169 20.7288 39.8333 2.52727 46.0836 2.52727C52.3338 2.52727 54.7498 20.4978 61 20.4978C67.2502 20.4978 69.6662 2.52727 75.9164 2.52727C82.1667 2.52727 84.5827 20.4978 90.8329 20.4978C97.0831 20.4978 100.75 2.45389 107 2.52727C113.19 2.59994 114.5 20.4978 120.5 20.4978";
+
+/** The squiggle's own size, pt: it is scaled from this to the name's width. */
+const SQWIGGLE_W = 122;
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export type LiquidBubblesMultiProps = {
+  /** Mean birth radius, points — each bubble is `× BIRTH_RADIUS_RANGE`. */
+  restRadius?: number;
+};
+
+type Panel = "none" | "text" | "bubble";
+
+type SceneProps = {
+  width: number;
+  height: number;
+  restRadius: number;
+};
+
+// ============================================================================
+// Component
+// ============================================================================
+
+export function LiquidBubblesMulti({
+  restRadius = 50,
+}: LiquidBubblesMultiProps) {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (!size || size.width !== width || size.height !== height) {
+      setSize({ width, height });
+    }
+  };
+
+  return (
+    <View style={styles.container} onLayout={onLayout}>
+      {size && (
+        // Keyed by size: the physics captures the bounds, so a new size
+        // remounts it with the new walls and spawn point.
+        <MultiBubbleScene
+          key={`${size.width}x${size.height}`}
+          width={size.width}
+          height={size.height}
+          restRadius={restRadius}
+        />
+      )}
+    </View>
+  );
+}
+
+function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
+  // ==========================================================================
+  // Levers (slider bases; each bubble multiplies them by its traits)
+  // ==========================================================================
+
+  const [floatOn, setFloatOn] = useState(FLOAT_ON_DEFAULT);
+  const floatOnValue = useSharedValue(FLOAT_ON_DEFAULT ? 1 : 0);
+  const toggleFloat = () => {
+    const next = !floatOn;
+    setFloatOn(next);
+    floatOnValue.value = next ? 1 : 0;
+  };
+  const buoyancy = useSharedValue(FLOAT_BUOYANCY_LEVER_DEFAULT);
+  // This demo's own shape defaults (multiBubbleConfig.ts), not the shared
+  // liquid-bubble-live ones — see the README's LiquidBubblesMulti.tsx section.
+  const wobble = useSharedValue(MULTI_WOBBLE);
+  const inertia = useSharedValue(MULTI_INERTIA);
+  const strength = useSharedValue(MULTI_STRENGTH);
+  const isDay = useSharedValue(true);
+
+  // Every overlay (button row, tuning panel, scrub bar) hides behind this —
+  // default false so the scene opens on an unobstructed view, fit for
+  // watching or recording. The "Controls" button itself always renders.
+  const [showControls, setShowControls] = useState(false);
+
+  // One panel open at a time (React state — changes only on tap).
+  const [panel, setPanel] = useState<Panel>("none");
+  const togglePanel = (next: Panel) =>
+    setPanel((current) => (current === next ? "none" : next));
+
+  const greeting = TEXT + (isDay.value ? "Morning" : "Night");
+  // Text panel levers (UI thread; no re-render while dragging).
+  const textControls: TextControls = {
+    size: useSharedValue(TEXT_SIZE_DEFAULT),
+    y: useSharedValue(TEXT_Y_DEFAULT),
+    underlineWidth: useSharedValue(UNDERLINE_WIDTH_DEFAULT),
+    underlineGap: useSharedValue(UNDERLINE_GAP_DEFAULT),
+    bubbleX: useSharedValue(TEXT_BUBBLE_X_DEFAULT),
+    bubbleY: useSharedValue(TEXT_BUBBLE_Y_DEFAULT),
+  };
+  // Mean bubble radius: the Bubble panel's Shape → Size slider. Each intro
+  // bubble multiplies it by its own `INTRO_RADIUS_MUL`.
+  const bubbleSize = useSharedValue(INTRO_BASE_RADIUS);
+
+  // ==========================================================================
+  // Solo bubble preview (SOLO_BUBBLE) — built unconditionally so hooks never
+  // run conditionally; only the JSX and `pinned` below branch on the flag.
+  // Pinned dead centre, permanently inflated. `r` reads the Bubble panel's
+  // Size slider so the optics stay tunable; labelOpacity is 1 because there
+  // is no intro to fade it in.
+  // ==========================================================================
+
+  const soloIndex = SOLO_BUBBLE ?? 0;
+  const soloX = useDerivedValue(() => width / 2);
+  const soloY = useDerivedValue(() => height / 2);
+  const soloR = useDerivedValue(
+    () => bubbleSize.value * INTRO_RADIUS_MUL[soloIndex],
+  );
+  const soloOpacity = useDerivedValue(() => 1);
+  const soloBubble = useMemo(
+    () => ({ x: soloX, y: soloY, r: soloR, labelOpacity: soloOpacity }),
+    // the derived values are stable for the mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // ==========================================================================
+  // Greeting text (before the physics: the bubble is placed off its height)
+  // ==========================================================================
+
+  const name = NAME_TEXT[0];
+
+  // const fontMgr = useFonts({
+  //   Boldonse: [require("../../assets/fonts/Boldonse-Regular.ttf")],
+  //   Lexend: [require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf")],
+  //   PTSerif: [
+  //     require("../../assets/fonts/PTSerif-Regular.ttf"),
+  //     require("../../assets/fonts/PTSerif-Bold.ttf"),
+  //   ],
+  // });
+
+  // "Good Morning" / name on two lines, center-aligned, laid out once at
+  // TEXT_BASE_SIZE across the screen width. The Size slider scales the whole
+  // group, so dragging never rebuilds the paragraph or re-renders.
+  const paragraph = useMemo(() => {
+    // if (!fontMgr) {
+    //   return null;
+    // }
+
+
+    const p = Skia.ParagraphBuilder.Make(
+      { textAlign: TextAlign.Center },
+      // fontMgr,
+    )
+      .pushStyle({
+        // fontFamilies: ["PTSerif"],
+        fontStyle: { weight: 200 },
+        fontSize: TEXT_BASE_SIZE,
+        letterSpacing: 0.1,
+        color: Skia.Color("#242424"),
+      })
+      .addText(`${greeting}\n`)
+      .pop()
+      .pushStyle({
+        // fontFamilies: ["PTSerif"],
+        fontStyle: { weight: 200 },
+        fontSize: TEXT_BASE_SIZE,
+        letterSpacing: 0.1,
+        color: Skia.Color("#1c4b62"),//#e8a519
+      })
+      .addText(name)
+      .pop()
+      .build();
+    p.layout(width);
+    return p;
+  }, [ name, width]);
+
+  // One paragraph per bubble label, laid out at that bubble's rest size.
+  // `BubbleLabel` only scales the result, so a bubble's text never re-measures.
+  const labels = useMemo(() => {
+    // if (!fontMgr) {
+    //   return [];
+    // }
+    return INTRO_LABELS.slice(0, INTRO_COUNT).map((text, i) => {
+      const rest = INTRO_BASE_RADIUS * INTRO_RADIUS_MUL[i];
+      const labelWidth = rest * INTRO_LABEL_WIDTH_MUL;
+      const p = Skia.ParagraphBuilder.Make(
+        { textAlign: TextAlign.Center },
+        // fontMgr,
+      )
+        .pushStyle({
+          // fontFamilies: ["PTSerif"],
+          fontSize: INTRO_LABEL_SIZE,
+          color: Skia.Color("#0f1725"),
+        })
+        .addText(text)
+        .pop()
+        .build();
+      p.layout(labelWidth);
+      return { paragraph: p, width: labelWidth, height: p.getHeight(), rest };
+    });
+  }, []);
+
+  // The trigger bubble's own label, laid out the same way as the four.
+  const triggerLabel = useMemo(() => {
+    // if (!fontMgr) {
+    //   return null;
+    // }
+    const labelWidth = TRIGGER_RADIUS * TRIGGER_LABEL_WIDTH_MUL;
+    const p = Skia.ParagraphBuilder.Make(
+      { textAlign: TextAlign.Center },
+      // fontMgr,
+    )
+      .pushStyle({
+        fontStyle: {weight: 600},
+        // fontFamilies: ["PTSerif"],
+        fontSize: TRIGGER_LABEL_SIZE,
+        color: Skia.Color("#0f1725"),
+      })
+      .addText(TRIGGER_LABEL)
+      .pop()
+      .build();
+    p.layout(labelWidth);
+    return { paragraph: p, width: labelWidth, height: p.getHeight() };
+  }, []);
+
+  // One card paragraph per intro bubble: its points only — the chosen
+  // bubble above the card, grown to SELECT_SCALE, is the title. Laid out
+  // once at the card's inner width; the card only moves it. The card's
+  // height is the paragraph's measured height + the padding, top and bottom.
+  const cardParagraphs = useMemo(() => {
+    // if (!fontMgr) {
+    //   return [];
+    // }
+    const innerW = width * SELECT_CARD_WIDTH - 2 * SELECT_CARD_PAD;
+    return INTRO_LABELS.slice(0, INTRO_COUNT).map((_, i) => {
+      const points = (SELECT_DESCRIPTIONS[i] ?? []).map((pt) => `•  ${pt}`);
+      const p = Skia.ParagraphBuilder.Make(
+        { textAlign: TextAlign.Left },
+        // fontMgr,
+      )
+        .pushStyle({
+          // fontFamilies: ["PTSerif"],
+          fontSize: SELECT_POINT_SIZE,
+          heightMultiplier: 1.6,
+          color: Skia.Color("#1f2a3a"),
+        })
+        // Joined, not "\n"-terminated: a trailing newline adds an empty line.
+        .addText(points.join("\n"))
+        .pop()
+        .build();
+      p.layout(innerW);
+      return p;
+    });
+  }, [width]);
+  const cardHeights = useMemo(
+    () => cardParagraphs.map((p) => p.getHeight() + 2 * SELECT_CARD_PAD),
+    [cardParagraphs],
+  );
+
+  // Paragraph drawn centered on (0, 0); the group moves it to the screen
+  // center. The underline sits under line 2 (the name), from its measured
+  // left edge and width, `gap` below its baseline.
+  const paragraphH = paragraph ? paragraph.getHeight() : 0;
+  const paragraphX = -width / 2;
+  const paragraphY = -paragraphH / 2;
+  const nameLine = paragraph?.getLineMetrics()[1];
+  const underlineX = paragraphX + (nameLine?.left ?? 0);
+  const underlineBaseline = paragraphY + (nameLine?.baseline ?? 0);
+  const underlineW = nameLine?.width ?? 0;
+
+  const nameAscent = nameLine?.ascent ?? 0;
+  const nameDescent = nameLine?.descent ?? 0;
+
+  // ==========================================================================
+  // Intro timeline (text collapse → four bubbles out to the corners)
+  // ==========================================================================
+
+  const time = useClock();
+
+  // Trigger bubble: horizontally centred, `TRIGGER_GAP` under the paragraph's
+  // bottom edge. Derived, so dragging the Text panel's Size or Vertical slider
+  // carries it along without ever re-rendering. The paragraph's half-height is
+  // scaled by the same factor the text group uses — the bubble is drawn
+  // OUTSIDE that group, so it doesn't inherit the scale; the gap and the
+  // radius are left unscaled, so the bubble keeps its own size and spacing.
+  const triggerX = useSharedValue(width / 2);
+  const triggerY = useDerivedValue(() => {
+    const s = textControls.size.value / TEXT_BASE_SIZE;
+    return (
+      height / 2 +
+      textControls.y.value +
+      (paragraphH / 2) * s +
+      TRIGGER_GAP +
+      TRIGGER_RADIUS
+    );
+  });
+
+  const intro = useIntroTimeline({
+    centerX: width / 2,
+    centerY: height / 2 + TEXT_Y_DEFAULT,
+    radius: bubbleSize,
+    time,
+    offsetX: textControls.bubbleX,
+    offsetY: textControls.bubbleY,
+    triggerX,
+    triggerY,
+    triggerRadius: TRIGGER_RADIUS,
+  });
+
+  // Press an intro bubble: it rises to the top, the rest scroll off, the
+  // card slides up under it. Wraps the intro's bubbles — pass-through until
+  // one is pressed.
+  const selection = useBubbleSelect({
+    bubbles: intro.bubbles,
+    width,
+    height,
+    cardHeights,
+  });
+
+  // Rest state once the font is in, so the greeting is never drawn unstyled:
+  // full-size text, four bubbles gone, the trigger inflated in. Also what
+  // "Reset" runs — one code path for first paint and for the button.
+  const { reset } = intro;
+  useEffect(() => {
+    // if (fontMgr) {
+      reset();
+    // }
+  }, [ reset]);
+
+  // Tap the trigger bubble to run the intro. Coordinates are both in points
+  // (the canvas view isn't scaled — the DPR sandwich is internal to it), so
+  // no pixelDensity conversion is needed here.
+  const { play } = intro;
+  const { open: openBubble, close: closeBubble } = selection;
+  const selectBubbles = selection.bubbles;
+  const selectedIndex = selection.selected;
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap().onEnd((e, success) => {
+        // `success` is false for a cancelled tap (the finger slid off), same
+        // check the liquid-metal demo's tap makes.
+        if (!success) {
+          return;
+        }
+
+        // A bubble is open: any tap sends it back.
+        if (selectedIndex.value >= 0) {
+          closeBubble();
+          return;
+        }
+
+        // The intro has finished: the four bubbles are pressable.
+        if (intro.progress.value >= 1) {
+          for (let i = 0; i < selectBubbles.length; i++) {
+            const b = selectBubbles[i];
+            const bx = e.x - b.x.value;
+            const by = e.y - b.y.value;
+            const br = b.r.value;
+            if (br > 0 && bx * bx + by * by <= br * br) {
+              openBubble(i);
+              return;
+            }
+          }
+          return;
+        }
+
+        const dx = e.x - intro.trigger.x.value;
+        const dy = e.y - intro.trigger.y.value;
+        const r = intro.trigger.r.value;
+        if (r <= 0) {
+          return;
+        }
+        const slop = r * TRIGGER_TAP_SLOP;
+        if (dx * dx + dy * dy <= slop * slop) {
+          scheduleOnRN(play);
+        }
+      }),
+    // The intro's shared values are stable for the mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [play],
+  );
+
+  // The greeting no longer scales as part of the intro — only the Text
+  // panel's Size slider scales it. The intro instead fades it out via
+  // `intro.textOpacity` (see the Group below), driven by the trigger's swell.
+  const textTransform = useDerivedValue(() => [
+    { translateX: width / 2 },
+    { translateY: height / 2 + textControls.y.value },
+    { scale: textControls.size.value / TEXT_BASE_SIZE },
+  ]);
+
+  // The squiggle is authored at SQWIGGLE_W × SQWIGGLE_H from its own origin,
+  // so it is scaled to the name's width and moved under it. Uniform scale —
+  // scaling y alone would flatten the waves.
+  const squiggleScale = underlineW > 0 ? underlineW / SQWIGGLE_W : 1;
+  const squiggleTransform = useDerivedValue(() => [
+    { translateX: underlineX },
+    { translateY: underlineBaseline + textControls.underlineGap.value },
+    { scale: squiggleScale },
+  ]);
+  // Undo the scale so Underline width stays the stroke's real thickness.
+  const squiggleStroke = useDerivedValue(
+    () => textControls.underlineWidth.value,
+  );
+
+  // ==========================================================================
+  // Physics
+  // ==========================================================================
+
+  const spawnX = width / 2;
+  const spawnY = height - (BOX_SIZE + BOX_BOTTOM_OFFSET);
+
+  const { paramBuffer } = useMultiBubblePhysics({
+    count: FLOATER_COUNT,
+    width,
+    height,
+    spawnX,
+    spawnY,
+    restRadius,
+    enabled: floatOnValue,
+    buoyancy,
+    wobble,
+    inertia,
+    strength,
+    pinned:
+      SOLO_BUBBLE !== null
+        ? [soloBubble]
+        : [...selection.bubbles, intro.trigger],
+  });
+
+  // ==========================================================================
+  // Scene ripple — fires on `progress`, just before the bubbles bloom
+  // ==========================================================================
+
+  // Origin is the canvas centre, which is also where the trigger empties and
+  // the four bubbles are born. `pixelDensity` because the layer it paints
+  // sits inside DPR_DOWN, so its fragment coords are device pixels.
+  const ripple = useSceneRipple({
+    progress: intro.progress,
+    time,
+    width,
+    height,
+    pixelDensity: PD,
+  });
+
+  // One look for all; each BaselineBubble swaps in its own iParams.
+  const { optics, defaults, uniforms } = useBubbleOptics({
+    paramBuffer,
+    tintColor: BUBBLE_TINT,
+    overrides: MULTI_OPTICS,
+  });
+
+  // ==========================================================================
+  // Soap film over the labeled bubbles (liquid-bubble-live's overlay pass)
+  // ==========================================================================
+
+  // One film shared by every labeled bubble; each maps its own disk onto it.
+  // No touches: the ring buffer stays empty (every slot aged out), so the
+  // film flows on its own rather than trailing the bubble's motion.
+  const filmSize = useSharedValue<[number, number]>(FILM_OVERLAY_SIZE);
+  const filmTouch = useSharedValue<number[]>(
+    new Array(FILM_TOUCH_SLOTS * 4).fill(0),
+  );
+  const filmTouchAge = useSharedValue<number[]>(
+    new Array(FILM_TOUCH_SLOTS).fill(FILM_TOUCH_AGE_INACTIVE),
+  );
+  const soapFilm = useSoapFilmUniforms({
+    time,
+    size: filmSize,
+    touch: filmTouch,
+    touchAge: filmTouchAge,
+  });
+  const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
+  const bubbleFilm: BubbleFilm | undefined = BUBBLE_SOAP_FILM
+    ? { flow: soapFilm.flow, color: soapFilm.color, ramp: filmRamp }
+    : undefined;
+
+  // ==========================================================================
+  // Live background
+  // ==========================================================================
+
+  const backgroundUniforms = useDerivedValue(() => ({
+    iResolution: [width, height],
+    iTime: time.value,
+    iBand: [BG_SCROLL_RATE, BG_BAND_DIR_X, BG_BAND_DIR_Y, BG_GRID_DENSITY],
+    iGrid: [BG_GRID_DRIFT, BG_GRID_WIDTH, BG_GRID_STRENGTH, 0],
+  }));
+
+  const bg_path = require("../../../assets/liquid-glass-bubble/15_bg.jpg");
+
+  // const imagePath1 = require("../../../assets/images/pedra.jpg");
+  const image = useImage(bg_path);
+
+  // The ripple's layer paint. `undefined` when the flag is off (or if the
+  // shader failed to compile) so the Group below takes no saveLayer at all.
+  // The RuntimeShader's `uniform shader image` is the layer's own contents —
+  // the finished scene — which is what makes this a post-process.
+  const rippleLayer =
+    SCENE_RIPPLE && BouncyRipplePrismShader ? (
+      <Paint>
+        <RuntimeShader
+          source={BouncyRipplePrismShader}
+          uniforms={ripple.uniforms}
+        />
+      </Paint>
+    ) : undefined;
+
+  // ---- Solo mode content: background only (no greeting), one LabeledBubble
+  // dead centre. `restRadius` MUST be the label's LAYOUT radius (what its
+  // paragraph was measured at), not the live `soloR` — the label scales by
+  // `r / restRadius` inside BubbleLabel. ----
+  const soloSceneContent = (
+    <>
+      <Group transform={DPR_UP}>
+        {image && (
+          <Image
+            image={image}
+            fit="cover"
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            opacity={1}
+            blendMode="plus"
+          />
+        )}
+      </Group>
+      {/* No `birthOptics`: the solo bubble is pinned permanently inflated
+          with no `inflate` curve, so there is no crossover to run. */}
+      <LabeledBubble
+        bubble={soloBubble}
+        index={SOLO_SLOT}
+        paramBuffer={paramBuffer}
+        uniforms={uniforms}
+        optics={optics}
+        paragraph={labels[soloIndex]?.paragraph ?? null}
+        labelWidth={labels[soloIndex]?.width ?? 0}
+        labelHeight={labels[soloIndex]?.height ?? 0}
+        restRadius={labels[soloIndex]?.rest ?? INTRO_BASE_RADIUS}
+        icon={INTRO_ICONS[soloIndex]}
+        pixelDensity={PD}
+        film={bubbleFilm}
+      />
+    </>
+  );
+
+  // ---- Full scene content: exactly what the committed file renders — the
+  // backdrop, the floaters, the four intro bubbles, then the trigger. ----
+  const fullSceneContent = (
+    <>
+      {/* DPR_UP puts the backdrop back in logical points, so everything
+          inside it is authored in pt exactly as before. */}
+      <Group transform={DPR_UP}>
+        {/* ---- Backdrop: drawn first so the bubbles refract it ---- */}
+        {/* Base fill under the background image. */}
+        {/*<Fill color="#ffffff" />*/}
+
+        {/* Background image, centered, 2× screen width. */}
+        {image && (
+          <Image
+            image={image}
+            fit="cover"
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            opacity={1}
+            blendMode="plus"
+          />
+        )}
+
+        {/* Greeting: centered paragraph, name on line 2, underlined.
+            Part of the backdrop, so the bubble refracts it. Opacity is
+            the intro's textOpacity — a function of how far the trigger
+            has swollen, not of time (see useIntroTimeline.ts).
+
+            The fade MUST be a `layer`, not a plain `opacity` prop: a
+            Group's opacity is applied to the paint its children
+            inherit, and the renderer draws a Paragraph with
+            `paragraph.paint(canvas, x, y)` using the text's OWN baked
+            paint — so the inherited alpha never reaches it. With
+            `opacity` the squiggle (a Path, which does use the paint)
+            faded while the text stayed solid. A layer composites the
+            whole group through one alpha instead, which catches both.
+            It costs a saveLayer over the greeting's bounds per frame. */}
+        <Group
+          transform={textTransform}
+          layer={<Paint opacity={intro.textOpacity} />}
+        >
+          <Paragraph
+            paragraph={paragraph}
+            x={paragraphX}
+            y={paragraphY}
+            width={width}
+          />
+        </Group>
+      </Group>
+
+      {/* ---- Floaters: one backdrop pass each (phase 2 baseline).
+          They sit OUTSIDE DPR_UP, so their filter space is device
+          pixels; BaselineBubble scales its point uniforms by PD. ---- */}
+      {SLOTS.map((i) => (
+        <BaselineBubble
+          key={i}
+          index={i}
+          paramBuffer={paramBuffer}
+          uniforms={uniforms}
+          optics={optics}
+          pixelDensity={PD}
+        />
+      ))}
+
+      {/* ---- The four intro bubbles. Each LabeledBubble draws its own
+          label (icon + text, back in points via its own pd group) and
+          then its glass pass, so a bubble always refracts its own
+          contents. Drawn after the floaters, so they sit on top.
+
+          Mapped over the SLOTS, not over `labels`: the glass has to be
+          there from the first frame, while `labels` is still empty
+          until the font manager resolves. A null paragraph just skips
+          the label. ---- */}
+      {INTRO_SLOTS.map((slot, i) => (
+        <LabeledBubble
+          key={slot}
+          bubble={selection.bubbles[i]}
+          index={slot}
+          paramBuffer={paramBuffer}
+          uniforms={uniforms}
+          optics={optics}
+          paragraph={labels[i]?.paragraph ?? null}
+          labelWidth={labels[i]?.width ?? 0}
+          labelHeight={labels[i]?.height ?? 0}
+          restRadius={labels[i]?.rest ?? INTRO_BASE_RADIUS}
+          icon={INTRO_ICONS[i]}
+          pixelDensity={PD}
+          birthOptics={BIRTH_OPTICS_ON ? BIRTH_OPTICS : undefined}
+          // film={bubbleFilm}
+        />
+      ))}
+
+      {/* ---- The trigger bubble, on top of everything else. No icon:
+          "Go" is the whole label. No `birthOptics`: it has no `inflate`
+          curve (it isn't one of the four bloomed bubbles), so there is
+          nothing for the birth look to cross over from. ---- */}
+      <LabeledBubble
+        bubble={intro.trigger}
+        index={TRIGGER_SLOT}
+        paramBuffer={paramBuffer}
+        uniforms={uniforms}
+        optics={optics}
+        paragraph={triggerLabel?.paragraph ?? null}
+        labelWidth={triggerLabel?.width ?? 0}
+        labelHeight={triggerLabel?.height ?? 0}
+        restRadius={TRIGGER_RADIUS}
+        showIcon={false}
+        pixelDensity={PD}
+        film={bubbleFilm}
+      />
+
+      {/* ---- The detail card for a pressed bubble. Last, so its blur
+          frosts the bubbles scrolling past behind it. Mounted only while a
+          bubble is chosen — a BackdropBlur is a pass break even off-screen. ---- */}
+      {selection.activeIndex !== null && (
+        <SelectCard
+          width={width}
+          cardHeight={cardHeights[selection.activeIndex] ?? 0}
+          top={selection.cardTop}
+          paragraph={cardParagraphs[selection.activeIndex] ?? null}
+          pixelDensity={PD}
+        />
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {/* The tap that starts the intro: the trigger bubble is a Skia circle,
+          so the hit test happens in the gesture's own worklet. */}
+      <GestureDetector gesture={tapGesture}>
+        <Canvas style={{ width, height }}>
+          {/* Everything lives under DPR_DOWN, so one local unit inside it is
+              one device pixel: that is the space the bubbles' image filter
+              runs in, and it is what makes the backdrop snapshot — and the
+              text refracted through it — full resolution. See CRISP_BUBBLES. */}
+          <Group transform={DPR_DOWN}>
+            {/* ---- The scene ripple. A layer over EVERYTHING below — the
+                backdrop, the labels and the glass passes alike — so the wave
+                bends the finished frame rather than any one element.
+
+                It is inside DPR_DOWN on purpose: a `layer` rasterizes at the
+                resolution of the space it is declared in, so out here it
+                would snapshot the scene at logical points and hand back a
+                pd×-upscaled blur. In here one local unit is one device
+                pixel, which is also why `useSceneRipple` scales
+                `u_resolution` by PD.
+
+                `layer={undefined}` when SCENE_RIPPLE is off = no saveLayer
+                at all, not an identity one. ---- */}
+            <Group layer={rippleLayer}>
+              {SOLO_BUBBLE !== null ? soloSceneContent : fullSceneContent}
+            </Group>
+          </Group>
+        </Canvas>
+      </GestureDetector>
+
+      <IslandFps placement="bottom" />
+
+      {/* Back button: always visible, not gated on `showControls`. */}
+      <PressableScale
+        style={[styles.backButton, { left: width * 0.1, top: height * 0.1 }]}
+        onPress={() => router.back()}
+      >
+        <MaterialCommunityIcons name="arrow-left" color="#000" size={24} />
+      </PressableScale>
+
+      {/* Everything below "Controls" is gated on `showControls` — the whole
+          point is to be able to watch or record the scene with nothing
+          drawn over it. `panel` is left untouched while hidden, so
+          reopening Controls restores whichever panel was open. */}
+      {showControls && panel === "text" && (
+        <TextTuningPanel
+          controls={textControls}
+          width={width}
+          height={height}
+        />
+      )}
+
+      {/* The bubble's own levers: Shape (size, wobble, inertia, strength),
+          Refraction, Surface, Rim. No float / soap-film toggles here. */}
+      {showControls && panel === "bubble" && (
+        <BubbleTuningPanel
+          wobble={wobble}
+          wobbleDefault={MULTI_WOBBLE}
+          inertia={inertia}
+          inertiaDefault={MULTI_INERTIA}
+          strength={strength}
+          strengthDefault={MULTI_STRENGTH}
+          size={bubbleSize}
+          sizeDefault={INTRO_BASE_RADIUS}
+          sizeMin={0}
+          sizeMax={240}
+          optics={optics}
+          defaults={defaults}
+          refractMax={LIVE_REFRACT_SLIDER_MAX}
+          initialTab="shape"
+        />
+      )}
+
+      <View style={[styles.toggles, { top: height * 0.1 }]}>
+        <PressableScale
+          style={[styles.toggle, showControls && styles.toggleActive]}
+          onPress={() => setShowControls((v) => !v)}
+        >
+          <Text
+            style={[
+              styles.toggleText,
+              showControls && styles.toggleTextActive,
+            ]}
+          >
+            Controls
+          </Text>
+        </PressableScale>
+        {showControls && (
+          <>
+            <PressableScale
+              style={styles.toggle}
+              onPress={() => {
+                scheduleOnUI(selection.close);
+                intro.reset();
+              }}
+            >
+              <Text style={styles.toggleText}>Reset</Text>
+            </PressableScale>
+            <PressableScale
+              style={[
+                styles.toggle,
+                panel === "text" && styles.toggleActive,
+              ]}
+              onPress={() => togglePanel("text")}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  panel === "text" && styles.toggleTextActive,
+                ]}
+              >
+                Text
+              </Text>
+            </PressableScale>
+            <PressableScale
+              style={[
+                styles.toggle,
+                panel === "bubble" && styles.toggleActive,
+              ]}
+              onPress={() => togglePanel("bubble")}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  panel === "bubble" && styles.toggleTextActive,
+                ]}
+              >
+                Bubble
+              </Text>
+            </PressableScale>
+            {SHOW_FLOATERS && (
+              <PressableScale style={styles.toggle} onPress={toggleFloat}>
+                <Text style={styles.toggleText}>
+                  {floatOn ? "Float: On" : "Float: Off"}
+                </Text>
+              </PressableScale>
+            )}
+          </>
+        )}
+      </View>
+
+      {/* Hidden whenever a tuning panel is open: the panel and the bar fight
+          for the same screen space (both pinned near the bottom). */}
+      {showControls && SHOW_SCRUB_BAR && panel === "none" && (
+        <IntroScrubBar progress={intro.progress} play={intro.play} />
+      )}
+    </>
+  );
+}
+
+// ============================================================================
+// Styles
+// ============================================================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
+  },
+  toggles: {
+    position: "absolute",
+    right: 16,
+    flexDirection: "row",
+    gap: 8,
+  },
+  backButton: {
+    position: "absolute",
+  },
+  toggle: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#1a1a1a",
+  },
+  toggleActive: {
+    backgroundColor: "#fff",
+  },
+  toggleText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  toggleTextActive: {
+    color: "#1a1a1a",
+  },
+});

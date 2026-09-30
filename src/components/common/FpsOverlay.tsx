@@ -57,6 +57,7 @@ import { useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import type { FrameSampler, FrameStats } from "./frameSampler";
+import FastSquircleView from "react-native-fast-squircle";
 
 // ============================================================================
 // Types
@@ -91,12 +92,12 @@ export function FpsOverlay({
   const color = dark ? "#fff" : "#000";
 
   return (
-    <View pointerEvents="none" style={styles.overlay}>
+    <FastSquircleView pointerEvents="none" style={styles.overlay} cornerSmoothing={0.6}>
       {showUiThread && <UiThreadRow intervalMs={intervalMs} color={color} />}
       {sources?.map((s) => (
         <SourceRow key={s.label} sampler={s} color={color} />
       ))}
-    </View>
+    </FastSquircleView>
   );
 }
 
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     gap: 2,
-    backgroundColor: "rgba(127,127,127,0.18)",
+    backgroundColor: "rgba(127,127,127,0.70)",
   },
   text: {
     fontSize: 11,

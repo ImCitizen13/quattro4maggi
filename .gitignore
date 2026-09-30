@@ -60,4 +60,5 @@ src/components/premuim/shaders.ts
 
 .DS_Store
 
+/agent-rules
 *.local
