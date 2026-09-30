@@ -387,30 +387,30 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
 
   const name = NAME_TEXT[0];
 
-  const fontMgr = useFonts({
-    Boldonse: [require("../../assets/fonts/Boldonse-Regular.ttf")],
-    Lexend: [require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf")],
-    PTSerif: [
-      require("../../assets/fonts/PTSerif-Regular.ttf"),
-      require("../../assets/fonts/PTSerif-Bold.ttf"),
-    ],
-  });
+  // const fontMgr = useFonts({
+  //   Boldonse: [require("../../assets/fonts/Boldonse-Regular.ttf")],
+  //   Lexend: [require("../../assets/fonts/LexendDeca-VariableFont_wght.ttf")],
+  //   PTSerif: [
+  //     require("../../assets/fonts/PTSerif-Regular.ttf"),
+  //     require("../../assets/fonts/PTSerif-Bold.ttf"),
+  //   ],
+  // });
 
   // "Good Morning" / name on two lines, center-aligned, laid out once at
   // TEXT_BASE_SIZE across the screen width. The Size slider scales the whole
   // group, so dragging never rebuilds the paragraph or re-renders.
   const paragraph = useMemo(() => {
-    if (!fontMgr) {
-      return null;
-    }
+    // if (!fontMgr) {
+    //   return null;
+    // }
 
 
     const p = Skia.ParagraphBuilder.Make(
       { textAlign: TextAlign.Center },
-      fontMgr,
+      // fontMgr,
     )
       .pushStyle({
-        fontFamilies: ["PTSerif"],
+        // fontFamilies: ["PTSerif"],
         fontStyle: { weight: 200 },
         fontSize: TEXT_BASE_SIZE,
         letterSpacing: 0.1,
@@ -419,7 +419,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       .addText(`${greeting}\n`)
       .pop()
       .pushStyle({
-        fontFamilies: ["PTSerif"],
+        // fontFamilies: ["PTSerif"],
         fontStyle: { weight: 200 },
         fontSize: TEXT_BASE_SIZE,
         letterSpacing: 0.1,
@@ -430,23 +430,23 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       .build();
     p.layout(width);
     return p;
-  }, [fontMgr, name, width]);
+  }, [ name, width]);
 
   // One paragraph per bubble label, laid out at that bubble's rest size.
   // `BubbleLabel` only scales the result, so a bubble's text never re-measures.
   const labels = useMemo(() => {
-    if (!fontMgr) {
-      return [];
-    }
+    // if (!fontMgr) {
+    //   return [];
+    // }
     return INTRO_LABELS.slice(0, INTRO_COUNT).map((text, i) => {
       const rest = INTRO_BASE_RADIUS * INTRO_RADIUS_MUL[i];
       const labelWidth = rest * INTRO_LABEL_WIDTH_MUL;
       const p = Skia.ParagraphBuilder.Make(
         { textAlign: TextAlign.Center },
-        fontMgr,
+        // fontMgr,
       )
         .pushStyle({
-          fontFamilies: ["PTSerif"],
+          // fontFamilies: ["PTSerif"],
           fontSize: INTRO_LABEL_SIZE,
           color: Skia.Color("#0f1725"),
         })
@@ -456,21 +456,21 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       p.layout(labelWidth);
       return { paragraph: p, width: labelWidth, height: p.getHeight(), rest };
     });
-  }, [fontMgr]);
+  }, []);
 
   // The trigger bubble's own label, laid out the same way as the four.
   const triggerLabel = useMemo(() => {
-    if (!fontMgr) {
-      return null;
-    }
+    // if (!fontMgr) {
+    //   return null;
+    // }
     const labelWidth = TRIGGER_RADIUS * TRIGGER_LABEL_WIDTH_MUL;
     const p = Skia.ParagraphBuilder.Make(
       { textAlign: TextAlign.Center },
-      fontMgr,
+      // fontMgr,
     )
       .pushStyle({
         fontStyle: {weight: 600},
-        fontFamilies: ["PTSerif"],
+        // fontFamilies: ["PTSerif"],
         fontSize: TRIGGER_LABEL_SIZE,
         color: Skia.Color("#0f1725"),
       })
@@ -479,25 +479,25 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       .build();
     p.layout(labelWidth);
     return { paragraph: p, width: labelWidth, height: p.getHeight() };
-  }, [fontMgr]);
+  }, []);
 
   // One card paragraph per intro bubble: its points only — the chosen
   // bubble above the card, grown to SELECT_SCALE, is the title. Laid out
   // once at the card's inner width; the card only moves it. The card's
   // height is the paragraph's measured height + the padding, top and bottom.
   const cardParagraphs = useMemo(() => {
-    if (!fontMgr) {
-      return [];
-    }
+    // if (!fontMgr) {
+    //   return [];
+    // }
     const innerW = width * SELECT_CARD_WIDTH - 2 * SELECT_CARD_PAD;
     return INTRO_LABELS.slice(0, INTRO_COUNT).map((_, i) => {
       const points = (SELECT_DESCRIPTIONS[i] ?? []).map((pt) => `•  ${pt}`);
       const p = Skia.ParagraphBuilder.Make(
         { textAlign: TextAlign.Left },
-        fontMgr,
+        // fontMgr,
       )
         .pushStyle({
-          fontFamilies: ["PTSerif"],
+          // fontFamilies: ["PTSerif"],
           fontSize: SELECT_POINT_SIZE,
           heightMultiplier: 1.6,
           color: Skia.Color("#1f2a3a"),
@@ -509,7 +509,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       p.layout(innerW);
       return p;
     });
-  }, [fontMgr, width]);
+  }, [width]);
   const cardHeights = useMemo(
     () => cardParagraphs.map((p) => p.getHeight() + 2 * SELECT_CARD_PAD),
     [cardParagraphs],
@@ -580,10 +580,10 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // "Reset" runs — one code path for first paint and for the button.
   const { reset } = intro;
   useEffect(() => {
-    if (fontMgr) {
+    // if (fontMgr) {
       reset();
-    }
-  }, [fontMgr, reset]);
+    // }
+  }, [ reset]);
 
   // Tap the trigger bubble to run the intro. Coordinates are both in points
   // (the canvas view isn't scaled — the DPR sandwich is internal to it), so
