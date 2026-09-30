@@ -47,6 +47,11 @@ app-example
 /.claude
 /.vscode
 
+# EAS workflow definitions. NOTE: ignoring these means GitHub-triggered
+# workflows (on.push / on.pull_request) cannot work — EAS reads the YAML from
+# the repo. Local `eas workflow:run` is unaffected; it uploads the directory.
+/.eas
+
 temp/
 
 DEBUG/
@@ -56,3 +61,4 @@ src/components/premuim/shaders.ts
 .DS_Store
 
 /agent-rules
+*.local
