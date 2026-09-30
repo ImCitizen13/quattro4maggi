@@ -10,13 +10,15 @@
  *     → every `intervalMs`, scheduleOnRN one setState with the mean fps
  *     → re-renders ~2×/sec, NOT per frame.
  *   Position: rendered through a Portal (screen coordinates, so a navigation
- *   header can't push it down), `FPS_GAP + offset` below the Dynamic
- *   Island's bottom edge — the same island geometry ibtasim's
- *   `useGetDynamicIslandDimensions` uses. No island → safe-area top inset.
+ *   header can't push it down), `FPS_GAP + offset` away from the Dynamic
+ *   Island — below, or to its left/right per `placement` — using the same
+ *   island geometry ibtasim's `useGetDynamicIslandDimensions` uses. No
+ *   island → always below, at the safe-area top inset.
  *
  * USAGE
  *   Anywhere under the root PortalProvider (it's `pointerEvents:none`):
  *     {SHOW_FPS_OVERLAY && <IslandFps />}
+ *     {SHOW_FPS_OVERLAY && <IslandFps placement="right" />}
  *
  * CAVEATS
  *   - Same as FpsOverlay: simulators cap at 60Hz; ProMotion drops the display
@@ -36,10 +38,13 @@ import { scheduleOnRN } from "react-native-worklets";
 // ============================================================================
 
 /** Gap between the island's bottom edge and the pill, pt. */
-const FPS_GAP = 8;
+const FPS_GAP = 4;
 
 /** Dynamic Island height, pt. */
 const ISLAND_HEIGHT = 36.5;
+
+/** Dynamic Island width, pt. */
+const ISLAND_WIDTH = 120;
 
 /** Island's distance from the screen top, pt: Max/Plus-size vs base models. */
 const ISLAND_TOP_MAX = 25;
@@ -55,26 +60,35 @@ const ISLAND_MIN_INSET = 51;
 // Types
 // ============================================================================
 
+export type IslandFpsPlacement = "bottom" | "left" | "right";
+
 export type IslandFpsProps = {
   /** Reporting cadence in ms (how often the number updates). Default 500. */
   intervalMs?: number;
-  /** Extra gap on top of `FPS_GAP`, pt. Default 0. */
+  /** Extra gap away from the island in every placement, pt. Default 0. */
   offset?: number;
+  /** Which side of the island the pill sits on. Default "bottom". No island → always "bottom". */
+  placement?: IslandFpsPlacement;
 };
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function IslandFps({ intervalMs = 500, offset = 0 }: IslandFpsProps) {
+export function IslandFps({
+  intervalMs = 500,
+  offset = 0,
+  placement = "bottom",
+}: IslandFpsProps) {
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const [fps, setFps] = useState(0);
 
   const hasIsland = insets.top >= ISLAND_MIN_INSET;
   const islandTop =
     screenHeight >= MAX_SCREEN_HEIGHT ? ISLAND_TOP_MAX : ISLAND_TOP_NORMAL;
   const islandBottomY = hasIsland ? islandTop + ISLAND_HEIGHT : insets.top;
+  const side = hasIsland ? placement : "bottom";
 
   const frames = useSharedValue(0);
   const elapsed = useSharedValue(0);
@@ -94,13 +108,47 @@ export function IslandFps({ intervalMs = 500, offset = 0 }: IslandFpsProps) {
     }
   });
 
+  if (side === "bottom") {
+    return (
+      <Portal>
+        <View
+          pointerEvents="none"
+          style={[
+            styles.pillBase,
+            styles.pillBottom,
+            { top: islandBottomY + FPS_GAP + offset },
+          ]}
+        >
+          <Text style={styles.text}>{fps} fps</Text>
+        </View>
+      </Portal>
+    );
+  }
+
+  const bandSideStyle =
+    side === "right"
+      ? {
+          left: screenWidth / 2 + ISLAND_WIDTH / 2 + FPS_GAP + offset,
+          alignItems: "flex-start" as const,
+        }
+      : {
+          right: screenWidth / 2 + ISLAND_WIDTH / 2 + FPS_GAP + offset,
+          alignItems: "flex-end" as const,
+        };
+
   return (
     <Portal>
       <View
         pointerEvents="none"
-        style={[styles.pill, { top: islandBottomY + FPS_GAP + offset }]}
+        style={[
+          styles.band,
+          bandSideStyle,
+          { top: islandTop, height: ISLAND_HEIGHT },
+        ]}
       >
-        <Text style={styles.text}>{fps} fps</Text>
+        <View style={styles.pillBase}>
+          <Text style={styles.text}>{fps} fps</Text>
+        </View>
       </View>
     </Portal>
   );
@@ -111,13 +159,19 @@ export function IslandFps({ intervalMs = 500, offset = 0 }: IslandFpsProps) {
 // ============================================================================
 
 const styles = StyleSheet.create({
-  pill: {
-    position: "absolute",
-    alignSelf: "center",
+  pillBase: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: "rgba(127,127,127,0.70)",
+    backgroundColor: "#000",
+  },
+  pillBottom: {
+    position: "absolute",
+    alignSelf: "center",
+  },
+  band: {
+    position: "absolute",
+    justifyContent: "center",
   },
   text: {
     color: "#fff",

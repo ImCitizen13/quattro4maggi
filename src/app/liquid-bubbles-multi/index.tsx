@@ -1,5 +1,4 @@
 import { LiquidBubblesMulti } from "@/components/liquid-bubbles-multi/LiquidBubblesMulti";
-import { ThemeHeaderTitle } from "@/components/Theme";
 import { Stack } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -13,8 +12,7 @@ export default function Index() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          headerShown: true,
-          headerTitle: () => <ThemeHeaderTitle text="Liquid Bubbles Multi" />,
+          headerShown: false,
         }}
       />
       <LiquidBubblesMulti />

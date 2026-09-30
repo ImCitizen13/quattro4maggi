@@ -37,6 +37,8 @@
  * - `SCENE_RIPPLE`: the whole frame runs through the bouncy-ripple prism
  *   shader, fired from the centre just before the bubbles bloom.
  * - Top-right panels: Text and Bubble. FPS pill just below the Dynamic Island.
+ * - No navigation header: a back arrow top-left (as in the Wabi demo), level
+ *   with the Controls row.
  * - Every overlay — the button row, whichever panel is open, the scrub bar —
  *   sits behind one "Controls" button (top-right, always shown), so the
  *   scene can be watched or recorded with nothing drawn over it. The FPS
@@ -61,6 +63,8 @@ import {
   useFonts,
   Path,
 } from "@shopify/react-native-skia";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { PressableScale } from "pressto";
 import React, { useEffect, useMemo, useState } from "react";
@@ -961,7 +965,15 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         </Canvas>
       </GestureDetector>
 
-      <IslandFps />
+      <IslandFps placement="bottom" />
+
+      {/* Back button: always visible, not gated on `showControls`. */}
+      <PressableScale
+        style={[styles.backButton, { left: width * 0.1, top: height * 0.1 }]}
+        onPress={() => router.back()}
+      >
+        <MaterialCommunityIcons name="arrow-left" color="#000" size={24} />
+      </PressableScale>
 
       {/* Everything below "Controls" is gated on `showControls` — the whole
           point is to be able to watch or record the scene with nothing
@@ -996,7 +1008,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         />
       )}
 
-      <View style={styles.toggles}>
+      <View style={[styles.toggles, { top: height * 0.1 }]}>
         <PressableScale
           style={[styles.toggle, showControls && styles.toggleActive]}
           onPress={() => setShowControls((v) => !v)}
@@ -1084,10 +1096,12 @@ const styles = StyleSheet.create({
   },
   toggles: {
     position: "absolute",
-    top: 12,
     right: 16,
     flexDirection: "row",
     gap: 8,
+  },
+  backButton: {
+    position: "absolute",
   },
   toggle: {
     paddingHorizontal: 16,
