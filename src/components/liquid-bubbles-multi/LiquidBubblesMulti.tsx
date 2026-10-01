@@ -16,6 +16,17 @@
  *     → LabeledBubble × 4 (label then glass) → the trigger
  *     → all of it through the ripple layer
  *
+ * CHOREOGRAPHY (`choreography` prop, "A / B" toggle in Controls; a switch
+ * remounts the scene, since the physics' pinned set differs):
+ *   A — the flow above: trigger bubble under the greeting, tap to bloom.
+ *   B — no trigger bubble; a glass "Explore" button at the bottom centre.
+ *     Press it (or drag up) → useChoreographyB springs `progress` 0 → 1: the
+ *     greeting scales out and drifts up, the four bubbles float up from the
+ *     bottom. Drag down reverses it; a drag of half the screen height is the
+ *     full range, release is decided by position (only a very hard flick
+ *     overrides). No scene ripple in B. Gesture = Race(hook's vertical pan,
+ *     tap); the tap only opens/closes a bubble, once progress ≥ 1.
+ *
  * KEY FEATURES:
  * - No autoplay: the screen sits at rest — full-size greeting, a small "Go"
  *   trigger bubble centred under it. Tapping the trigger runs the intro: the
@@ -75,11 +86,15 @@ import {
   View,
   type LayoutChangeEvent,
 } from "react-native";
-import {
+import Animated, {
+  Extrapolation,
   interpolate,
+  useAnimatedProps,
+  useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 
 import { IslandFps } from "@/components/common/IslandFps";
@@ -113,6 +128,7 @@ import { BouncyRipplePrismShader } from "@/components/premium/shaders";
 import { BaselineBubble } from "./BaselineBubble";
 import type { BubbleFilm } from "./BubbleFilmOverlay";
 import { useBubbleSelect } from "./hooks/useBubbleSelect";
+import { useChoreographyB } from "./hooks/useChoreographyB";
 import { useIntroTimeline } from "./hooks/useIntroTimeline";
 import { useSceneRipple } from "./hooks/useSceneRipple";
 import { INTRO_ICONS } from "./IconPaths";
@@ -273,9 +289,18 @@ const SQWIGGLE_W = 122;
 // Types
 // ============================================================================
 
+/**
+ * "A": tap the trigger bubble under the greeting → the intro plays.
+ * "B": a button at the bottom; press it (or flick up) → the greeting scrolls
+ * away and the four bubbles float up from the bottom.
+ */
+export type Choreography = "A" | "B";
+
 export type LiquidBubblesMultiProps = {
   /** Mean birth radius, points — each bubble is `× BIRTH_RADIUS_RANGE`. */
   restRadius?: number;
+  /** Initial choreography. Also switchable from the Controls row. Default "A". */
+  choreography?: Choreography;
 };
 
 type Panel = "none" | "text" | "bubble";
@@ -284,7 +309,17 @@ type SceneProps = {
   width: number;
   height: number;
   restRadius: number;
+  choreography: Choreography;
+  onChoreographyChange: (next: Choreography) => void;
 };
+
+/** Choreography B: button's distance above the bottom safe-area edge, pt. */
+const B_BUTTON_BOTTOM = 24;
+
+/** Choreography B: button fades/scales out as progress goes 0 → this. */
+const B_BUTTON_HIDE_AT = 0.3;
+
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 // ============================================================================
 // Component
@@ -292,7 +327,10 @@ type SceneProps = {
 
 export function LiquidBubblesMulti({
   restRadius = 50,
+  choreography: initialChoreography = "A",
 }: LiquidBubblesMultiProps) {
+  const [choreography, setChoreography] =
+    useState<Choreography>(initialChoreography);
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
@@ -309,17 +347,28 @@ export function LiquidBubblesMulti({
         // Keyed by size: the physics captures the bounds, so a new size
         // remounts it with the new walls and spawn point.
         <MultiBubbleScene
-          key={`${size.width}x${size.height}`}
+          key={`${size.width}x${size.height}-${choreography}`}
           width={size.width}
           height={size.height}
           restRadius={restRadius}
+          choreography={choreography}
+          onChoreographyChange={setChoreography}
         />
       )}
     </View>
   );
 }
 
-function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
+function MultiBubbleScene({
+  width,
+  height,
+  restRadius,
+  choreography,
+  onChoreographyChange,
+}: SceneProps) {
+  const isB = choreography === "B";
+  const insets = useSafeAreaInsets();
+
   // ==========================================================================
   // Levers (slider bases; each bubble multiplies them by its traits)
   // ==========================================================================
@@ -569,11 +618,36 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     triggerRadius: TRIGGER_RADIUS,
   });
 
+  // Choreography B is built unconditionally too (rules of hooks); in A its
+  // progress just stays at 0 and nothing reads it.
+  const choreoB = useChoreographyB({
+    centerX: width / 2,
+    centerY: height / 2 + TEXT_Y_DEFAULT,
+    height,
+    radius: bubbleSize,
+    offsetX: textControls.bubbleX,
+    offsetY: textControls.bubbleY,
+    time,
+  });
+  // Destructured once: a worklet that reads a field off `choreoB` captures the
+  // whole object, which holds a PanGesture (not copyable to the UI runtime).
+  const {
+    progress: bProgress,
+    textOpacity: bTextOpacity,
+    textScale: bTextScale,
+    textTranslateY: bTextTranslateY,
+    bubbles: bBubbles,
+    show: bShow,
+    hide: bHide,
+    pan: bPan,
+  } = choreoB;
+  const activeProgress = isB ? bProgress : intro.progress;
+
   // Press an intro bubble: it rises to the top, the rest scroll off, the
   // card slides up under it. Wraps the intro's bubbles — pass-through until
   // one is pressed.
   const selection = useBubbleSelect({
-    bubbles: intro.bubbles,
+    bubbles: isB ? bBubbles : intro.bubbles,
     width,
     height,
     cardHeights,
@@ -584,10 +658,11 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // "Reset" runs — one code path for first paint and for the button.
   const { reset } = intro;
   useEffect(() => {
-    // if (fontMgr) {
+    // B starts at progress 0 on its own: nothing to arm.
+    if (!isB) {
       reset();
-    // }
-  }, [ reset]);
+    }
+  }, [reset, isB]);
 
   // Tap the trigger bubble to run the intro. Coordinates are both in points
   // (the canvas view isn't scaled — the DPR sandwich is internal to it), so
@@ -596,9 +671,8 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   const { open: openBubble, close: closeBubble } = selection;
   const selectBubbles = selection.bubbles;
   const selectedIndex = selection.selected;
-  const tapGesture = useMemo(
-    () =>
-      Gesture.Tap().onEnd((e, success) => {
+  const gesture = useMemo(() => {
+    const tap = Gesture.Tap().onEnd((e, success) => {
         // `success` is false for a cancelled tap (the finger slid off), same
         // check the liquid-metal demo's tap makes.
         if (!success) {
@@ -611,8 +685,8 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           return;
         }
 
-        // The intro has finished: the four bubbles are pressable.
-        if (intro.progress.value >= 1) {
+        // The bubbles are shown: they are pressable.
+        if (activeProgress.value >= 1) {
           for (let i = 0; i < selectBubbles.length; i++) {
             const b = selectBubbles[i];
             const bx = e.x - b.x.value;
@@ -626,6 +700,11 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           return;
         }
 
+        // B has no trigger bubble: the button does that job.
+        if (isB) {
+          return;
+        }
+
         const dx = e.x - intro.trigger.x.value;
         const dy = e.y - intro.trigger.y.value;
         const r = intro.trigger.r.value;
@@ -636,20 +715,56 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
         if (dx * dx + dy * dy <= slop * slop) {
           scheduleOnRN(play);
         }
-      }),
+      });
+    // B: the vertical pan and the tap race — a flick wins over a tap.
+    return isB ? Gesture.Race(bPan, tap) : tap;
     // The intro's shared values are stable for the mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [play],
-  );
+  }, [play, isB, bPan]);
 
   // The greeting no longer scales as part of the intro — only the Text
   // panel's Size slider scales it. The intro instead fades it out via
   // `intro.textOpacity` (see the Group below), driven by the trigger's swell.
-  const textTransform = useDerivedValue(() => [
-    { translateX: width / 2 },
-    { translateY: height / 2 + textControls.y.value },
-    { scale: textControls.size.value / TEXT_BASE_SIZE },
-  ]);
+  // In B the hook adds an extra scale-out and upward drift on top.
+  const textTransform = useDerivedValue(() => {
+    const base = textControls.size.value / TEXT_BASE_SIZE;
+    return [
+      { translateX: width / 2 },
+      {
+        translateY:
+          height / 2 +
+          textControls.y.value +
+          (isB ? bTextTranslateY.value : 0),
+      },
+      { scale: isB ? base * bTextScale.value : base },
+    ];
+  });
+  const textOpacity = isB ? bTextOpacity : intro.textOpacity;
+
+  // B's button: fades + shrinks out as progress runs 0 → B_BUTTON_HIDE_AT,
+  // and stops taking touches once it is mostly gone.
+  const bButtonStyle = useAnimatedStyle(() => {
+    const p = bProgress.value;
+    return {
+      opacity: interpolate(p, [0, B_BUTTON_HIDE_AT], [1, 0], Extrapolation.CLAMP),
+      transform: [
+        {
+          scale: interpolate(
+            p,
+            [0, B_BUTTON_HIDE_AT],
+            [1, 0.6],
+            Extrapolation.CLAMP,
+          ),
+        },
+      ],
+    };
+  });
+  const bButtonProps = useAnimatedProps(() => ({
+    pointerEvents:
+      bProgress.value > B_BUTTON_HIDE_AT / 2
+        ? ("none" as const)
+        : ("box-none" as const),
+  }));
 
   // The squiggle is authored at SQWIGGLE_W × SQWIGGLE_H from its own origin,
   // so it is scaled to the name's width and moved under it. Uniform scale —
@@ -687,7 +802,9 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     pinned:
       SOLO_BUBBLE !== null
         ? [soloBubble]
-        : [...selection.bubbles, intro.trigger],
+        : isB
+          ? [...selection.bubbles]
+          : [...selection.bubbles, intro.trigger],
   });
 
   // ==========================================================================
@@ -698,6 +815,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // the four bubbles are born. `pixelDensity` because the layer it paints
   // sits inside DPR_DOWN, so its fragment coords are device pixels.
   const ripple = useSceneRipple({
+    // B renders no ripple layer; feed it the idle intro progress (stays 0).
     progress: intro.progress,
     time,
     width,
@@ -757,8 +875,10 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
   // shader failed to compile) so the Group below takes no saveLayer at all.
   // The RuntimeShader's `uniform shader image` is the layer's own contents —
   // the finished scene — which is what makes this a post-process.
+  // Choreography B never ripples: `undefined` there too, so B has no
+  // full-screen saveLayer at all.
   const rippleLayer =
-    SCENE_RIPPLE && BouncyRipplePrismShader ? (
+    SCENE_RIPPLE && !isB && BouncyRipplePrismShader ? (
       <Paint>
         <RuntimeShader
           source={BouncyRipplePrismShader}
@@ -847,7 +967,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
             It costs a saveLayer over the greeting's bounds per frame. */}
         <Group
           transform={textTransform}
-          layer={<Paint opacity={intro.textOpacity} />}
+          layer={<Paint opacity={textOpacity} />}
         >
           <Paragraph
             paragraph={paragraph}
@@ -904,20 +1024,22 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
           "Go" is the whole label. No `birthOptics`: it has no `inflate`
           curve (it isn't one of the four bloomed bubbles), so there is
           nothing for the birth look to cross over from. ---- */}
-      <LabeledBubble
-        bubble={intro.trigger}
-        index={TRIGGER_SLOT}
-        paramBuffer={paramBuffer}
-        uniforms={uniforms}
-        optics={optics}
-        paragraph={triggerLabel?.paragraph ?? null}
-        labelWidth={triggerLabel?.width ?? 0}
-        labelHeight={triggerLabel?.height ?? 0}
-        restRadius={TRIGGER_RADIUS}
-        showIcon={false}
-        pixelDensity={PD}
-        film={bubbleFilm}
-      />
+      {!isB && (
+        <LabeledBubble
+          bubble={intro.trigger}
+          index={TRIGGER_SLOT}
+          paramBuffer={paramBuffer}
+          uniforms={uniforms}
+          optics={optics}
+          paragraph={triggerLabel?.paragraph ?? null}
+          labelWidth={triggerLabel?.width ?? 0}
+          labelHeight={triggerLabel?.height ?? 0}
+          restRadius={TRIGGER_RADIUS}
+          showIcon={false}
+          pixelDensity={PD}
+          film={bubbleFilm}
+        />
+      )}
 
       {/* ---- The detail card for a pressed bubble. Last, so its blur
           frosts the bubbles scrolling past behind it. Mounted only while a
@@ -938,7 +1060,7 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
     <>
       {/* The tap that starts the intro: the trigger bubble is a Skia circle,
           so the hit test happens in the gesture's own worklet. */}
-      <GestureDetector gesture={tapGesture}>
+      <GestureDetector gesture={gesture}>
         <Canvas style={{ width, height }}>
           {/* Everything lives under DPR_DOWN, so one local unit inside it is
               one device pixel: that is the space the bubbles' image filter
@@ -966,6 +1088,28 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       </GestureDetector>
 
       <IslandFps placement="bottom" />
+
+      {/* Choreography B's only control: a button at the bottom centre. The
+          FPS pill sits under the island at the TOP, so only the bottom
+          safe-area inset needs clearing. */}
+      {isB && (
+        <AnimatedView
+          style={[
+            styles.bButtonWrap,
+            { bottom: insets.bottom + B_BUTTON_BOTTOM },
+            bButtonStyle,
+          ]}
+          animatedProps={bButtonProps}
+        >
+          <PressableScale
+            style={styles.bButton}
+            onPress={() => scheduleOnUI(bShow)}
+          >
+            <MaterialCommunityIcons name="chevron-up" color="#0f1725" size={28} />
+            <Text style={styles.bButtonText}>Explore</Text>
+          </PressableScale>
+        </AnimatedView>
+      )}
 
       {/* Back button: always visible, not gated on `showControls`. */}
       <PressableScale
@@ -1028,10 +1172,22 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
               style={styles.toggle}
               onPress={() => {
                 scheduleOnUI(selection.close);
-                intro.reset();
+                if (isB) {
+                  scheduleOnUI(bHide);
+                } else {
+                  intro.reset();
+                }
               }}
             >
               <Text style={styles.toggleText}>Reset</Text>
+            </PressableScale>
+            <PressableScale
+              style={styles.toggle}
+              onPress={() => onChoreographyChange(isB ? "A" : "B")}
+            >
+              <Text style={styles.toggleText}>
+                {isB ? "A / B: B" : "A / B: A"}
+              </Text>
             </PressableScale>
             <PressableScale
               style={[
@@ -1079,7 +1235,10 @@ function MultiBubbleScene({ width, height, restRadius }: SceneProps) {
       {/* Hidden whenever a tuning panel is open: the panel and the bar fight
           for the same screen space (both pinned near the bottom). */}
       {showControls && SHOW_SCRUB_BAR && panel === "none" && (
-        <IntroScrubBar progress={intro.progress} play={intro.play} />
+        <IntroScrubBar
+          progress={activeProgress}
+          play={isB ? () => scheduleOnUI(bShow) : intro.play}
+        />
       )}
     </>
   );
@@ -1102,6 +1261,27 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: "absolute",
+  },
+  bButtonWrap: {
+    position: "absolute",
+    alignSelf: "center",
+  },
+  bButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingLeft: 14,
+    paddingRight: 20,
+    paddingVertical: 12,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.55)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.9)",
+  },
+  bButtonText: {
+    color: "#0f1725",
+    fontWeight: "600",
+    fontSize: 16,
   },
   toggle: {
     paddingHorizontal: 16,
