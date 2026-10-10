@@ -3,7 +3,7 @@
 # Liquid Metal — Path SDF / Bubble Containment Handoff (2026-07-17)
 
 **Branch:** `expo-metal-shader`
-**Verified against:** `@shopify/react-native-skia` **2.4.18 (m144)** — note `.claude/CLAUDE.md` still claims 2.2.12, worth correcting.
+**Verified against:** `react-native-skia` **2.4.18 (m144)** — note `.claude/CLAUDE.md` still claims 2.2.12, worth correcting.
 **Related:** `src/lib/shaders/PathMaskShader.ts` (WIP, commit `01a7eb1` "incomplete"), memories `gooey-border-128-cliff-fragment-fill`, `gooey-border-highdpi-shader-cost`.
 
 ---
@@ -84,7 +84,7 @@ fMinDistanceFieldFontSize  = 18      // .../GrContextOptions.h:202, graphite/Con
 
 These are **on/off tuning booleans on the GPU context** selecting an internal rasterization strategy. The field is coverage-for-antialiasing, computed inside the renderer and discarded — never queryable, never reaches SkSL. RN Skia doesn't bind `GrContextOptions`, so the switches aren't even reachable. **The capability exists; the surface to use it does not. Build it yourself.**
 
-Everything needed to do so is present (paths relative to `node_modules/@shopify/react-native-skia/lib/typescript/src/skia/types/`):
+Everything needed to do so is present (paths relative to `node_modules/react-native-skia/lib/typescript/src/skia/types/`):
 
 | Need | API | Notes |
 |---|---|---|

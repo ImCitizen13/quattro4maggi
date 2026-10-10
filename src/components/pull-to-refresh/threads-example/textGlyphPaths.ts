@@ -1,4 +1,4 @@
-import { Skia, type SkFont, type SkPath } from "@shopify/react-native-skia";
+import { Skia, type SkFont, type SkPath } from "react-native-skia";
 
 /**
  * Split any `SkPath` into one open-stroke SVG string **per contour** — the reusable

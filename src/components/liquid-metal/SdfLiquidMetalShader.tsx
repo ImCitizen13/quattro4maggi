@@ -40,7 +40,7 @@ import {
   Skia,
   useClock,
   type SkPath,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo, useRef } from "react";
 import {
   useDerivedValue,

@@ -6,7 +6,7 @@ import {
   View,
 } from "react-native";
 import React, { useEffect, useState } from "react";
-import { Canvas } from "@shopify/react-native-skia";
+import { Canvas } from "react-native-skia";
 import StarsShader from "../../shaders/StarsShader";
 import { EaseView } from "react-native-ease";
 

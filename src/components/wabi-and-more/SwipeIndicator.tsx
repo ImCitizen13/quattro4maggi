@@ -1,4 +1,4 @@
-import { Group, ImageSVG, Paint, SkSVG } from "@shopify/react-native-skia";
+import { Group, ImageSVG, Paint, SkSVG } from "react-native-skia";
 import React from "react";
 import { SharedValue } from "react-native-reanimated";
 

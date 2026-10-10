@@ -1,4 +1,4 @@
-import { Rect, Shader, Skia, useClock, vec } from "@shopify/react-native-skia";
+import { Rect, Shader, Skia, useClock, vec } from "react-native-skia";
 import { useDerivedValue } from "react-native-reanimated";
 
 const source = Skia.RuntimeEffect.Make(`

@@ -1,4 +1,4 @@
-import { SkData, Skia } from "@shopify/react-native-skia";
+import { SkData, Skia } from "react-native-skia";
 import { useEffect, useState } from "react";
 import { Image } from "react-native";
 

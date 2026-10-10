@@ -19,7 +19,7 @@ import {
   Text as SKText,
   useFont,
   Skia,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";

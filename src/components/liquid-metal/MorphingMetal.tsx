@@ -5,7 +5,7 @@ import { SdfLiquidMetalShader } from "@/components/liquid-metal/SdfLiquidMetalSh
 import {  ThemeView } from "@/components/Theme";
 import { MetalPresetName } from "@/lib/shaders/ColorsLiquidMetal";
 import { SimpleLineIcons } from "@expo/vector-icons";
-import { Skia, useFont } from "@shopify/react-native-skia";import { LinearGradient } from "expo-linear-gradient";
+import { Skia, useFont } from "react-native-skia";import { LinearGradient } from "expo-linear-gradient";
 import { PressableScale } from "pressto";
 import React, { useMemo, useRef, useState } from "react";
 import {

@@ -36,7 +36,7 @@ import {
   Skia,
   SweepGradient,
   vec,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useEffect, useMemo } from "react";
 import Animated, {
   Easing,
@@ -180,7 +180,7 @@ export const SkiaRingGlow = ({
   // Create the ring clip path (outer - inner rounded rectangles)
   const clipPath = useMemo(() => {
     // Outer rounded rectangle (with offset for canvas padding)
-    const outerPath = Skia.Path.Make();
+    const outerPath = Skia.PathBuilder.Make();
     outerPath.addRRect(
       Skia.RRectXY(
         Skia.XYWHRect(offsetX, offsetY, width, height),
@@ -190,7 +190,7 @@ export const SkiaRingGlow = ({
     );
 
     // Inner rounded rectangle (inset by strokeWidth)
-    const innerPath = Skia.Path.Make();
+    const innerPath = Skia.PathBuilder.Make();
     const innerRadius = Math.max(0, borderRadius - strokeWidth);
     innerPath.addRRect(
       Skia.RRectXY(
@@ -206,7 +206,7 @@ export const SkiaRingGlow = ({
     );
 
     // Subtract inner from outer to create ring
-    return Skia.Path.MakeFromOp(outerPath, innerPath, PathOp.Difference)!;
+    return Skia.Path.MakeFromOp(outerPath.build(), innerPath.build(), PathOp.Difference)!;
   }, [width, height, strokeWidth, borderRadius, offsetX, offsetY]);
 
   // Animated gradient rotation matrix

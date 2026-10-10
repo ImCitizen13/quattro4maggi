@@ -1,5 +1,5 @@
 import { splitPathContours } from "@/components/pull-to-refresh/threads-example/textGlyphPaths";
-import { Path, Skia } from "@shopify/react-native-skia";
+import { Path, Skia, type SkPath } from "react-native-skia";
 import { useMemo } from "react";
 
 type RosetteColors = {
@@ -246,7 +246,7 @@ function computeGeometry(center: V2, radius: number): Geometry {
 }
 
 export function buildLinesPath(geom: Geometry) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   const { center, r, c, i, v } = geom;
 
   const moveLine = ([a, b]: [V2, V2]) => {
@@ -297,13 +297,13 @@ export function buildLinesPath(geom: Geometry) {
     moveLine([v[ends[1]], p2]);
   }
 
-  return path;
+  return path.build();
 }
 
 // 16-vertex central 8-pointed star: alternates central-octagon vertices v[k]
 // (inner concave points) with outward star tips T[k].
 function buildCentralStarPath(geom: Geometry) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   const { v, T } = geom;
   path.moveTo(v[0][0], v[0][1]);
   for (let k = 0; k < 8; k++) {
@@ -312,13 +312,13 @@ function buildCentralStarPath(geom: Geometry) {
     path.lineTo(nextV[0], nextV[1]);
   }
   path.close();
-  return path;
+  return path.build();
 }
 
 // 8 diamond "kites" connecting the central star to the petals. Each kite sits
 // at an i[k] inner-ring vertex and has corners i[k], T[k], v[k], T[k-1].
 function buildDiamondsPath(geom: Geometry) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   const { i, v, T } = geom;
   for (let k = 0; k < 8; k++) {
     const km1 = (k + 7) % 8;
@@ -327,14 +327,14 @@ function buildDiamondsPath(geom: Geometry) {
     for (let j = 1; j < 4; j++) path.lineTo(verts[j][0], verts[j][1]);
     path.close();
   }
-  return path;
+  return path.build();
 }
 
 // 8 hexagonal petals around the outer octagon vertices c[k]. "Axis" petals
 // (k even) are symmetric about the cardinal axes; "diagonal" petals (k odd)
 // sit in the corners. Both types share the same 6-vertex topology.
 function buildPetalsPath(geom: Geometry) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   const { c, i, T, edgeNear, edgeFar } = geom;
   for (let k = 0; k < 8; k++) {
     const km1 = (k + 7) % 8;
@@ -346,7 +346,7 @@ function buildPetalsPath(geom: Geometry) {
     for (let j = 1; j < 6; j++) path.lineTo(verts[j][0], verts[j][1]);
     path.close();
   }
-  return path;
+  return path.build();
 }
 
 export type LinesAnimationMode = "opacity" | "draw";
@@ -356,7 +356,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-function pathLength(path: ReturnType<typeof Skia.Path.Make>): number {
+function pathLength(path: SkPath): number {
   const iter = Skia.ContourMeasureIter(path, false, 1);
   let total = 0;
   let contour;

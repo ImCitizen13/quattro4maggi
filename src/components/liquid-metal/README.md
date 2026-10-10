@@ -19,9 +19,9 @@ source:
 ## Required Libraries
 
 ```bash
-npx expo install @shopify/react-native-skia react-native-reanimated
+npx expo install react-native-skia react-native-reanimated
 # or
-npm install @shopify/react-native-skia react-native-reanimated
+npm install react-native-skia react-native-reanimated
 ```
 
 **Setup `react-native-reanimated`** in your `babel.config.js`:

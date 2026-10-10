@@ -30,7 +30,7 @@ import {
   Group,
   Path,
   type SkSize,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { PressableScale } from "pressto";

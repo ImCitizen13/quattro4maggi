@@ -54,7 +54,7 @@ import {
   Skia,
   useCollectionLoading,
   type SkImage,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";

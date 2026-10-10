@@ -9,7 +9,7 @@ A fullscreen interactive React Native experience featuring a draggable prism bub
 ## Required Libraries
 
 ```bash
-bun add @shopify/react-native-skia react-native-reanimated react-native-gesture-handler expo-sensors react-native-pulsar
+bun add react-native-skia react-native-reanimated react-native-gesture-handler expo-sensors react-native-pulsar
 ```
 
 ---

@@ -18,7 +18,7 @@
  * - Multi-bubble ready: one instance per bubble, inputs are parameters.
  */
 
-import { useImage, type SkImage } from "@shopify/react-native-skia";
+import { useImage, type SkImage } from "react-native-skia";
 import { useCallback, useState } from "react";
 import {
   useDerivedValue,

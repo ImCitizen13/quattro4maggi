@@ -1,4 +1,4 @@
-import { AlphaType, ColorType, SkData, Skia } from "@shopify/react-native-skia";
+import { AlphaType, ColorType, SkData, Skia } from "react-native-skia";
 import type { SharedValue } from "react-native-reanimated";
 import tgpu, { AutoVertexIn } from "typegpu";
 import * as d from "typegpu/data";

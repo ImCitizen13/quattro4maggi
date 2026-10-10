@@ -73,7 +73,7 @@ import {
   TextAlign,
   useFonts,
   Path,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";

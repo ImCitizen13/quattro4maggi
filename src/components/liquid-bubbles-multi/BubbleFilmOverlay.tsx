@@ -26,7 +26,7 @@ import {
   Shader,
   rect,
   type SkImage,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React from "react";
 import {
   useDerivedValue,

@@ -7,7 +7,7 @@
  * `x = sign(cosθ)·|cosθ|^(2/n)`, `y = sign(sinθ)·|sinθ|^(2/n)`.
  */
 
-import { Skia, type SkPath, type SkSize } from "@shopify/react-native-skia";
+import { Skia, type SkPath, type SkSize } from "react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 
 import { SQUIRCLE_PATH_SEGMENTS } from "../soapFilmConfig";
@@ -36,7 +36,7 @@ export function useSquirclePath({
 }: UseSquirclePathParams): SharedValue<SkPath> {
   return useDerivedValue(() => {
     "worklet";
-    const path = Skia.Path.Make();
+    const path = Skia.PathBuilder.Make();
     const centerX = canvasSize.value.width / 2;
     const centerY = canvasSize.value.height / 2;
     const n = exponent.value;
@@ -56,6 +56,6 @@ export function useSquirclePath({
       }
     }
     path.close();
-    return path;
+    return path.build();
   });
 }

@@ -219,7 +219,7 @@ A backdrop `RuntimeShader` filter was expected to run in DEVICE PIXELS: the
 `<Group layer>` note in project memory says "the layer-filter uniforms run
 in DEVICE pixels → multiply by pd", and `SkRuntimeShaderImageFilter`
 declares only a translate matrix capability, which usually means Skia bakes
-the CTM scale into the layer. On iOS with `@shopify/react-native-skia`
+the CTM scale into the layer. On iOS with `react-native-skia`
 2.10.2 that is NOT what happens here. Rendering `half4(p.x/1200, p.y/2600,
 0, 1)` from this filter and reading the corner pixels back gave a red ramp
 reaching ~0.36 at the right edge, not ~1.0 — i.e. `p` tops out near the

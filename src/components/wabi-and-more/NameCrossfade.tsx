@@ -1,5 +1,5 @@
-import { Group, Paint, Paragraph } from "@shopify/react-native-skia";
-import type { SkParagraph } from "@shopify/react-native-skia";
+import { Group, Paint, Paragraph } from "react-native-skia";
+import type { SkParagraph } from "react-native-skia";
 import type { SharedValue } from "react-native-reanimated";
 import {
   cancelAnimation,

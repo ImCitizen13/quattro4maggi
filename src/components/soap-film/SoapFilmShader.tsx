@@ -30,7 +30,7 @@ import {
   ImageShader,
   MipmapMode,
   Shader,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo } from "react";
 import {
   useDerivedValue,

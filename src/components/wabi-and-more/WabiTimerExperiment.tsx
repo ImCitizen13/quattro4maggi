@@ -11,7 +11,7 @@ import {
   useFont,
   useSVG,
   useTypeface,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React from "react";
 import {
   PixelRatio,

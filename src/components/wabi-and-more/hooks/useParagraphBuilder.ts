@@ -4,7 +4,7 @@ import {
   SkTypeface,
   TextAlign,
   TextDirection,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import { useMemo } from "react";
 import { ARABIC_TEXT, FONT_SIZE, TEXT_2 } from "../constants";
 

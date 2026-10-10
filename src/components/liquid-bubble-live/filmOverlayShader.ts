@@ -16,7 +16,7 @@
  * tilt `nz`), so colors shift toward the rim.
  */
 
-import { Skia } from "@shopify/react-native-skia";
+import { Skia } from "react-native-skia";
 
 import { SOAP_FILM_COLOR_FN } from "@/lib/shaders/soapFilm";
 

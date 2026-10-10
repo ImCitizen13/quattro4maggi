@@ -19,7 +19,7 @@
  */
 
 import { bakePathSdf, type PathSdf } from "@/lib/shaders/pathSdf";
-import { Skia, type SkPath } from "@shopify/react-native-skia";
+import { Skia, type SkPath } from "react-native-skia";
 import { useMemo } from "react";
 import { InteractionManager, PixelRatio } from "react-native";
 
@@ -54,7 +54,7 @@ export const fitPathToCanvas = (
   scale = 1
 ): SkPath | null => {
   const p = path
-    ? path.copy()
+    ? path
     : svgPath
       ? Skia.Path.MakeFromSVGString(svgPath)
       : null;
@@ -70,13 +70,14 @@ export const fitPathToCanvas = (
   const offsetX = (width - bounds.width * fitScale) / 2;
   const offsetY = (height - bounds.height * fitScale) / 2;
 
-  p.transform(
-    Skia.Matrix()
-      .translate(-bounds.x, -bounds.y)
-      .scale(fitScale * scale, fitScale * scale)
-      .translate(offsetX / fitScale, offsetY / fitScale)
-  );
-  return p;
+  return Skia.PathBuilder.MakeFromPath(p)
+    .transform(
+      Skia.Matrix()
+        .translate(-bounds.x, -bounds.y)
+        .scale(fitScale * scale, fitScale * scale)
+        .translate(offsetX / fitScale, offsetY / fitScale)
+    )
+    .build();
 };
 
 // ============================================================================

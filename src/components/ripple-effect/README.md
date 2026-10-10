@@ -9,7 +9,7 @@ A touch-reactive water ripple shader using Skia RuntimeShader. Tap anywhere to c
 ## Required Libraries
 
 ```bash
-bun add @shopify/react-native-skia react-native-reanimated react-native-gesture-handler react-native-pulsar
+bun add react-native-skia react-native-reanimated react-native-gesture-handler react-native-pulsar
 ```
 
 `react-native-pulsar` drives the haptic on tap (`Presets.ripple()`); the

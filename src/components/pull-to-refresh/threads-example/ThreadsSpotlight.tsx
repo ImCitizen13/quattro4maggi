@@ -4,7 +4,7 @@ import {
   Skia,
   Vertices,
   type SkPath,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import { useMemo } from "react";
 import {
   Extrapolation,
@@ -517,9 +517,9 @@ export function ThreadsSpotlight({
   // once. The reactive transform below fits these to `size` each frame.
   const bounds = useMemo(() => {
     if (entries.length === 0) return null;
-    const union = Skia.Path.Make();
+    const union = Skia.PathBuilder.Make();
     for (const en of entries) union.addPath(en.path);
-    const b = union.computeTightBounds();
+    const b = union.build().computeTightBounds();
     return { x: b.x, y: b.y, width: b.width, height: b.height };
   }, [entries]);
 
