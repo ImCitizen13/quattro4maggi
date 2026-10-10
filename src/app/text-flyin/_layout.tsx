@@ -1,5 +1,5 @@
 import { ThemeHeaderTitle } from "@/components/Theme";
-import { HeaderBackButton } from "@react-navigation/elements";
+import { HeaderBackButton } from "expo-router/react-navigation";
 import { Stack, router } from "expo-router";
 
 export default function Layout() {

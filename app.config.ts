@@ -80,6 +80,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-font",
     "expo-image",
     "expo-web-browser",
+    "expo-status-bar",
     [
       "expo-build-properties",
       {
