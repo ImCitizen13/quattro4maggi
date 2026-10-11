@@ -163,10 +163,9 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
     setColorMode(mode);
   };
 
-  const changePalette = (next: readonly string[] | null) => {
+  const selectLook = (next: readonly string[] | null, mode: number) => {
     setPalette(next);
-    // A palette only shows in ramp mode.
-    if (next !== null) changeColorMode(FILM_MODE_UNIFORM.ramp);
+    changeColorMode(mode);
   };
 
   return (
@@ -193,7 +192,12 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
         </Canvas>
       </GestureDetector>
 
-      <SoapFilmPaletteBar palette={palette} onPaletteChange={changePalette} />
+      <SoapFilmPaletteBar
+        palette={palette}
+        colorMode={colorMode}
+        defaultMode={defaults.mode}
+        onSelect={selectLook}
+      />
 
       {showTuningPanel && (
         <SoapFilmTuningPanel

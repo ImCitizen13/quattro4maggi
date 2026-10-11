@@ -1,7 +1,8 @@
 /**
  * SoapFilmPaletteBar — palette swatches pinned to the top of the screen.
- * A "Default" swatch (the built-in film ramp) followed by one per
- * `LIVE_BORDER_PALETTES`. Centered when they fit, horizontally scrollable
+ * First "Default" (the shader's bubble cosine palette), then "Film ramp"
+ * (the built-in ramp LUT), then one per `LIVE_BORDER_PALETTES` (ramp mode).
+ * Each pick reports a palette + color mode via `onSelect`. Centered when they fit, horizontally scrollable
  * otherwise. The wrapper passes touches through outside the swatches.
  */
 
@@ -13,14 +14,21 @@ import { PressableScale } from "pressto";
 import { LIVE_BORDER_PALETTES } from "@/lib/palettes";
 import { SOAP_RAMP_STOPS } from "@/lib/shaders/soapFilm";
 
+import { FILM_MODE_UNIFORM } from "./soapFilmConfig";
+
 // ============================================================================
 // Types
 // ============================================================================
 
 export type SoapFilmPaletteBarProps = {
-  /** Selected ramp palette; `null` = the default film colors. */
+  /** Selected ramp palette; `null` = a built-in look (see `colorMode`). */
   palette: readonly string[] | null;
-  onPaletteChange: (palette: readonly string[] | null) => void;
+  /** Current shader color mode (`FILM_MODE_UNIFORM` value). */
+  colorMode: number;
+  /** Color mode the "Default" swatch restores (the demo's default mode). */
+  defaultMode: number;
+  /** A swatch was picked: the palette to use and the color mode to switch to. */
+  onSelect: (palette: readonly string[] | null, mode: number) => void;
 };
 
 // ============================================================================
@@ -29,11 +37,25 @@ export type SoapFilmPaletteBarProps = {
 
 const SWATCH_SIZE = 36;
 
-/** Default-film swatch: a few evenly spaced stops of the built-in ramp. */
-const DEFAULT_SWATCH_COLORS = [0, 4, 8, 12, 16].map((i) => {
+type GradientColors = [string, string, ...string[]];
+
+const toRgb = (r: number, g: number, b: number) =>
+  `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+
+/** Default swatch: the shader's bubble cosine palette, sampled at 5 t in [0,1). */
+const BUBBLE_SWATCH_COLORS = [0, 0.2, 0.4, 0.6, 0.8].map((t) =>
+  toRgb(
+    ...([0, 2.1, 4.2].map(
+      (phase) => 0.5 + 0.5 * Math.cos(2 * Math.PI * t + phase),
+    ) as [number, number, number]),
+  ),
+) as GradientColors;
+
+/** Film-ramp swatch: a few evenly spaced stops of the built-in ramp. */
+const RAMP_SWATCH_COLORS = [0, 4, 8, 12, 16].map((i) => {
   const [r, g, b] = SOAP_RAMP_STOPS[i];
-  return `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
-}) as [string, string, ...string[]];
+  return toRgb(r, g, b);
+}) as GradientColors;
 
 // ============================================================================
 // Component
@@ -41,8 +63,14 @@ const DEFAULT_SWATCH_COLORS = [0, 4, 8, 12, 16].map((i) => {
 
 export function SoapFilmPaletteBar({
   palette,
-  onPaletteChange,
+  colorMode,
+  defaultMode,
+  onSelect,
 }: SoapFilmPaletteBarProps) {
+  const bubbleActive =
+    palette === null && colorMode === FILM_MODE_UNIFORM.bubble;
+  const rampActive = palette === null && colorMode === FILM_MODE_UNIFORM.ramp;
+
   return (
     <View style={styles.bar} pointerEvents="box-none">
       <ScrollView
@@ -50,16 +78,34 @@ export function SoapFilmPaletteBar({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}
       >
-        <PressableScale onPress={() => onPaletteChange(null)}>
+        <PressableScale
+          accessibilityLabel="Default colors"
+          onPress={() => onSelect(null, defaultMode)}
+        >
           <LinearGradient
-            colors={DEFAULT_SWATCH_COLORS}
+            colors={BUBBLE_SWATCH_COLORS}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.swatch, palette === null && styles.swatchActive]}
+            style={[styles.swatch, bubbleActive && styles.swatchActive]}
           />
         </PressableScale>
-        {LIVE_BORDER_PALETTES.map((p) => (
-          <PressableScale key={p.join()} onPress={() => onPaletteChange(p)}>
+        <PressableScale
+          accessibilityLabel="Film ramp"
+          onPress={() => onSelect(null, FILM_MODE_UNIFORM.ramp)}
+        >
+          <LinearGradient
+            colors={RAMP_SWATCH_COLORS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.swatch, rampActive && styles.swatchActive]}
+          />
+        </PressableScale>
+        {LIVE_BORDER_PALETTES.map((p, i) => (
+          <PressableScale
+            key={p.join()}
+            accessibilityLabel={`Palette ${i + 1}`}
+            onPress={() => onSelect(p, FILM_MODE_UNIFORM.ramp)}
+          >
             <LinearGradient
               colors={p as unknown as [string, string, ...string[]]}
               start={{ x: 0, y: 0 }}

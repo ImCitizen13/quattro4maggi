@@ -160,9 +160,11 @@ all" restores them) but are no longer tunable. The color mode is owned by
 
 ### SoapFilmPaletteBar.tsx
 
-Palette swatches (Default + `LIVE_BORDER_PALETTES` from `src/lib/palettes.ts`)
-in a bar fixed at the top of the screen, always visible (not gated by the
-tuning panel). Picking one switches to Ramp mode.
+Swatches in a bar fixed at the top of the screen, always visible (not gated
+by the tuning panel): "Default" (bubble cosine palette; restores the default
+mode, palette cleared), "Film ramp" (built-in ramp, Ramp mode), then
+`LIVE_BORDER_PALETTES` from `src/lib/palettes.ts` (Ramp mode). Each pick calls
+`onSelect(palette, mode)`; `SoapFilm` owns both.
 A pick is held in `SoapFilm` state and passed to `SoapFilmShader` as
 `rampColors`, which builds a 20x1 LUT via `buildSoapFilmRampImage`
 (cyclic interpolation, so the wrap has no seam; memoized per palette).
