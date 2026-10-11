@@ -31,7 +31,7 @@ import {
   MipmapMode,
   Shader,
 } from "react-native-skia";
-import React, { useMemo } from "react";
+import React from "react";
 import {
   useDerivedValue,
   type SharedValue,
@@ -172,13 +172,9 @@ export function SoapFilmShader({
     uOpacity: color ? color.opacity.value : FILM_OPACITY_DEFAULT,
   }));
 
-  const rampKey = rampColors?.join();
-  const ramp = useMemo(
-    () =>
-      rampColors ? buildSoapFilmRampImage(rampColors) : getSoapFilmRampImage(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rampKey],
-  );
+  const ramp = rampColors
+    ? buildSoapFilmRampImage(rampColors)
+    : getSoapFilmRampImage();
 
   const thicknessEffect =
     generator === "sine" ? soapThicknessSineEffect : soapThicknessEffect;
