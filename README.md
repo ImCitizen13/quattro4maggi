@@ -78,9 +78,9 @@ Read them at [quattro4maggi.com](https://quattro4maggi.com) — free, no signup.
 
 ---
 
-Built by [Mohamed Eltohamy](https://meltohamy.xyz) — open for remote contract and part-time work.
+Built by [Mohamed Eltohamy](https://meltohamy.dev) — open for remote contract and part-time work.
 
-[meltohamy.xyz](https://meltohamy.xyz) · meltohamy@protonmail.com
+[meltohamy.dev](https://meltohamy.dev) · meltohamy@protonmail.com
 
 ## License
 
