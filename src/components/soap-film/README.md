@@ -89,14 +89,15 @@ grazing angles and dim head-on, the way real soap film looks.
 
 ## Controls
 
-Every slider has a ↺ reset. **Reset all** restores every default.
+No per-slider resets. A circular refresh icon in the panel's top-right corner
+(**Reset all**, shown on slider tabs only) restores every default.
 
 | Tab   | Control                                | What it does                                    |
 | ----- | --------------------------------------- | ------------------------------------------------ |
 | Shape | Scale                                   | Squircle size (also pinchable)                   |
 |       | Exponent                                | Superellipse corner sharpness                    |
 | Color | Curl / Sine                             | Which thickness generator drives the film        |
-|       | Ramp / Physical                         | Color mapping mode                               |
+|       | Bubble / Ramp                           | Color mapping mode (no Physical button)          |
 |       | Drainage                                | Noise film → horizontal gravity bands            |
 |       | Thickness scale                         | Ramp wrap count, or nm in physical mode          |
 |       | Cos theta                               | View-angle cosine (physical mode)                |
@@ -132,7 +133,7 @@ triggers a React re-render — only the UI-thread uniform recomputes.
 
 Owns every live `SharedValue` behind the `flow`/`color` uniform groups,
 seeded from `soapFilmConfig.ts`. Exports `SOAP_FILM_DEFAULTS` so the tuning
-panel's per-slider reset and "Reset all" read the same numbers the hook
+panel's "Reset all" reads the same numbers the hook
 seeded from, with no duplication.
 
 ### hooks/useFilmTouches.ts
