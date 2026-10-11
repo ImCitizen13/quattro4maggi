@@ -83,13 +83,7 @@ export type UseBubbleOpticsParams = {
   tintColor: readonly [number, number, number];
   /** Starting `iRefract`, pt. @default REFRACT */
   refract?: number;
-  /**
-   * Per-demo starting values, overriding the shared `bubbleModes` defaults for
-   * the levers named. They seed BOTH the live shared values AND the returned
-   * `defaults`, so a tuning panel's Reset returns to THIS demo's look rather
-   * than the global one. Omit it and nothing changes. `overrides.refract`
-   * WINS over the standalone `refract` param when both are given.
-   */
+  /** Per-demo starting values; seed the live values AND `defaults` (Reset returns here). Wins over `refract`. */
   overrides?: Partial<BubbleOpticsValues>;
 };
 

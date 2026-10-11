@@ -9,9 +9,9 @@ A collection of React Native components that render animated glowing borders aro
 ## Required Libraries
 
 ```bash
-bun add @shopify/react-native-skia react-native-reanimated react-native-svg
+bun add react-native-skia react-native-reanimated react-native-svg
 # or
-npx expo install @shopify/react-native-skia react-native-reanimated react-native-svg
+npx expo install react-native-skia react-native-reanimated react-native-svg
 ```
 
 

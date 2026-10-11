@@ -1,4 +1,4 @@
-import { Rect, Shader, Skia, vec } from "@shopify/react-native-skia";
+import { Rect, Shader, Skia, vec } from "react-native-skia";
 import React from "react";
 import {
   Easing,

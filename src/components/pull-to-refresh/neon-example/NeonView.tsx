@@ -29,7 +29,7 @@
  */
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Canvas, matchFont, Skia, useTypeface } from "@shopify/react-native-skia";
+import { Canvas, matchFont, Skia, useTypeface } from "react-native-skia";
 import { PressableScale } from "pressto";
 import { useMemo, useState } from "react";
 import { Platform, StyleSheet, useWindowDimensions, View } from "react-native";

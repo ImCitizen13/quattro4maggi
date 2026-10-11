@@ -1,4 +1,4 @@
-import { Canvas, Rect } from "@shopify/react-native-skia";
+import { Canvas, Rect } from "react-native-skia";
 import { PressableScale } from "pressto";
 import React from "react";
 import { StyleSheet } from "react-native";

@@ -32,7 +32,7 @@ import {
   BackdropFilter,
   RuntimeShader,
   rect,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React from "react";
 import {
   useDerivedValue,

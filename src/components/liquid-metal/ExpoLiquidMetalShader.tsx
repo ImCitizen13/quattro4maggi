@@ -14,7 +14,7 @@ import {
   Shader,
   Skia,
   useClock,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo } from "react";
 import { PixelRatio, StyleSheet } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";

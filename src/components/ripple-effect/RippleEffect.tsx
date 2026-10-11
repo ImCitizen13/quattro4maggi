@@ -30,7 +30,7 @@ import {
   RuntimeShader,
   useClock,
   useImage,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useState } from "react";
 import {
   ActivityIndicator,

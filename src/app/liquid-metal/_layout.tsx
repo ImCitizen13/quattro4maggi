@@ -1,6 +1,6 @@
 import { ThemeHeaderTitle } from "@/components/Theme";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { HeaderBackButton } from "@react-navigation/elements";
+import { HeaderBackButton } from "expo-router/react-navigation";
 import { Stack, router } from "expo-router";
 import { PressableScale } from "pressto";
 import { useColorScheme } from "react-native";

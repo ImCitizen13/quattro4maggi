@@ -272,3 +272,52 @@ All in `multiBubbleConfig.ts`.
 
 The whole run is 2490 ms today, which is long to sit through on every tap.
 `TRIGGER_SWELL_MS` and `INTRO_TRAVEL_MS` are the two worth cutting first.
+
+---
+
+# Choreography B
+
+An alternate intro (`hooks/useChoreographyB.ts`): no trigger bubble. The
+greeting shrinks up and away while four bubbles float up from below the
+screen into the same quad A blooms. One `progress` 0 → 1, every value a pure
+function of it, so it scrubs both ways.
+
+**Driven by** a button (`show()` / `hide()`: a linear `withTiming` to 1 / 0,
+`B_SHOW_MS` = 1600 ms for the full run, scaled by remaining distance; the
+per-stage curves already shape the motion, and a spring front-loads it and felt
+too fast) or a
+vertical drag: `progress = start − translationY / (height · B_SCRUB_FRACTION)`,
+clamped, so half the screen height is the full 0 → 1. On release the position
+decides (`progress ≥ 0.5` → 1, else 0); only a very hard flick beyond
+`B_FLICK_VELOCITY` (2000 pt/s) overrides it (up → 1, down → 0). The spring is
+seeded with the release velocity. B renders no scene ripple (no ripple layer).
+Button = linear timed, release = spring (it carries finger velocity).
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `B_SHOW_MS` | 1600 | Full 0 → 1 button run (and Reset's 1 → 0), linear |
+
+| Stage | Window (`progress`) | Curve |
+| --- | --- | --- |
+| Greeting: up `B_TEXT_RISE`, scale 1 → 0, fade | `B_TEXT_WINDOW` = 0 → 0.5 | ease-in cubic |
+| Bubble i scale 0 → 1 (`inflate`) | `B_BUBBLE_START + i·B_BUBBLE_STAGGER`, length `B_BUBBLE_WINDOW` | ease-out cubic |
+| Bubble i rise from below the screen to its slot | same window | ease-out back (0.6) |
+| Bubble i label | last 30% of its window (`B_LABEL_DELAY`) | linear |
+
+The last bubble's window ends at exactly 1 (`B_BUBBLE_WINDOW` is derived).
+The back-ease carries each bubble slightly past its slot on arrival, so the
+glass wobbles for free. Once settled the bubbles drift with A's sin drift.
+
+| Constant | Value |
+| --- | --- |
+| `B_TEXT_RISE` | 120 pt |
+| `B_TEXT_WINDOW` | [0, 0.5] |
+| `B_BUBBLE_START` | 0.25 |
+| `B_BUBBLE_STAGGER` | 0.03 |
+| `B_BUBBLE_WINDOW` | derived, 0.66 |
+| `B_RISE_FROM` | 40 pt below screen bottom + own radius |
+| `B_LABEL_DELAY` | 0.7 |
+| `B_SCRUB_FRACTION` | 0.5 × screen height |
+| `B_FLICK_VELOCITY` | 2000 pt/s |
+| `B_MAX_SETTLE_VELOCITY` | 2 progress/s (cap on seeded release velocity) |
+| `B_SPRING` | dampingRatio 0.8, duration 900, mass 1 |

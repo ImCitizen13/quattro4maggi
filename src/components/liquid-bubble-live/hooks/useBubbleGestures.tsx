@@ -30,40 +30,20 @@ import {
 type UseBubblPanGestureParams = {
   centerX: number;
   centerY: number;
-  /**
-   * Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble
-   * inertia and strength"), scaling the follow spring's `mass` — a heavier
-   * bubble lags the finger more. Optional so existing callers keep today's
-   * mass unchanged.
-   */
+  /** Scales the follow spring's `mass`: a heavier bubble lags the finger more. */
   inertia?: DerivedValue<number>;
 };
 
 type UseBubblPanGestureReturn = {
-  /**
-   * Spring-smoothed anchor. Kept for the older `LiquidGlassBubble` /
-   * `LiquidGlassSingleBubble` screens, where the drawn circle itself is what
-   * needs to look springy. NOT what drives the harmonic bubble — see
-   * `targetX`/`targetY`.
-   */
+  /** Spring-smoothed anchor (trails the finger ~0.1 s × velocity). */
   bubbleX: SharedValue<number>;
   bubbleY: SharedValue<number>;
-  /**
-   * Raw, unsmoothed finger position. `SPRING_FOLLOW_PROPS` is
-   * `stiffness 300 / damping 30`, and a spring tracking a constant-velocity
-   * target trails it by `(damping / stiffness) × velocity` = 0.1 s × velocity
-   * — 200 pt behind at a 2000 pt/s drag. `LiquidBubbles` anchors on these
-   * instead so the bubble stays under the finger and ALL of its liquid
-   * character comes from the harmonic modes, not from a lagging center.
-   */
+  /** Raw, unsmoothed finger position: anchor on these to keep the bubble under the finger. */
   targetX: SharedValue<number>;
   targetY: SharedValue<number>;
-  /** 1 while the pan is active (begin..end/finalize), 0 otherwise. Read by
-   * `bubbleModeMath.ts` to detect the release edge for the mode 3/4 kick. */
+  /** 1 while the pan is active, 0 otherwise (release edge triggers the kick). */
   isActive: SharedValue<number>;
-  /** Raw `e.velocityX`/`e.velocityY` from the gesture, pt/s. Plumbed for
-   * later phases — the mode-2 physics derives its own speed/angle from the
-   * (cx, cy) position delta, not from these. */
+  /** Raw gesture velocity, pt/s (feeds the release kick only). */
   velocityX: SharedValue<number>;
   velocityY: SharedValue<number>;
   panGesture: PanGesture;
@@ -95,11 +75,7 @@ export function useBubblePanGesture({
 
   const onUpdate = (e: GestureUpdateEvent<PanGestureHandlerEventPayload>) => {
     "worklet";
-    // One config object per gesture event (not per physics frame), reused for
-    // both X and Y — a heavier bubble (inertia > 1) gets a heavier follow
-    // spring, so it lags the finger more. This allocates a small object per
-    // event, off the per-frame physics path; `withSpring` itself allocates
-    // per call anyway.
+    // Heavier bubble (inertia > 1) = heavier follow spring.
     const cfg = {
       ...SPRING_FOLLOW_PROPS,
       mass:
@@ -125,9 +101,7 @@ export function useBubblePanGesture({
     e: GestureStateChangeEvent<PanGestureHandlerEventPayload>,
   ) => {
     "worklet";
-    // Covers the cancelled/failed path too — onEnd doesn't always fire, but
-    // onFinalize always does, so this is the reliable place to guarantee
-    // isActive drops back to 0.
+    // onEnd doesn't fire on cancel/fail; onFinalize always does.
     isActive.value = 0;
     velocityX.value = e.velocityX;
     velocityY.value = e.velocityY;
@@ -174,21 +148,18 @@ export function useBubblePinchGesture({
   minRadius = 16,
 }: UseBubblPinchGestureParams): UseBubblPinchGestureReturn {
   const scaledRadius = useSharedValue<number>(restRadius);
-  // Radius at the moment this pinch started — the base `e.scale` multiplies.
-  // Both values are in points; mixing a multiplier in here collapses the bubble.
+  // Radius (points) when this pinch started — the base `e.scale` multiplies.
   const savedRadius = useSharedValue<number>(restRadius);
 
   const onBegin = () => {
     "worklet";
-    // Capture on begin rather than on end so a cancelled pinch can't leave a
-    // stale base behind.
+    // Captured on begin so a cancelled pinch can't leave a stale base.
     savedRadius.value = scaledRadius.value;
   };
 
   const onUpdate = (e: GestureUpdateEvent<PinchGestureHandlerEventPayload>) => {
     "worklet";
-    // `e.scale` is cumulative from the start of the gesture, so this is an
-    // absolute target recomputed each frame — it cannot drift.
+    // `e.scale` is cumulative, so this absolute target cannot drift.
     scaledRadius.value = withSpring(
       clamp(savedRadius.value * e.scale, minRadius, maxRadius),
       SPRING_BOUNCE_ANIMATION,

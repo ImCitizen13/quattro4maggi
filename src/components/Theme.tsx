@@ -1,4 +1,4 @@
-import { HeaderBackButton } from "@react-navigation/elements";
+import { HeaderBackButton } from "expo-router/react-navigation";
 import { useRouter } from "expo-router";
 import { PressableScale } from "pressto";
 import React from "react";

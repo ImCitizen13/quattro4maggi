@@ -13,7 +13,7 @@ import {
   Shader,
   Skia,
   useClock,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo } from "react";
 import { StyleSheet } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";
@@ -217,14 +217,16 @@ export function SvgLiquidMetalShader({
     const offsetY = (height - scaledHeight) / 2;
 
     // Translate to origin, scale, then center
-    p.transform(
-      Skia.Matrix()
-        .translate(-bounds.x, -bounds.y)
-        .scale(scale, scale)
-        .translate(offsetX / scale, offsetY / scale)
-    );
+    const fitted = Skia.PathBuilder.MakeFromPath(p)
+      .transform(
+        Skia.Matrix()
+          .translate(-bounds.x, -bounds.y)
+          .scale(scale, scale)
+          .translate(offsetX / scale, offsetY / scale)
+      )
+      .build();
 
-    return { path: p, pathWidth: scaledWidth, pathHeight: scaledHeight };
+    return { path: fitted, pathWidth: scaledWidth, pathHeight: scaledHeight };
   }, [svgPath, viewBoxWidth, viewBoxHeight, width, height]);
 
   // ============================================================================

@@ -23,8 +23,7 @@
  * - Image positions are LOCAL to the bubble center, so they ride with it.
  * - Zero React renders per frame: one `SharedValue<number[]>` mutated with
  *   `modify`, each image derives its own x/y.
- * - Same shape physics + optics as `LiquidBubbleLive` (useBubbleShape,
- *   useBubbleOptics, shaders.ts).
+ * - Shape physics + optics from useBubbleShape, useBubbleOptics, shaders.ts.
  */
 
 import {
@@ -40,7 +39,7 @@ import {
   Shader,
   rect,
   useImage,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -54,7 +53,7 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 
-import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { IslandFps } from "@/components/common/IslandFps";
 import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
 import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
 import { SPRING_BUBBLE_INFLATE } from "@/lib/animations/constants";
@@ -87,7 +86,7 @@ const SHOW_FPS_OVERLAY = true;
 /** Mount `BubbleTuningPanel` (shape + optics levers). */
 const SHOW_TUNING_PANEL = true;
 
-/** Upper bound of the Refract slider, pt (same as LiquidBubbleLive). */
+/** Upper bound of the Refract slider, pt. */
 const REFRACT_SLIDER_MAX = 40;
 
 /** Soap-film overlay on at mount (live toggle: Surface tab). */
@@ -96,7 +95,7 @@ const SOAP_FILM_ON_DEFAULT = true;
 /** Full-screen background the bubble refracts (fit: cover). */
 const BACKGROUND_SOURCE = require("../../../assets/liquid-glass-bubble/stars_bg.jpg");
 
-/** Tint hue, rgb 0..1 (same as LiquidBubbleLive). */
+/** Tint hue, rgb 0..1. */
 const BUBBLE_TINT: [number, number, number] = [0.85, 0.93, 1.0];
 
 /** Floats per image in the bodies buffer: x, y, vx, vy (local to center). */
@@ -149,7 +148,7 @@ type BouncingImageProps = {
   /**
    * `useBubbleShape`'s `iParams` buffer; `[0..1]` = the center the glass draws
    * this frame. Reading `bubbleX/Y` instead can put the images a frame off
-   * the glass (see README → "hooks/useImageBubble.ts").
+   * the glass.
    */
   paramBuffer: SharedValue<number[]>;
 };
@@ -344,7 +343,7 @@ export function BouncingImagesBubble({
   );
 
   // ==========================================================================
-  // Shape physics + optics (shared with LiquidBubbleLive)
+  // Shape physics + optics
   // ==========================================================================
 
   const wobble = useSharedValue(WOBBLE_DEFAULT);
@@ -388,8 +387,8 @@ export function BouncingImagesBubble({
     soapFilmOnValue.value = next ? 1 : 0;
   };
 
-  // Film lags the bubble's motion (drag + spring home) — same as
-  // LiquidBubbleLive, see hooks/useBubbleFilmMotion.ts.
+  // Film lags the bubble's motion (drag + spring home), see
+  // hooks/useBubbleFilmMotion.ts.
   const filmDrag = useSharedValue(FILM_DRAG_DEFAULT);
   const filmMotion = useBubbleFilmMotion({
     posX: bubbleX,
@@ -438,7 +437,7 @@ export function BouncingImagesBubble({
     ],
   }));
 
-  // Same padding reasoning as LiquidBubbleLive's clipRect.
+  // Clip = shape bbox grown by refract + CLIP_SLACK (see liveConfig.ts).
   const clipRect = useDerivedValue(() => {
     const R = Math.max(bboxW.value, bboxH.value) / 2;
     const pad =
@@ -668,7 +667,7 @@ export function BouncingImagesBubble({
         </Canvas>
       </GestureDetector>
 
-      {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
+      {SHOW_FPS_OVERLAY && <IslandFps />}
 
       {/* After the GestureDetector so the bubble's pan can't steal slider
           touches. No Float / Buoyancy here: this mode doesn't float. */}

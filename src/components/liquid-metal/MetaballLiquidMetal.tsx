@@ -51,7 +51,7 @@ import {
   Shader,
   Skia,
   useClock,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { PressableScale } from "pressto";
 import React, { useMemo, useRef, useState } from "react";

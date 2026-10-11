@@ -1,5 +1,5 @@
-import { Group, Text } from "@shopify/react-native-skia";
-import type { SkFont } from "@shopify/react-native-skia";
+import { Group, Text } from "react-native-skia";
+import type { SkFont } from "react-native-skia";
 import type { SharedValue } from "react-native-reanimated";
 import { clamp, interpolate, useDerivedValue } from "react-native-reanimated";
 

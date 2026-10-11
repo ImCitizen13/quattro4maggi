@@ -35,7 +35,7 @@ import {
   Skia,
   Circle as SkiaCircle,
   Path as SkiaPath,
-} from '@shopify/react-native-skia';
+} from 'react-native-skia';
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Svg, { G, Path } from 'react-native-svg';
@@ -275,7 +275,7 @@ export const SkiaColorWheel = ({
    * Creates a Skia path for an elliptical wedge segment.
    */
   const createWedgePath = (startAngle: number, endAngle: number) => {
-    const path = Skia.Path.Make();
+    const path = Skia.PathBuilder.Make();
 
     // Apply rotation offset
     const adjStartAngle = startAngle + rotationRad;
@@ -319,7 +319,7 @@ export const SkiaColorWheel = ({
       path.close();
     }
 
-    return path;
+    return path.build();
   };
 
   return (
@@ -403,7 +403,7 @@ export const SkiaColorWheelBlurred = ({
    * Creates a Skia path for an elliptical wedge segment.
    */
   const createWedgePath = (startAngle: number, endAngle: number) => {
-    const path = Skia.Path.Make();
+    const path = Skia.PathBuilder.Make();
 
     // Apply rotation offset
     const adjStartAngle = startAngle + rotationRad;
@@ -447,7 +447,7 @@ export const SkiaColorWheelBlurred = ({
       path.close();
     }
 
-    return path;
+    return path.build();
   };
 
   // Create the blur paint for the layer

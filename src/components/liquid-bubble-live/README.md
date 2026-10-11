@@ -1,22 +1,22 @@
 # Liquid Bubble Live
 
-A wobbly glass bubble that bends whatever is drawn behind it, live.
+One big wobbly glass bubble with pictures bouncing around inside it. The
+glass bends whatever is drawn behind it, live.
 
-Drag to move it, pinch to resize it. It refracts through a Skia
-`<BackdropFilter>`. Self-contained: everything it needs is in this folder.
+Drag to move it (it springs back to the center on release), pinch to resize
+it. It refracts through a Skia `<BackdropFilter>`. The shader, tuning panel
+and physics here are also reused by `liquid-bubbles-multi` and `soap-film`.
 
 ## Files
 
-- `LiquidBubbleLive.tsx`: canvas, background, backdrop clip, panel
-- `BouncingImagesBubble.tsx`: Bounce mode — images bouncing inside one big bubble
-- `ArcCarouselBubble.tsx`: Arc mode — image wheel on a bottom semicircle, bubble at its top slot
-- `StackedBubbles.tsx`: Stack mode — two concentric bubbles (inner = 0.875×) sharing one shape
+- `BouncingImagesBubble.tsx`: canvas, background, bouncing images, backdrop clip, panel
 - `shaders.ts`: the bubble shader
 - `filmOverlayShader.ts`: the soap-film overlay pass (film from `soap-film`)
 - `bubbleModes.ts`: physics + look constants
 - `liveConfig.ts`: background + clip constants
+- `backgroundShaders.ts`: the animated background scene (used by `liquid-bubbles-multi`)
 - `BubbleTuningPanel.tsx`: the controls
-- `hooks/`: gestures, float, image bubble, shape physics (`bubbleModeMath` + test), optics, film motion, clock
+- `hooks/`: gestures, shape physics (`bubbleModeMath` + test), optics, film motion, clock
 - `multi_bubble.md`: design notes + cost comparison for several bubbles on one screen
 
 ## Controls
@@ -26,8 +26,7 @@ loads the look from `gargantua-type-gpu/centerBubbleScene.ts`.
 
 | Tab        | Slider               | What it does                                                                                                 |
 | ---------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Shape      | Float: On/Off        | Bubbles inflate out of the box and float (rise, sway, bounce, respawn) · off = park                          |
-|            | Buoyancy             | How strongly it rises · 0 drifts without rising (× each bubble's random trait)                               |
+| Shape      | Size                 | Bubble radius (same as pinching)                                                                             |
 |            | Wobble               | How much the edge wobbles                                                                                    |
 |            | Inertia              | How heavy the bubble feels — lags more, rings longer, bigger release kick, stretches further                 |
 |            | Strength             | How stiff the surface is — higher snaps back faster and rests rounder, lower wobbles longer and more at rest |
@@ -54,26 +53,42 @@ Tests: `bun test src/components/liquid-bubble-live/hooks/bubbleModeMath.test.ts`
 
 ## Design notes
 
-### LiquidBubbleLive.tsx
+### BouncingImagesBubble.tsx
 
-Divergence phase 12B (`temp/liquid-bubbles-divergence.md` → "Refraction
-source"): the harmonic bubble from the retired `liquid-glass-bubble` demo,
-refracting LIVE content instead of a still image. Its physics, gestures and
-controls now live in this folder; the notes below comparing against the
-still-image version are history.
-
-**Why this is a separate demo, not a flag**
-
-The two differ in pass structure, not in a prop. The still-image version is:
+One glass bubble in the middle of the screen, spanning the screen width at
+start, with random pictures from `assets/Bubbles/128` bouncing inside it.
 
 ```
-pass 1: draw Rect, shader samples a child ImageShader → store
+ mount (JS)   IMAGE_COUNT distinct random sources, non-overlapping start spots
+              inside the disk, random headings
+ every frame  UI useFrameCallback: bubble accel → opposite kick on every image
+              (slosh) · move · bounce off the round wall · bounce off each
+              other · relax speed back to IMAGE_SPEED
+ draw         background → images → BackdropFilter (bubble shader)
+              → soap-film overlay (filmOverlayShader.ts)
+ drag         pan moves the bubble by the finger's translation; release springs
+              it back to the center
 ```
 
-— one pass, the photo already a texture. This one is:
+- Image positions are LOCAL to the bubble center, so they ride with it. Each
+  image has a random size and a mass proportional to its area.
+- Image size, cruise speed and the wall scale with the radius; a resize
+  rescales positions and velocities in place.
+- Zero React renders per frame: one `SharedValue<number[]>` mutated with
+  `modify`, each image derives its own x/y.
+- `SHOW_FPS_OVERLAY` mounts `IslandFps`. The simulator caps at 60 Hz, which
+  pins `j120` at 100% and makes it carry no signal — real numbers need a
+  release build on a 120 Hz device.
+- `SHOW_TUNING_PANEL` mounts `BubbleTuningPanel`, all `SharedValue`s written
+  on the UI thread with no React re-render per tick. It is rendered after the
+  bubble's `GestureDetector` so the pan can't steal slider touches.
+
+**Why the pass structure matters**
+
+The live backdrop costs more passes than a still image:
 
 ```
-pass 1: draw the background                        → STORE (forced:
+pass 1: draw the background + images               → STORE (forced:
         the backdrop must be samplable)
 pass 2: bubble shader reads that snapshot          → store
 pass 3: composite the layer back onto the canvas   → store
@@ -82,122 +97,45 @@ pass 3: composite the layer back onto the canvas   → store
 Pass 3 exists only because Skia's `saveLayer` is a TEMPORARY it has to paste
 back; there is no "keep this layer between frames" in Skia. Clipping bounds
 how much AREA each pass touches, but not how many passes there are, and on a
-tile-based GPU each break is real main-memory traffic. That is the price of
-live content on this route, and it is why the doc lists a 2-pass
-WebGPU/TypeGPU variant as the alternative if these three ever prove too many.
+tile-based GPU each break is real main-memory traffic.
 
 **Flow:**
 
-1. Gestures and physics are IMPORTED from the still-image demo, not
-   reimplemented: `useBubblePanGesture` / `useBubblePinchGesture` own the
-   anchor and radius, `useBubbleShape` steps `stepBubbleModes` on the UI
-   runtime and publishes the double-buffered 12-float `iParams` buffer plus
-   the shape bbox. The mode state is renderer-independent — nothing in it
-   knows whether the thing behind the bubble is a photo or a live scene.
-2. A `<Fill>` draws the live background (`backgroundShaders.ts`) FIRST, so
-   it is what Skia snapshots as the backdrop. It has to live inside this
-   same `<Canvas>`: sibling RN views are composited by CoreAnimation only
-   after Skia has finished, so at shader time there is nothing behind the
-   Canvas to read.
+1. `useBubblePinchGesture` owns the radius; `useBubbleShape` steps
+   `stepBubbleModes` on the UI runtime and publishes the double-buffered
+   12-float `iParams` buffer plus the shape bbox.
+2. The background and images are drawn FIRST inside the same `<Canvas>`, so
+   they are what Skia snapshots as the backdrop. Sibling RN views are
+   composited by CoreAnimation only after Skia has finished, so at shader
+   time there is nothing behind the Canvas to read.
 3. `<BackdropFilter>` runs the bubble effect over that snapshot. Skia binds
    the snapshot to the effect's single `uniform shader` slot; there is no
    `<ImageShader>` child here and therefore no `tx/ty="clamp"` guardrail.
-4. `clipRect` is the shape bbox grown by `REFRACT + CLIP_SLACK`. This is the
-   ONE place where the still-image demo's `BBOX_PAD` reasoning inverts — see
-   `liveConfig.ts`. A clip governs which pixels are READABLE, and the rim
-   samples outward; the draw rect governs where alpha is non-zero, and that
-   never leaves `r + 0.75`.
+4. `clipRect` is the shape bbox grown by `REFRACT + CLIP_SLACK`. A clip
+   governs which pixels are READABLE, and the rim samples outward; the draw
+   rect governs where alpha is non-zero, and that never leaves `r + 0.75`.
 
 **Key features:**
 
 - The 12-float physics buffer is forwarded to the shader VERBATIM. The
-  backdrop filter was expected to need a PixelRatio conversion (a runtime
-  shader image filter is usually handed the layer's device space); measuring
-  it showed this one runs in absolute canvas POINTS, so there is nothing to
+  backdrop filter runs in absolute canvas POINTS, so there is nothing to
   rescale and nothing allocated per frame. See `shaders.ts` for the
   measurement and how to redo it.
 - Outside the bubble the filter returns alpha 0, and the layer composites
-  src-over, so the clip rect never reads as a visible box over the
-  background.
-- `LIVE_REFRACT` (18 pt) is a demo-local starting `iRefract`, not the
-  still-image demo's `REFRACT` (9); it is now live-tunable via
+  src-over, so the clip rect never reads as a visible box.
+- `LIVE_REFRACT` (18 pt) is the starting `iRefract`; it is live-tunable via
   `BubbleTuningPanel`, so the clip pads by the current slider value, not the
-  constant. That 9 exists to stop the rim sampling past the edge of a small
-  `<ImageShader>` rect; the backdrop is the whole canvas, so the bend can be
-  twice as strong without smearing.
-- `SHOW_FPS_OVERLAY` mounts `FpsOverlay`. Note the simulator caps at 60 Hz,
-  which pins `j120` at 100% and makes it carry no signal — real numbers need
-  a release build on a 120 Hz device.
-- `SHOW_TUNING_PANEL` mounts `BubbleTuningPanel` (Wobble + the 7 optics
-  levers), all `SharedValue`s written on the UI thread with no React
-  re-render per tick.
-
-### ArcCarouselBubble.tsx
-
-Arc mode: the `assets/liquid-glass-bubble` images as rectangular thumbnails
-(each keeps its own aspect) on a semicircle at the bottom, a fixed glass
-bubble at the arc's top slot, and the top image as the full-screen
-background.
-
-```
- pan (UI)      offset = start − dx / (arcR · STEP)        STEP = 2π / N (wraps)
- release (UI)  offset = withSpring(round(offset + v · 0.25), SPRING_ARC_SNAP, velocity v)
- item i        d = wrap(i − offset), θ = d · STEP
-               x = cx + arcR·sinθ, y = cy − arcR·cosθ, height × 1.4 at θ 0 → 1 at ±STEP
-               fades out below the horizon (90° → 115°), not drawn past it
- background i  weight = max(0, 1 − |d|), blend "plus" over black
- draw          black → backgrounds → thumbnails → BackdropFilter bubble → soap film
- film motion   virtual bubble x = cx + offset · stepPx → useBubbleFilmMotion
-```
-
-- **Crossfade:** "plus" makes the two nearest layers sum to an exact mix, in
-  any draw order (a src-over pair breaks at the 9 → 0 wrap). Layers with
-  weight 0 get height 0, so at most 2 full-screen images are drawn.
-- **Images load once** with Skia's `useCollectionLoading`, shared by the
-  background and the thumbnail. All 10 stay decoded at full size.
-- **Bubble:** fixed; `isActive` + the release velocity (× `BUBBLE_KICK`) feed
-  `useBubbleShape`, so a flick makes it wobble. Radius = `BUBBLE_FIT` (1.35) ×
-  the widest centered rectangle's half-diagonal, so its corners stay off the
-  rim; Shape → Size scales it 0.6–1.6×.
-- **Soap film:** the bubble never moves, so the film lags the wheel instead:
-  content sliding right under the glass reads as the bubble moving left.
-- **Controls:** `BubbleTuningPanel` via its `style` prop at the top (the arc
-  owns the bottom), starting on Hide. No Float / Buoyancy.
-- **Geometry** comes from `onLayout`, not the window, so the arc sits on the
-  real bottom edge under the header.
-
-### StackedBubbles.tsx
-
-Stack mode: two concentric glass bubbles at the center over a full-screen
-wallpaper (`black_and_white_aesthetic_wallpapers.jpg`, fit cover — fine
-topographic lines make the bend easy to read). The inner one is
-`INNER_SCALE` (0.875) of the outer.
-
-```
- gestures (UI)  pan drags the pair, pinch resizes it; release → withSpring(center)
- physics (UI)   ONE useBubbleShape → outer iParams [cx, cy, R, a2, phi2, …]
- inner          same buffer, R × 0.875 (mode amplitudes are fractions of R)
- draw           wallpaper → outer BackdropFilter → outer film
-                → inner BackdropFilter (refracts the outer bubble) → inner film
-```
-
-- **Shared shape:** one physics state, so the pair wobbles as one and the
-  `useBubbleShape` singleton is never shared by two callers.
-- **Inner clip:** the outer bbox's shape part scaled by 0.875, AA pad kept.
-- **Controls:** the top-right toggle mounts/unmounts `BubbleTuningPanel`
-  (no collapsed tab row left behind). One set of levers drives both bubbles.
-- **Cost:** 2 × (backdrop filter + film pass) ≈ 8 pass breaks — see
-  `multi_bubble.md`.
+  constant. The backdrop is the whole canvas, so the bend can be strong
+  without smearing clamped edge pixels.
 
 ### shaders.ts
 
 Liquid Bubble Live — harmonic bubble shader, as a BACKDROP image filter
-(divergence phase 12B, Skia route).
+(Skia route).
 
-Originally a port of the retired `liquid-glass-bubble` still-image shader
-(history below compares against it). The field, the analytic
-`dr/dθ`, the normal, the refraction sample, the thin film and the dark rim
-are IDENTICAL line for line. Two things, and only two things, differ:
+Originally a port of the retired `liquid-glass-bubble` still-image shader.
+The field, the analytic `dr/dθ`, the normal, the refraction sample, the thin
+film and the dark rim are identical to it. Two things differ:
 
 1. **What `iImage` is.** In the still-image demo it is a child
    `<ImageShader>` — a photo, already a texture, mapped onto the bubble.
@@ -219,7 +157,7 @@ A backdrop `RuntimeShader` filter was expected to run in DEVICE PIXELS: the
 `<Group layer>` note in project memory says "the layer-filter uniforms run
 in DEVICE pixels → multiply by pd", and `SkRuntimeShaderImageFilter`
 declares only a translate matrix capability, which usually means Skia bakes
-the CTM scale into the layer. On iOS with `@shopify/react-native-skia`
+the CTM scale into the layer. On iOS with `react-native-skia`
 2.10.2 that is NOT what happens here. Rendering `half4(p.x/1200, p.y/2600,
 0, 1)` from this filter and reading the corner pixels back gave a red ramp
 reaching ~0.36 at the right edge, not ~1.0 — i.e. `p` tops out near the
@@ -228,8 +166,7 @@ both load-bearing:
 
 - `p` and `iImage.eval(uv)` are both in POINTS, so `iParams` is forwarded
   from `useBubbleShape` verbatim with no rescale and no per-frame
-  allocation, and every line below is byte-for-byte the still-image
-  shader.
+  allocation.
 - `p` is ABSOLUTE canvas points, not relative to the backdrop clip. The
   bubble lands under the finger with a clip that tracks it, which would
   not happen if the clip's top-left were the origin.
@@ -270,7 +207,7 @@ chromatic aberration (+2 taps when on), angular rainbow, specular, and a
 signed halo drawn OUTSIDE the rim. Superellipse `shapeN` was not ported:
 it would fight the harmonic shape. All default off (see `bubbleModes.ts`).
 The halo and the pincushion/dispersion reads go past the rim, so the
-`BackdropFilter` clip pads for them in `LiquidBubbleLive`.
+`BackdropFilter` clip pads for them.
 
 The filter's output is composited over the untouched background with
 src-over (`saveLayer(undefined, null, filter)` then `restore()`), so the
@@ -354,41 +291,36 @@ motion"):
 
 ### bubbleModes.ts
 
-Liquid Bubbles — harmonic mode constants (divergence phase 5B+).
+Liquid Bubbles — harmonic mode constants.
 
 Pure data: the buffer shape shared between the physics step
-(`hooks/bubbleModeMath.ts`, phase 6B) and the `iParams` uniform in
-`shaders.ts`, plus the spring/idle tuning constants that
-`stepBubbleModes` (phase 6B) will read. No React, no Skia, no Reanimated
-imports here — safe to import from a worklet or from plain TS.
-
-See `temp/liquid-bubbles-divergence.md` → "Physics contract" for the
-derivation of every constant below. Do not re-derive or re-tune these in
-phase 5B; phase 9B is the only phase that retunes feel.
+(`hooks/bubbleModeMath.ts`) and the `iParams` uniform in `shaders.ts`, plus
+the spring/idle tuning constants that `stepBubbleModes` reads. No React, no
+Skia, no Reanimated imports here — safe to import from a worklet or from
+plain TS. Also shared with `liquid-bubbles-multi`, so changing a constant
+here restyles every demo that imports it.
 
 ### liveConfig.ts
 
-Liquid Bubble Live — demo-local constants (phase 12B, Skia route).
+Liquid Bubble Live — demo-local constants (Skia route).
 
 Everything the harmonic bubble itself needs — mode springs, amplitudes,
-`REFRACT`, `FILM`, `BBOX_PAD` — lives in `./bubbleModes.ts` (moved here
-from the retired `liquid-glass-bubble` demo). This file holds only what is
-specific to refracting LIVE content: the backdrop clip padding and the
-background scene's own look/speed.
+`REFRACT`, `FILM`, `BBOX_PAD` — lives in `./bubbleModes.ts`. This file holds
+only what is specific to refracting LIVE content: the backdrop clip padding
+and the background scene's own look/speed.
 
 No React, no Skia imports — safe to read from a worklet.
 
 ### backgroundShaders.ts
 
-Liquid Bubble Live — the live background (phase 12B, Skia route).
+The animated background scene (used by `liquid-bubbles-multi`; Bounce draws
+an image instead).
 
-This is the content the bubble refracts. It is drawn as a plain `<Fill>`
-INSIDE the same `<Canvas>` as the bubble, because that is the only place it
-can be: the Canvas is one iOS view backed by one Metal texture, and sibling
-React Native views are composited by CoreAnimation only AFTER Skia has
-finished — at the moment the bubble's shader runs there is nothing "behind"
-it to read (see `temp/liquid-bubbles-divergence.md` → "The surface
-boundary").
+It is drawn as a plain `<Fill>` INSIDE the same `<Canvas>` as the bubble,
+because that is the only place it can be: the Canvas is one iOS view backed
+by one Metal texture, and sibling React Native views are composited by
+CoreAnimation only AFTER Skia has finished — at the moment the bubble's
+shader runs there is nothing "behind" it to read.
 
 **Flow (per pixel):**
 
@@ -408,15 +340,16 @@ the thing being measured.
 
 ### BubbleTuningPanel.tsx
 
-Live tuning levers for the harmonic bubble, shared by `LiquidBubbles` and
-`LiquidBubbleLive`. Every slider writes a `SharedValue` on the UI thread
-(`TuningSlider`), so dragging never re-renders React.
+Live tuning levers for the harmonic bubble, shared by `BouncingImagesBubble`
+and `liquid-bubbles-multi`. Every slider writes a `SharedValue` on the UI
+thread (`TuningSlider`), so dragging never re-renders React.
 
 **Flow:**
 
 1. Tab row: Hide · Shape · Refraction · Surface · Rim (React state — changes
    only on tap). Wraps onto two lines on a ~393pt phone.
-2. Shape → Wobble (mode 3/4 master multiplier).
+2. Shape → Size, Wobble, Inertia, Strength (the Float toggle and Buoyancy
+   only show when a demo passes them, as `liquid-bubbles-multi` does).
 3. Refraction → Refract, Lens falloff, Lens, Dispersion, Edge width.
 4. Surface → Film, Film bands, Tint, Specular.
 5. Rim → Rim dark, Rim width, Rainbow mix, Rainbow glow, Halo
@@ -435,7 +368,7 @@ Live tuning levers for the harmonic bubble, shared by `LiquidBubbles` and
 
 ### hooks/bubbleModeMath.ts
 
-Liquid Bubbles — harmonic mode physics (divergence phase 6B).
+Liquid Bubbles — harmonic mode physics.
 
 Advances the three damped harmonic modes (`a2/phi2`, `a3`, `a4`) that
 `shaders.ts` reads as `iParams`. No React, no Reanimated, no Skia imports —
@@ -447,13 +380,10 @@ babel plugin compiles it for the Reanimated UI runtime: an UNMARKED
 imported function captured by a worklet becomes a remote function and
 throws when called synchronously on the UI thread. A `'worklet'`-marked
 function is still an ordinary callable on the JS thread, so the tests are
-unaffected — same pattern as the Verlet math module this replaced (phase 3,
-commit a724cc6; see `temp/liquid-bubbles-divergence.md`).
+unaffected.
 
 `stepBubbleModes` is ONE function with the spring integration and the
-shortest-arc phase lerp written INLINE, and never allocates. Two reasons,
-both learned the hard way in phase 3/4 (see
-`temp/liquid-bubbles-divergence.md` → "Lessons"):
+shortest-arc phase lerp written INLINE, and never allocates. Two reasons:
 
 - react-native-worklets 0.10.1 in Bundle Mode resolves a `'worklet'`
   -marked sibling helper captured by another worklet as `undefined` at
@@ -476,15 +406,14 @@ and the mode-2 stretch cap (`A2_MAX`, capped at `A2_MAX_CEIL`).
 
 ### hooks/useBubbleShape.ts
 
-Liquid Bubbles — bubble mode shape hook (divergence phase 6B).
+Liquid Bubbles — bubble mode shape hook.
 
 **Flow:**
 
-bubbleX/bubbleY/scaledRadius/isActive (from useBubblePanGesture /
-useBubblePinchGesture) → useFrameCallback('worklet') →
-stepBubbleModes (see bubbleModeMath.ts) → paramBuffer SharedValue<number[]>
-(12 floats, one of two buffers flipped each frame) + bboxX/Y/W/H
-SharedValues.
+bubbleX/bubbleY/scaledRadius/isActive (from the demo's pan / pinch gestures)
+→ useFrameCallback('worklet') → stepBubbleModes (see bubbleModeMath.ts)
+→ paramBuffer SharedValue<number[]> (12 floats, one of two buffers flipped
+each frame) + bboxX/Y/W/H SharedValues.
 
 **Key features:**
 
@@ -493,23 +422,17 @@ SharedValues.
   in place afterwards. The frame callback never calls `new` or `.fill`
   on a steady-state frame.
 - All mutable state lives on the UI runtime (hung off `globalThis`
-  there), not in JS module scope — same reasoning as the phase 3 Verlet
-  hook this replaced (commit a724cc6; see
-  `temp/liquid-bubbles-divergence.md`): a JS module-scope object
-  captured by a worklet is cloned into a frozen shareable on the UI
-  side, so the state has to be born on the runtime that mutates it.
+  there), not in JS module scope: a JS module-scope object captured by a
+  worklet is cloned into a frozen shareable on the UI side, so the state
+  has to be born on the runtime that mutates it.
 - Double-buffered `paramBuffer`: the shader always reads a fully-written
   buffer, never one being mutated mid-frame.
-
-Mounted in `LiquidBubbles.tsx` (phase 7B), replacing the phase 3/4 Verlet
-ball-physics hook it superseded.
 
 ### hooks/useBubbleOptics.ts
 
 Owns the live "look" levers of the harmonic bubble and builds the shader
-`uniforms` from them. Currently wired to `LiquidBubbleLive` only: the
-`iLens`/`iPrism` uniforms exist in `liquid-bubble-live/shaders.ts`, not yet
-in the still-image shader.
+`uniforms` from them. Used by `BouncingImagesBubble` and
+`liquid-bubbles-multi`.
 
 **Flow:**
 
@@ -528,107 +451,20 @@ in the still-image shader.
 - Pre-first-frame fallback: `paramBuffer` is empty until `useBubbleShape`'s
   first frame; a zeroed `PARAM_FLOATS` buffer stands in, or Skia throws
   "Incorrect uniform size for: iParams".
-- `refract` default is per demo (still image caps at `REFRACT`, live uses
-  `LIVE_REFRACT`), so it is a parameter.
+- `refract` default is per demo (`LIVE_REFRACT` here), so it is a parameter.
 - **`overrides` generalises that to every lever.** A demo tuned differently
   from the rest passes `overrides: Partial<BubbleOpticsValues>` instead of
   editing `bubbleModes.ts`, whose constants are shared by all of these
   demos — changing them there restyles every one at once.
-  `liquid-bubbles-multi` uses it (`MULTI_OPTICS`); the four callers here
-  do not, and are unaffected, since an omitted `overrides` resolves every
-  lever to exactly the constant it used before.
+  `liquid-bubbles-multi` uses it (`MULTI_OPTICS`).
 - It seeds the returned `defaults` as well as the live values, which is the
   point: otherwise the panel's Reset would throw a demo back to the global
   look rather than its own. `overrides.refract` wins over the standalone
   `refract` parameter when both are given.
 
-### hooks/useBubbleFloat.ts
-
-The bubble's life cycle. Every bubble is born in the black spawn box at the
-bottom of the screen, inflates out of the box's top edge, launches upward,
-floats like a soap bubble (buoyancy, sideways sway, air drag, soft bounces
-off the left, right and bottom edges), drifts out the top, and is born
-again from the box.
-
-```
- UI worklet (useFrameCallback), phases SPAWN → INFLATE → FLOAT → SPAWN
-   SPAWN   roll traits: wobble ×0.6–1.6 · strength ×0.7–1.4 · inertia ×0.7–1.5
-           · buoyancy ×0.6–1.5 · birthShape [a2, phi2, a3, phi3, a4, phi4]
-           launch v = 100–300 pt/s within ±30° of straight up
-           scaledRadius = 1 → withSpring(restRadius × 0.6–1.5, duration T = BIRTH_TIME 1.5 s)
-           pos = box top-center, anchored = false
-   INFLATE attached at spawnY − R (grows out of the box's top edge) + offset
-           motion eases in from spawn: m = smoothstep(age / T), same T as the spring,
-           offset += v · m · dt (forces already act on v) → FLOAT at age = T
-           no hold, no velocity jump; whole birth = T = 1.5 s
-           (float off: the newborn keeps growing but waits at the mouth)
-   FLOAT   v.y −= FLOAT_BUOYANCY · buoyancy · buoyancyMul / I · dt  (y DOWN, minus = up)
-           v.x += FLOAT_SWAY · sin(2π t / FLOAT_SWAY_PERIOD + φ) · dt
-           v   *= exp(−FLOAT_DRAG / √I · dt)
-           pos += v·dt → bubbleX / bubbleY  (direct write cancels any leftover spring)
-           x < R, x > W − R, y > H − R → reflect v, keep FLOAT_BOUNCE_KEEP
-           y < −R · FLOAT_EXIT_RADII   → SPAWN
-   finger down (any phase) → the pan's follow spring drives bubbleX/Y
-   release                 → FLOAT with the fling (≤ FLOAT_FLING_MAX)
- useBubbleShape
-   anchored false → re-anchor the modes at the box, then apply birthShape
-   (a teleport is not motion); the modes spring the birth deformation back to rest
- LiquidBubbleLive
-   wobble / strength / inertia fed to the physics = slider × trait (useDerivedValue)
-```
-
-- **Traits:** `useBubbleTraits` holds one bubble's random multipliers and
-  birth shape. The sliders are the base and are never overwritten by a
-  spawn. It's a separate hook because `useBubbleShape` needs the effective
-  values before `useBubbleFloat` can take its `anchored` output.
-- **Numbers (inertia 1):** cruising rise ≈ 80 pt/s (`FLOAT_BUOYANCY /
-  FLOAT_DRAG`), sway ≈ ±14 pt over 3 s, a full screen in ~10 s. The launch
-  decays with τ = 2 s. Derivations are in `bubbleModes.ts` → "Float" and
-  "Birth".
-- **Inertia:** buoyancy ÷ I and drag ÷ √I, so rise speed is 80 / √I: a heavy
-  bubble rises slower and coasts longer.
-- **Drag interplay:** a touch anywhere grabs it (the pan covers the whole
-  canvas). Letting go throws it with the fling velocity.
-- **Multi-bubble ready:** one `useBubbleTraits` + one `useBubbleFloat` per
-  bubble; all state is in their own SharedValues.
-- **Limits:** the spawn box is drawn after the bubble, so it isn't in the
-  refracted backdrop and covers the bubble where they overlap. The tuning
-  panel covers the box unless it's on Hide. Width/height are captured as
-  numbers, so a rotation keeps the old bounds until remount. Touching
-  without moving freezes the bubble in place until the first move.
-
-### hooks/useImageBubble.ts
-
-A picture that rides behind the bubble. It's drawn after the background and
-before the `BackdropFilter`, so it's part of the backdrop snapshot and the
-glass refracts it.
-
-```
- JS, mount     8 distinct random sources from assets/Bubbles/256 imageArray
-               → preloaded with useImage (IMAGE_BUBBLE_POOL_SIZE)
- JS, spawn     useBubbleFloat → scheduleOnRN(onSpawn) → random pool index → image
- UI, per frame [cx, cy, R] = paramBuffer[0..2]   (what the glass draws this frame)
-               x = cx − 0.75R, y = cy − 0.75R, size = 1.5R  (useDerivedValue)
-```
-
-- **Same frame as the glass:** the center and radius come from `paramBuffer`,
-  not `bubbleX/Y`. `useBubbleShape` samples `bubbleX/Y` before `useBubbleFloat`
-  moves them, so reading them directly drew the picture one frame ahead of the
-  glass and its clip rect: a jitter inside the glass on uneven frames, and on
-  fast flings a leading edge outside the 2 pt `CLIP_SLACK`, where the glass
-  refracted empty pixels.
-
-- **Sits inside the bubble:** the rect is a `1.5R` square around the center,
-  so a clear glass ring shows around it. It inflates out of the box with the
-  bubble and follows pinch.
-- **Preloaded pool:** a spawn never waits on a decode. One React render per
-  spawn, never per frame.
-- **Limit:** the pool is fixed at mount, so a session shows only 8 of the
-  46 images. Growing the pool means adding explicit `useImage` calls.
-
 ### hooks/useClock.ts
 
-Liquid Bubble Live — elapsed-seconds clock (phase 12B, Skia route).
+Liquid Bubble Live — elapsed-seconds clock (Skia route).
 
 The background needs a wall clock and the bubble physics does not expose
 one: `stepBubbleModes` advances `filmPhase`, but that is a tuned drift rate

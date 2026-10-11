@@ -135,8 +135,9 @@ built-in (cosine) film first.
 ### Phases
 
 1. **Physics for N bubbles:** `useMultiBubblePhysics(count)`. Float and
-   respawn move out of `useBubbleFloat` into a pure `stepBubbleFloat` so
-   they can be tested with `bun test`. Each bubble has its own traits and
+   respawn live in a pure `stepBubbleFloat` (the old single-bubble
+   `useBubbleFloat` hook has since been removed) so they can be tested with
+   `bun test`. Each bubble has its own traits and
    birth shape. One frame callback for everything, no allocation per frame.
 2. **Stress baseline:** 5 copies of today's `BackdropFilter` + `shaders.ts`,
    fed from that buffer. This is the "5 current bubbles" measurement.

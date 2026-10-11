@@ -31,7 +31,7 @@ import {
   Skia,
   SweepGradient,
   vec,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
@@ -128,7 +128,7 @@ export const SkiaRingBorder = ({
   // Create the ring clip path (outer - inner)
   const clipPath = useMemo(() => {
     // Outer rounded rectangle
-    const outerPath = Skia.Path.Make();
+    const outerPath = Skia.PathBuilder.Make();
     outerPath.addRRect(
       Skia.RRectXY(
         Skia.XYWHRect(0, 0, width, height),
@@ -138,7 +138,7 @@ export const SkiaRingBorder = ({
     );
 
     // Inner rounded rectangle (inset by strokeWidth)
-    const innerPath = Skia.Path.Make();
+    const innerPath = Skia.PathBuilder.Make();
     const innerRadius = Math.max(0, borderRadius - strokeWidth);
     innerPath.addRRect(
       Skia.RRectXY(
@@ -154,7 +154,7 @@ export const SkiaRingBorder = ({
     );
 
     // Subtract inner from outer to create ring
-    return Skia.Path.MakeFromOp(outerPath, innerPath, PathOp.Difference)!;
+    return Skia.Path.MakeFromOp(outerPath.build(), innerPath.build(), PathOp.Difference)!;
   }, [width, height, strokeWidth, borderRadius]);
 
   // Gradient rotation matrix
@@ -224,7 +224,7 @@ export const AnimatedSkiaRingBorder = ({
 
   // Create the ring clip path (outer - inner)
   const clipPath = useMemo(() => {
-    const outerPath = Skia.Path.Make();
+    const outerPath = Skia.PathBuilder.Make();
     outerPath.addRRect(
       Skia.RRectXY(
         Skia.XYWHRect(0, 0, width, height),
@@ -233,7 +233,7 @@ export const AnimatedSkiaRingBorder = ({
       )
     );
 
-    const innerPath = Skia.Path.Make();
+    const innerPath = Skia.PathBuilder.Make();
     const innerRadius = Math.max(0, borderRadius - strokeWidth);
     innerPath.addRRect(
       Skia.RRectXY(
@@ -248,7 +248,7 @@ export const AnimatedSkiaRingBorder = ({
       )
     );
 
-    return Skia.Path.MakeFromOp(outerPath, innerPath, PathOp.Difference)!;
+    return Skia.Path.MakeFromOp(outerPath.build(), innerPath.build(), PathOp.Difference)!;
   }, [width, height, strokeWidth, borderRadius]);
 
   // Animated gradient rotation matrix using useDerivedValue

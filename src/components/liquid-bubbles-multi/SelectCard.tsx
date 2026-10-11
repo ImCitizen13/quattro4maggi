@@ -27,7 +27,7 @@ import {
   Skia,
   type SkParagraph,
   type SkPath,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo } from "react";
 import { useDerivedValue, type DerivedValue } from "react-native-reanimated";
 
@@ -75,7 +75,7 @@ export function makeSquirclePath(
   r: number,
   n: number,
 ): SkPath {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   const e = 2 / n;
   const rr = Math.min(r, w / 2, h / 2);
   // Corner centres and the direction each quarter is swept, clockwise.
@@ -101,7 +101,7 @@ export function makeSquirclePath(
     }
   }
   path.close();
-  return path;
+  return path.build();
 }
 
 // ============================================================================

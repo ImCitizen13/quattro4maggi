@@ -1,4 +1,4 @@
-import { Group, Image, useImage } from "@shopify/react-native-skia";
+import { Group, Image, useImage } from "react-native-skia";
 import { Accelerometer } from "expo-sensors";
 import React, { useEffect, useMemo } from "react";
 import { StyleSheet } from "react-native";

@@ -26,7 +26,7 @@ import {
   Skia,
   type SkImage,
   type SkRuntimeEffect,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 
 // ============================================================================
 // HELPERS

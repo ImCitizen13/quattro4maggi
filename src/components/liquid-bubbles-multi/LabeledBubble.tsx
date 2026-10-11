@@ -29,7 +29,7 @@
  *   hook). The label is untouched either way.
  */
 
-import { Group, type SkParagraph } from "@shopify/react-native-skia";
+import { Group, type SkParagraph } from "react-native-skia";
 import React, { useMemo } from "react";
 import {
   useDerivedValue,

@@ -12,7 +12,7 @@
  *              bottom; FLOAT_EXIT_RADII above the top → SPAWN
  *
  * KEY FEATURES:
- * - A port of `liquid-bubble-live/hooks/useBubbleFloat.ts` with the same
+ * - A port of the retired `liquid-bubble-live` `useBubbleFloat` hook with the same
  *   constants and the same forces; SharedValues become plain fields.
  * - The radius is integrated here (see `INFLATE_ZETA` / `INFLATE_OMEGA`)
  *   instead of `withSpring`, so the whole step is plain numbers and

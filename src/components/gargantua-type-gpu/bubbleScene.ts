@@ -1,4 +1,4 @@
-import { AlphaType, ColorType, SkData, Skia } from "@shopify/react-native-skia";
+import { AlphaType, ColorType, SkData, Skia } from "react-native-skia";
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
 import * as std from "typegpu/std";

@@ -3,8 +3,8 @@ import {
   KineticTextHandle,
 } from "@/components/text-flyin/TextCanvas";
 import { ThemeButton, ThemeHeaderTitle } from "@/components/Theme";
-import { Host, Slider, Switch, VStack } from "@expo/ui/swift-ui";
-import { disabled, opacity, padding } from "@expo/ui/swift-ui/modifiers";
+import { Host, Slider, Toggle, VStack } from "@expo/ui/swift-ui";
+import { disabled, opacity, padding, tint } from "@expo/ui/swift-ui/modifiers";
 import { Stack } from "expo-router";
 import React, { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -97,33 +97,28 @@ export default function TextFlyinDemo() {
             ]}
             spacing={10}
           >
-            <Switch
-              value={lagChecked}
-              onValueChange={(checked) => {
-                setLagChecked(checked);
-              }}
-              color="purple"
+            <Toggle
+              isOn={lagChecked}
+              onIsOnChange={setLagChecked}
               label="Make it laggy"
-              variant="switch"
+              modifiers={[tint("purple")]}
             />
-            <Switch
-              value={checked}
-              onValueChange={(checked) => {
-                setChecked(checked);
-              }}
-              color="purple"
+            <Toggle
+              isOn={checked}
+              onIsOnChange={setChecked}
               label="Use Slider"
-              variant="switch"
+              modifiers={[tint("purple")]}
             />
             <Slider
               max={1}
               min={0}
               value={sliderValue}
-              onValueChange={(value) => {
-                setSliderValue(value);
-              }}
-              color="purple"
-              modifiers={[opacity(checked ? 1 : 0.5), disabled(!checked)]}
+              onValueChange={setSliderValue}
+              modifiers={[
+                tint("purple"),
+                opacity(checked ? 1 : 0.5),
+                disabled(!checked),
+              ]}
             />
 
 

@@ -1,4 +1,4 @@
-import { Canvas, Group, SkFont, Text, Transforms3d, useFont, vec } from "@shopify/react-native-skia";
+import { Canvas, Group, SkFont, Text, Transforms3d, useFont, vec } from "react-native-skia";
 import React, { useEffect } from "react";
 import {
     Easing,

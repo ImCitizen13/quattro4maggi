@@ -29,7 +29,7 @@ import {
   useRSXformBuffer,
   type SkPath,
   type SkRect,
-} from "@shopify/react-native-skia";
+} from "react-native-skia";
 import React, { useMemo, useRef, useState } from "react";
 import { Pressable } from "react-native";
 import {

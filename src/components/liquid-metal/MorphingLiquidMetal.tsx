@@ -23,7 +23,7 @@
  */
 
 import { usePathSdf } from "@/hooks/usePathSdf";
-import { type SkPath } from "@shopify/react-native-skia";
+import { type SkPath } from "react-native-skia";
 import React, { useRef, useState } from "react";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { ParticlePathAssembly } from "./ParticlePathAssembly";
