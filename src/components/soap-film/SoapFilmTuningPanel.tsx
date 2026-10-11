@@ -5,8 +5,7 @@
  */
 
 import React, { useState } from "react";
-import { LinearGradient } from "expo-linear-gradient";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { type SharedValue } from "react-native-reanimated";
 import { PressableScale } from "pressto";
 
@@ -14,8 +13,6 @@ import {
   TuningSlider,
   type TuningSliderProps,
 } from "@/components/liquid-metal/TuningSlider";
-import { LIVE_BORDER_PALETTES } from "@/lib/palettes";
-import { SOAP_RAMP_STOPS } from "@/lib/shaders/soapFilm";
 
 import type { SoapFilmColorUniforms, SoapFilmFlowUniforms } from "./SoapFilmShader";
 import type { SoapFilmUniformDefaults } from "./hooks/useSoapFilmUniforms";
@@ -52,9 +49,11 @@ export type SoapFilmTuningPanelProps = {
   /** Which thickness generator drives the film. React state (rebuild-cheap). */
   generator: FilmGenerator;
   onGeneratorChange: (generator: FilmGenerator) => void;
-  /** Selected ramp palette; `null` = the default film colors. */
-  palette: readonly string[] | null;
+  /** Reset target only; the palette itself is picked in `SoapFilmPaletteBar`. */
   onPaletteChange: (palette: readonly string[] | null) => void;
+  /** Active color mode (mirror of `color.mode`, owned by the parent). */
+  colorMode: number;
+  onColorModeChange: (mode: number) => void;
   flow: SoapFilmFlowUniforms;
   color: SoapFilmColorUniforms;
   defaults: SoapFilmUniformDefaults;
@@ -73,14 +72,6 @@ const TABS: readonly { key: SoapFilmTuningTab; label: string }[] = [
 ];
 
 const SLIDER_TABS: readonly SoapFilmTuningTab[] = ["shape", "color"];
-
-const SWATCH_SIZE = 36;
-
-/** Default-film swatch: a few evenly spaced stops of the built-in ramp. */
-const DEFAULT_SWATCH_COLORS = [0, 4, 8, 12, 16].map((i) => {
-  const [r, g, b] = SOAP_RAMP_STOPS[i];
-  return `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
-}) as [string, string, ...string[]];
 
 // ============================================================================
 // ResettableSlider
@@ -122,18 +113,15 @@ export function SoapFilmTuningPanel({
   exponentDefault,
   generator,
   onGeneratorChange,
-  palette,
   onPaletteChange,
+  colorMode,
+  onColorModeChange,
   flow,
   color,
   defaults,
   initialTab = "shape",
 }: SoapFilmTuningPanelProps) {
   const [tab, setTab] = useState<SoapFilmTuningTab>(initialTab);
-  // Mirrors `color.mode` (a SharedValue, written from worklets by
-  // `resetAll`'s plain assignment too) so the active button can re-render —
-  // reading a SharedValue in the render body doesn't subscribe to it.
-  const [colorMode, setColorMode] = useState<number>(defaults.mode);
 
   const resetAll = () => {
     scale.value = scaleDefault;
@@ -157,15 +145,8 @@ export function SoapFilmTuningPanel({
     color.cosTheta.value = defaults.cosTheta;
     color.intensity.value = defaults.intensity;
     color.opacity.value = defaults.opacity;
-    setColorMode(defaults.mode);
+    onColorModeChange(defaults.mode);
     onPaletteChange(null);
-  };
-
-  const pickPalette = (next: readonly string[]) => {
-    onPaletteChange(next);
-    // The palette only shows in ramp mode.
-    color.mode.value = FILM_MODE_UNIFORM.ramp;
-    setColorMode(FILM_MODE_UNIFORM.ramp);
   };
 
   return (
@@ -215,32 +196,6 @@ export function SoapFilmTuningPanel({
 
       {tab === "color" && (
         <>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.swatchScroll}
-            contentContainerStyle={styles.swatchRow}
-          >
-            <PressableScale onPress={() => onPaletteChange(null)}>
-              <LinearGradient
-                colors={DEFAULT_SWATCH_COLORS}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.swatch, palette === null && styles.swatchActive]}
-              />
-            </PressableScale>
-            {LIVE_BORDER_PALETTES.map((p) => (
-              <PressableScale key={p.join()} onPress={() => pickPalette(p)}>
-                <LinearGradient
-                  colors={p as unknown as [string, string, ...string[]]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.swatch, palette === p && styles.swatchActive]}
-                />
-              </PressableScale>
-            ))}
-          </ScrollView>
-
           <View style={styles.generatorRow}>
             {(["curl", "sine"] as const).map((g) => (
               <PressableScale
@@ -273,10 +228,7 @@ export function SoapFilmTuningPanel({
             ).map((m) => (
               <PressableScale
                 key={m.label}
-                onPress={() => {
-                  color.mode.value = m.value;
-                  setColorMode(m.value);
-                }}
+                onPress={() => onColorModeChange(m.value)}
                 style={[
                   styles.generatorButton,
                   colorMode === m.value && styles.generatorButtonActive,
@@ -441,24 +393,5 @@ const styles = StyleSheet.create({
   },
   generatorButtonTextActive: {
     color: "#1a1a1a",
-  },
-  swatchScroll: {
-    maxWidth: 270,
-    flexGrow: 0,
-  },
-  swatchRow: {
-    gap: 8,
-    paddingVertical: 2,
-    paddingHorizontal: 2,
-  },
-  swatch: {
-    width: SWATCH_SIZE,
-    height: SWATCH_SIZE,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  swatchActive: {
-    borderColor: "#fff",
   },
 });

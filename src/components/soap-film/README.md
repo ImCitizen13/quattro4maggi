@@ -95,8 +95,7 @@ Every slider has a ↺ reset. **Reset all** restores every default.
 | ----- | --------------------------------------- | ------------------------------------------------ |
 | Shape | Scale                                   | Squircle size (also pinchable)                   |
 |       | Exponent                                | Superellipse corner sharpness                    |
-| Color | Palette swatches                        | Default film ramp, or a Live Border palette (switches to Ramp mode) |
-|       | Curl / Sine                             | Which thickness generator drives the film        |
+| Color | Curl / Sine                             | Which thickness generator drives the film        |
 |       | Ramp / Physical                         | Color mapping mode                               |
 |       | Drainage                                | Noise film → horizontal gravity bands            |
 |       | Thickness scale                         | Ramp wrap count, or nm in physical mode          |
@@ -155,8 +154,14 @@ it can be sampled at a fixed vertex count instead of solved per-point.
 
 Mirrors `liquid-bubble-live/BubbleTuningPanel.tsx`'s tab/reset structure.
 There is no Flow tab: the flow uniforms still drive the shader (and "Reset
-all" restores them) but are no longer tunable. The Color tab opens with a row
-of palette swatches (Default + `LIVE_BORDER_PALETTES` from `src/lib/palettes.ts`).
+all" restores them) but are no longer tunable. The color mode is owned by
+`SoapFilm` and passed in as `colorMode` / `onColorModeChange`.
+
+### SoapFilmPaletteBar.tsx
+
+Palette swatches (Default + `LIVE_BORDER_PALETTES` from `src/lib/palettes.ts`)
+in a bar fixed at the top of the screen, always visible (not gated by the
+tuning panel). Picking one switches to Ramp mode.
 A pick is held in `SoapFilm` state and passed to `SoapFilmShader` as
 `rampColors`, which builds a 20x1 LUT via `buildSoapFilmRampImage`
 (cyclic interpolation, so the wrap has no seam; memoized per palette).

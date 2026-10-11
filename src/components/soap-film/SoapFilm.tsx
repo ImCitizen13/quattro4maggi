@@ -32,8 +32,7 @@ import {
   type SkSize,
 } from "react-native-skia";
 import React, { useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { PressableScale } from "pressto";
+import { StyleSheet, View } from "react-native";
 import {
   Gesture,
   GestureDetector,
@@ -57,8 +56,10 @@ import { useFilmTouches } from "./hooks/useFilmTouches";
 import { useSoapFilmUniforms } from "./hooks/useSoapFilmUniforms";
 import { useSquirclePath } from "./hooks/useSquirclePath";
 import { SoapFilmShader } from "./SoapFilmShader";
+import { SoapFilmPaletteBar } from "./SoapFilmPaletteBar";
 import { SoapFilmTuningPanel } from "./SoapFilmTuningPanel";
 import {
+  FILM_MODE_UNIFORM,
   SQUIRCLE_BASE_SIZE,
   SQUIRCLE_EXPONENT_DEFAULT,
   SQUIRCLE_SCALE_DEFAULT,
@@ -85,7 +86,6 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
   // Written by `<Canvas onSize>` on the UI thread — no re-render on layout.
   const canvasSize = useSharedValue<SkSize>({ width: 0, height: 0 });
 
-  const [filmEnabled, setFilmEnabled] = useState(true);
   const [generator, setGenerator] = useState<FilmGenerator>("curl");
   // `null` = the default soap-film ramp.
   const [palette, setPalette] = useState<readonly string[] | null>(null);
@@ -151,33 +151,29 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
   });
 
   // ==========================================================================
-  // Film on/off crossfade
+  // Color mode + palette — shared by the top bar and the tuning panel
   // ==========================================================================
 
-  const filmOn = useSharedValue(filmEnabled ? 1 : 0);
+  // Mirrors `color.mode` (a SharedValue) so the panel's active button can
+  // re-render — reading a SharedValue in the render body doesn't subscribe.
+  const [colorMode, setColorMode] = useState<number>(defaults.mode);
 
-  const toggleFilm = () => {
-    const next = !filmEnabled;
-    setFilmEnabled(next);
-    filmOn.value = withSpring(next ? 1 : 0, SPRING_FILM_CROSSFADE);
+  const changeColorMode = (mode: number) => {
+    color.mode.value = mode;
+    setColorMode(mode);
   };
 
-  const onOpacity = filmOn;
-  const offOpacity = useDerivedValue(() => 1 - filmOn.value);
-
-
+  const changePalette = (next: readonly string[] | null) => {
+    setPalette(next);
+    // A palette only shows in ramp mode.
+    if (next !== null) changeColorMode(FILM_MODE_UNIFORM.ramp);
+  };
 
   return (
     <View style={styles.container}>
       <GestureDetector gesture={composedGesture}>
         <Canvas style={styles.canvas} onSize={canvasSize}>
-          {/* Plain `opacity`, not `layer` — a layer rasterizes at logical
-              resolution and pixelates the film on high-DPI screens. */}
-          <Group opacity={offOpacity}>
-            <Path path={path} color="#2a2a2a" style="fill" />
-          </Group>
-
-          <Group opacity={onOpacity}>
+          <Group>
             <Path path={path} style="fill">
               <SoapFilmShader
                 generator={generator}
@@ -197,13 +193,7 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
         </Canvas>
       </GestureDetector>
 
-      <View style={styles.topBar} pointerEvents="box-none">
-        <PressableScale onPress={toggleFilm} style={styles.filmToggle}>
-          <Text style={styles.filmToggleText}>
-            Film: {filmEnabled ? "On" : "Off"}
-          </Text>
-        </PressableScale>
-      </View>
+      <SoapFilmPaletteBar palette={palette} onPaletteChange={changePalette} />
 
       {showTuningPanel && (
         <SoapFilmTuningPanel
@@ -213,8 +203,9 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
           exponentDefault={SQUIRCLE_EXPONENT_DEFAULT}
           generator={generator}
           onGeneratorChange={setGenerator}
-          palette={palette}
           onPaletteChange={setPalette}
+          colorMode={colorMode}
+          onColorModeChange={changeColorMode}
           flow={flow}
           color={color}
           defaults={defaults}
@@ -235,21 +226,5 @@ const styles = StyleSheet.create({
   },
   canvas: {
     flex: 1,
-  },
-  topBar: {
-    position: "absolute",
-    top: 20,
-    right: 20,
-  },
-  filmToggle: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,.6)",
-  },
-  filmToggleText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "600",
   },
 });
