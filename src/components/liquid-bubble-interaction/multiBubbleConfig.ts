@@ -1,5 +1,5 @@
 /**
- * Liquid Bubbles Multi — demo constants.
+ * Liquid Bubble Interaction — demo constants.
  * Design notes: README.md.
  *
  * Everything a single bubble needs (mode springs, float forces, birth

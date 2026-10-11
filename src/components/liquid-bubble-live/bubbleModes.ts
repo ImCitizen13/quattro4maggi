@@ -211,7 +211,7 @@ export const MULT_MIN = 0.1;
 export const A2_MAX_CEIL = 0.11;
 
 // ============================================================================
-// Float — the bubble moving on its own (liquid-bubbles-multi/hooks/multiBubbleMath.ts)
+// Float — the bubble moving on its own (liquid-bubble-interaction/hooks/multiBubbleMath.ts)
 // ============================================================================
 //
 // Canvas points, y DOWN. Per frame while not dragged:
@@ -279,7 +279,7 @@ export const FLOAT_BOUNCE_KEEP = 0.6;
 export const FLOAT_EXIT_RADII = 1.3;
 
 // ============================================================================
-// Birth — each bubble inflates out of the spawn box (liquid-bubbles-multi/hooks/multiBubbleMath.ts)
+// Birth — each bubble inflates out of the spawn box (liquid-bubble-interaction/hooks/multiBubbleMath.ts)
 // ============================================================================
 //
 // Spawn → inflate over BIRTH_TIME (motion eases in over the same time) →

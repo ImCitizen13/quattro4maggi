@@ -1,6 +1,6 @@
 /**
- * LiquidBubblesMulti — a trigger bubble that, tapped, blooms the greeting
- * into four labelled bubbles. Design notes: README.md → "LiquidBubblesMulti.tsx".
+ * LiquidBubbleInteraction — a trigger bubble that, tapped, blooms the greeting
+ * into four labelled bubbles. Design notes: README.md → "LiquidBubbleInteraction.tsx".
  *
  * FLOW:
  *   onLayout → size → MultiBubbleScene (physics needs the real bounds)
@@ -296,7 +296,7 @@ const SQWIGGLE_W = 122;
  */
 export type Choreography = "A" | "B";
 
-export type LiquidBubblesMultiProps = {
+export type LiquidBubbleInteractionProps = {
   /** Mean birth radius, points — each bubble is `× BIRTH_RADIUS_RANGE`. */
   restRadius?: number;
   /** Initial choreography. Also switchable from the Controls row. Default "A". */
@@ -325,10 +325,10 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 // Component
 // ============================================================================
 
-export function LiquidBubblesMulti({
+export function LiquidBubbleInteraction({
   restRadius = 50,
   choreography: initialChoreography = "A",
-}: LiquidBubblesMultiProps) {
+}: LiquidBubbleInteractionProps) {
   const [choreography, setChoreography] =
     useState<Choreography>(initialChoreography);
   const [size, setSize] = useState<{ width: number; height: number } | null>(
@@ -382,7 +382,7 @@ function MultiBubbleScene({
   };
   const buoyancy = useSharedValue(FLOAT_BUOYANCY_LEVER_DEFAULT);
   // This demo's own shape defaults (multiBubbleConfig.ts), not the shared
-  // liquid-bubble-live ones — see the README's LiquidBubblesMulti.tsx section.
+  // liquid-bubble-live ones — see the README's LiquidBubbleInteraction.tsx section.
   const wobble = useSharedValue(MULTI_WOBBLE);
   const inertia = useSharedValue(MULTI_INERTIA);
   const strength = useSharedValue(MULTI_STRENGTH);

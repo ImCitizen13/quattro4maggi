@@ -1,5 +1,5 @@
 /**
- * Liquid Bubbles Multi — physics for N bubbles in ONE frame callback.
+ * Liquid Bubble Interaction — physics for N bubbles in ONE frame callback.
  * Design notes: README.md → "hooks/useMultiBubblePhysics.ts".
  *
  * FLOW (UI worklet, one `useFrameCallback`):
@@ -16,7 +16,7 @@
  *
  * KEY FEATURES:
  * - Replaces, for this demo only, the `useBubbleShape` singleton: its own
- *   UI-runtime key (`__liquidBubblesMulti`), so it never touches the single
+ *   UI-runtime key (`__liquidBubbleInteraction`), so it never touches the single
  *   bubble's state.
  * - Float runs BEFORE the modes in the same frame, so the buffer's center
  *   and radius are this frame's (no one-frame lag between the float and the
@@ -74,7 +74,7 @@ type UiMulti = {
   pinnedAnchored: boolean[];
 };
 
-type UiMultiHost = { __liquidBubblesMulti?: UiMulti };
+type UiMultiHost = { __liquidBubbleInteraction?: UiMulti };
 
 export type UseMultiBubblePhysicsParams = {
   /** Bubbles to run, clamped to `MAX_BUBBLES`. Fixed for the mount. */
@@ -169,7 +169,7 @@ export function useMultiBubblePhysics({
   useFrameCallback((frameInfo) => {
     "worklet";
     const host = globalThis as unknown as UiMultiHost;
-    let ui = host.__liquidBubblesMulti;
+    let ui = host.__liquidBubbleInteraction;
 
     if (ui === undefined || !initialized.value) {
       // Once per mount: build everything on the UI runtime so it stays
@@ -201,7 +201,7 @@ export function useMultiBubblePhysics({
         useA: true,
         pinnedAnchored,
       };
-      host.__liquidBubblesMulti = ui;
+      host.__liquidBubbleInteraction = ui;
       initialized.value = true;
     }
 

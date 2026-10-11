@@ -113,13 +113,13 @@ built-in (cosine) film first.
 
 ### Kept separate from the single bubble
 
-- New folder `src/components/liquid-bubbles-multi/` and route
-  `src/app/liquid-bubbles-multi/`, plus a card in the home gallery.
+- New folder `src/components/liquid-bubble-interaction/` and route
+  `src/app/liquid-bubble-interaction/`, plus a card in the home gallery.
 - `liquid-bubble-live/` is not changed. The new demo only imports its pure
   modules: `hooks/bubbleModeMath.ts` (`stepBubbleModes` takes its state as
   a parameter, so it can run N times) and the `bubbleModes.ts` constants.
 - The new physics keeps its state under its own UI-thread key
-  (`__liquidBubblesMulti`), so it never collides with `useBubbleShape`.
+  (`__liquidBubbleInteraction`), so it never collides with `useBubbleShape`.
 
 ### Layout
 
