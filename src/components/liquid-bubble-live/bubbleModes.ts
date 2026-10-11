@@ -376,7 +376,7 @@ export const MULT_MIN = 0.1;
 export const A2_MAX_CEIL = 0.11;
 
 // ============================================================================
-// Float — the bubble moving on its own (hooks/useBubbleFloat.ts)
+// Float — the bubble moving on its own (liquid-bubbles-multi/hooks/multiBubbleMath.ts)
 // ============================================================================
 //
 // Canvas points, y DOWN. Per frame while not dragged:
@@ -439,14 +439,6 @@ export const FLOAT_SWAY_PERIOD = 3;
 export const FLOAT_BOUNCE_KEEP = 0.6;
 
 /**
- * Release fling cap, pt/s — a hard flick can't send the bubble through
- * several edge bounces in a frame or two.
- *
- * TUNE: 1500 tame · 2500 · 4000.
- */
-export const FLOAT_FLING_MAX = 2500;
-
-/**
  * Respawn once the center is this many radii above the top edge. > 1 so
  * the stretched, wobbling rim is off-screen too.
  *
@@ -455,7 +447,7 @@ export const FLOAT_FLING_MAX = 2500;
 export const FLOAT_EXIT_RADII = 1.3;
 
 // ============================================================================
-// Birth — each bubble inflates out of the spawn box (hooks/useBubbleFloat.ts)
+// Birth — each bubble inflates out of the spawn box (liquid-bubbles-multi/hooks/multiBubbleMath.ts)
 // ============================================================================
 //
 // Spawn → inflate (attached at the box's top edge, R springs ≈ 1 → target

@@ -18,7 +18,7 @@
  * - Velocity from the spring-smoothed position, not the gesture: it keeps
  *   seeing motion after release while the follow spring settles.
  * - Returns its own `touchTau` / `touchRadius` so the caller overrides the
- *   film's flow uniforms with them (see `LiquidBubbleLive.tsx`).
+ *   film's flow uniforms with them (see `BouncingImagesBubble.tsx`).
  */
 
 import {

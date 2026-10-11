@@ -126,7 +126,7 @@ export const SPRING_FILM_CROSSFADE = {
 /**
  * Liquid Bubble Live: bubble inflating out of the spawn box, R ≈ 1 → target.
  * dampingRatio 0.6 gives one soft overshoot (a "pop" to size). `duration`
- * is a fallback: useBubbleFloat overrides it with `BIRTH_TIME` so inflation
+ * is a fallback: the multi-bubble physics overrides it with `BIRTH_TIME` so inflation
  * and the motion ease-in share one time factor.
  */
 export const SPRING_BUBBLE_INFLATE = {

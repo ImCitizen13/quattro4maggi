@@ -484,8 +484,9 @@ just above it already says it.
 
 ### hooks/multiBubbleMath.ts
 
-`useBubbleFloat` from the single bubble, rewritten as plain numbers so N
-bubbles can share one frame callback and `bun test` can run it.
+Float/respawn physics as plain numbers (ported from the retired single-bubble
+`useBubbleFloat` hook) so N bubbles can share one frame callback and
+`bun test` can run it.
 
 ```
  WAIT     hidden, counts down index × SPAWN_STAGGER (1.2 s) while float is on
@@ -494,7 +495,7 @@ bubbles can share one frame callback and `bun test` can run it.
  FLOAT    buoyancy, sway, drag, bounces; out the top → SPAWN
 ```
 
-- **Same forces and constants** as `useBubbleFloat`, from `bubbleModes.ts`.
+- **Same forces and constants** as the retired `useBubbleFloat`, from `bubbleModes.ts`.
 - **Radius spring by hand:** `withSpring` can't run inside a pure step, so the
   radius is a damped spring (ζ 0.6, the same as `SPRING_BUBBLE_INFLATE`) with ω
   chosen to settle within `BIRTH_TIME`.
