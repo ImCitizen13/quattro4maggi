@@ -38,11 +38,11 @@ export type BubbleTuningPanelProps = {
   wobble: SharedValue<number>;
   /** Default wobble value, used by "Reset all". */
   wobbleDefault: number;
-  /** Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble inertia and strength"). */
+  /** Per-bubble inertia multiplier. */
   inertia: SharedValue<number>;
   /** Default inertia value, used by "Reset all". */
   inertiaDefault: number;
-  /** Per-bubble strength multiplier (see `bubbleModes.ts` → "Per-bubble inertia and strength"). */
+  /** Per-bubble strength multiplier. */
   strength: SharedValue<number>;
   /** Default strength value, used by "Reset all". */
   strengthDefault: number;
@@ -159,8 +159,7 @@ export function BubbleTuningPanel({
   style,
 }: BubbleTuningPanelProps) {
   const [tab, setTab] = useState<BubbleTuningTab>(initialTab);
-  // Label state for the prism toggle. Seeded from the live value (once, at
-  // mount) so a remounted panel shows what the shader is actually drawing.
+  // Prism toggle label, seeded from the live value so a remount matches the shader.
   const [posterOn, setPosterOn] = useState(
     () => optics.palette.value === PRISM_PALETTE_POSTER,
   );

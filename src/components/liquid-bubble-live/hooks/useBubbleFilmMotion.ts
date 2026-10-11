@@ -12,13 +12,9 @@
  *   → SOAP_THICKNESS's `touchVelocity()` inside the backtrace (no SkSL change)
  *
  * KEY FEATURES:
- * - Multi-bubble ready: all state lives in this hook's own SharedValues (no
- *   `globalThis` singleton), and every input is a parameter, so each bubble
- *   gets one instance feeding its own film.
- * - Velocity from the spring-smoothed position, not the gesture: it keeps
- *   seeing motion after release while the follow spring settles.
- * - Returns its own `touchTau` / `touchRadius` so the caller overrides the
- *   film's flow uniforms with them (see `BouncingImagesBubble.tsx`).
+ * - All state is in this hook's own SharedValues: one instance per bubble.
+ * - Velocity comes from the smoothed position, so it sees motion after release.
+ * - Returns `touchTau` / `touchRadius` for the caller to override the film's flow uniforms.
  */
 
 import {
@@ -107,8 +103,7 @@ export function useBubbleFilmMotion({
   const touchTau = useSharedValue<number>(FILM_DRAG_TAU);
   const touchRadius = useSharedValue<number>(FILM_DRAG_RADIUS);
 
-  // Clock time each slot was written — ages are always `time − impactTime`,
-  // never hand-incremented (same as soap-film's `useFilmTouches`).
+  // Clock time each slot was written; ages are always `time − impactTime`.
   const impactTime = useSharedValue<number[]>(
     new Array(FILM_TOUCH_SLOTS).fill(-FILM_TOUCH_AGE_INACTIVE * 10),
   );
@@ -156,9 +151,7 @@ export function useBubbleFilmMotion({
       speed >= FILM_DRAG_SPEED_MIN &&
       now - lastWrite.value >= FILM_DRAG_WRITE_INTERVAL
     ) {
-      // Canvas pt/s → film pt/s: the disk (radius R) maps onto a 200 pt
-      // radius, and the MINUS makes the backtrace sample ahead of travel,
-      // so the pattern shifts backward (lags).
+      // Canvas pt/s → film pt/s; the MINUS makes the film lag the travel.
       const toFilm =
         -(FILM_CENTER / Math.max(radius.value, 1)) * FILM_DRAG_GAIN * strength;
       let fx = vx * toFilm;
@@ -168,9 +161,7 @@ export function useBubbleFilmMotion({
         fx *= FILM_DRAG_MAX / mag;
         fy *= FILM_DRAG_MAX / mag;
       }
-      // Stacking factor S(τ): all 8 impulses sit at the film center and sum,
-      // so a steady drag reaches Σ e^(−k·Δt/τ) × one impulse. Dividing by it
-      // makes the STEADY sum hit the calibrated speed at any τ.
+      // Divide by the stacking factor S(τ) so the steady sum hits the calibrated speed.
       const decayStep = Math.exp(-FILM_DRAG_WRITE_INTERVAL / tau);
       const stack =
         (1 - Math.pow(decayStep, FILM_TOUCH_SLOTS)) / (1 - decayStep);

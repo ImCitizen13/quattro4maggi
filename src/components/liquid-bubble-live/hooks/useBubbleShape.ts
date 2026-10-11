@@ -23,11 +23,7 @@ import {
 // Types
 // ============================================================================
 
-/**
- * Mutable per-frame state, owned by the UI runtime. See `bubbleModeMath.ts`
- * / `bubbleModes.ts` for the tuning constants (K2..K4, C2..C4, SPEED_REF,
- * A2_REST..A4_REST, PHI3_REST, PHI4_REST, W_FLOOR_2..4, TAU_W, etc).
- */
+/** Mutable per-frame state, owned by the UI runtime (constants in `bubbleModes.ts`). */
 type UiShape = {
   state: ModeState;
   bufA: number[];
@@ -47,41 +43,16 @@ export type UseBubbleShapeParams = {
   scaledRadius: SharedValue<number>;
   /** 1 while a pan is active, 0 otherwise — drives the mode 3/4 release kick. */
   isActive: SharedValue<number>;
-  /**
-   * Gesture fling velocity (pt/s). Only the release kick reads this — the
-   * amplitude kick (v3/v4) from its magnitude, and since phase 9B also the
-   * traveling-wave kick (w2/w3/w4) from the turn between the last two
-   * non-zero samples. Mode 2's drive still comes from the anchor's position
-   * delta. Needed because the anchor tracks the finger directly, so on the
-   * release frame the position delta is already ~0 and would give a kick of
-   * zero.
-   */
+  /** Gesture fling velocity (pt/s); only the release kick reads it (the anchor's position delta is ~0 on release). */
   velocityX: SharedValue<number>;
   velocityY: SharedValue<number>;
-  /**
-   * Master wobble visibility multiplier for mode 3/4 (see `bubbleModes.ts` →
-   * "Wobble visibility"): 0 suppresses the wobble entirely, 1 is the tuned
-   * default, 2 doubles it. Owned by the caller (`LiquidBubbles.tsx`) so a
-   * live slider can drive it without a React re-render.
-   */
+  /** Master wobble multiplier for mode 3/4: 0 smooth, 1 tuned, 2 double. */
   wobble: DerivedValue<number>;
-  /**
-   * Per-bubble inertia multiplier (see `bubbleModes.ts` → "Per-bubble
-   * inertia and strength"): 1 is today's feel, > 1 is heavier (rings out
-   * longer, bigger release kick, stretches further), < 1 is lighter.
-   */
+  /** Per-bubble inertia: > 1 heavier (rings longer, bigger kick), < 1 lighter. */
   inertia: DerivedValue<number>;
-  /**
-   * Per-bubble strength multiplier (see `bubbleModes.ts` → "Per-bubble
-   * inertia and strength"): 1 is today's feel, > 1 is stiffer (snaps back
-   * faster), < 1 wobbles longer.
-   */
+  /** Per-bubble strength: > 1 stiffer (snaps back faster), < 1 wobbles longer. */
   strength: DerivedValue<number>;
-  /**
-   * Optional birth deformation, applied right after a re-anchor
-   * (`anchored = false`): `[a2, phi2, a3, phi3, a4, phi4]`, amplitudes as
-   * fractions of R. The modes then spring it back to rest. Empty = none.
-   */
+  /** Optional birth deformation `[a2, phi2, a3, phi3, a4, phi4]` (fractions of R) applied after a re-anchor; empty = none. */
   birthShape?: SharedValue<number[]>;
 };
 
@@ -92,12 +63,7 @@ export type UseBubbleShapeReturn = {
   bboxY: SharedValue<number>;
   bboxW: SharedValue<number>;
   bboxH: SharedValue<number>;
-  /**
-   * True once the mode state is anchored at the current center. Write
-   * `false` from a worklet to re-anchor on the next frame — e.g. after a
-   * teleport (float respawn), which the modes would otherwise read as a huge
-   * speed and answer with a full stretch kick.
-   */
+  /** True once anchored at the current center; write `false` to re-anchor after a teleport (else a huge-speed stretch kick). */
   anchored: SharedValue<boolean>;
 };
 
@@ -122,9 +88,7 @@ export function useBubbleShape({
   const bboxY = useSharedValue<number>(0);
   const bboxW = useSharedValue<number>(0);
   const bboxH = useSharedValue<number>(0);
-  // Per-mount flag (fresh SharedValue per hook call) so a remount re-anchors
-  // the shape instead of inheriting the previous mount's modes across a
-  // center/radius jump.
+  // Per-mount flag so a remount re-anchors instead of inheriting old modes.
   const initialized = useSharedValue<boolean>(false);
 
   useFrameCallback((frameInfo) => {
@@ -137,8 +101,7 @@ export function useBubbleShape({
     let ui = host[UI_STATE_KEY];
 
     if (ui === undefined) {
-      // First frame ever on this runtime: allocate everything once, here, so
-      // the objects belong to the UI runtime and stay mutable.
+      // First frame on this runtime: allocate here so the objects stay mutable.
       ui = {
         state: createModeState(cx, cy),
         bufA: createParamBuffer(),
@@ -151,8 +114,7 @@ export function useBubbleShape({
     } else if (!initialized.value) {
       // Remount onto existing state: re-anchor in place, no allocation.
       resetModeState(ui.state, cx, cy);
-      // Birth deformation on top of the rest shape. Mode 2 is stored as a
-      // vector (see ModeState), so its amplitude/axis go in as (c2, s2).
+      // Birth deformation; mode 2 goes in as the (c2, s2) vector.
       const birth = birthShape ? birthShape.value : undefined;
       if (birth !== undefined && birth.length === 6) {
         ui.state.c2 = birth[0] * Math.cos(birth[1]);
@@ -169,9 +131,7 @@ export function useBubbleShape({
 
     const dtMs = frameInfo.timeSincePreviousFrame ?? 16.7;
     const outBuf = ui.useA ? ui.bufB : ui.bufA;
-    // Pass the velocity components through directly — the traveling-wave
-    // turn (phase 9B) needs the VECTOR, not just its magnitude, to tell a
-    // clockwise fling from a counter-clockwise one.
+    // Velocity components, not magnitude: the turn needs handedness.
     stepBubbleModes(
       ui.state,
       cx,
