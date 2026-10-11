@@ -87,6 +87,8 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
 
   const [filmEnabled, setFilmEnabled] = useState(true);
   const [generator, setGenerator] = useState<FilmGenerator>("curl");
+  // `null` = the default soap-film ramp.
+  const [palette, setPalette] = useState<readonly string[] | null>(null);
 
   // ==========================================================================
   // Shape
@@ -177,7 +179,12 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
 
           <Group opacity={onOpacity}>
             <Path path={path} style="fill">
-              <SoapFilmShader generator={generator} flow={flow} color={color} />
+              <SoapFilmShader
+                generator={generator}
+                flow={flow}
+                color={color}
+                rampColors={palette ?? undefined}
+              />
             </Path>
           </Group>
 
@@ -206,6 +213,8 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
           exponentDefault={SQUIRCLE_EXPONENT_DEFAULT}
           generator={generator}
           onGeneratorChange={setGenerator}
+          palette={palette}
+          onPaletteChange={setPalette}
           flow={flow}
           color={color}
           defaults={defaults}

@@ -434,3 +434,53 @@ export function getSoapFilmRampImage(): SkImage {
   cachedRampImage = image;
   return image;
 }
+
+const paletteRampCache = new Map<string, SkImage>();
+
+/**
+ * Builds (and memoizes per `colors.join()`) a 20x1 RGBA8 ramp image from a
+ * hex palette, same format as `getSoapFilmRampImage`.
+ *
+ * The shader wraps the ramp with `fract`, so the palette is interpolated
+ * CYCLICALLY: texel `i` sits at `p = i / width * n` along an `n`-color loop,
+ * and blends color `floor(p)` toward color `(floor(p) + 1) % n`. The last
+ * color therefore fades back into the first, with no seam at the wrap.
+ */
+export function buildSoapFilmRampImage(colors: readonly string[]): SkImage {
+  const key = colors.join();
+  const cached = paletteRampCache.get(key);
+  if (cached) return cached;
+
+  const width = SOAP_RAMP_STOPS.length;
+  const n = colors.length;
+  const parsed = colors.map((c) => Skia.Color(c));
+  const bytes = new Uint8Array(width * 4);
+  for (let i = 0; i < width; i++) {
+    const p = (i / width) * n;
+    const idx = Math.floor(p);
+    const f = p - idx;
+    const a = parsed[idx % n];
+    const b = parsed[(idx + 1) % n];
+    for (let k = 0; k < 3; k++) {
+      bytes[i * 4 + k] = Math.round((a[k] + (b[k] - a[k]) * f) * 255);
+    }
+    bytes[i * 4 + 3] = 255;
+  }
+
+  const image = Skia.Image.MakeImage(
+    {
+      width,
+      height: 1,
+      colorType: ColorType.RGBA_8888,
+      alphaType: AlphaType.Unpremul,
+    },
+    Skia.Data.fromBytes(bytes),
+    width * 4,
+  );
+  if (!image) {
+    throw new Error("soapFilm.ts: failed to build the palette ramp image");
+  }
+
+  paletteRampCache.set(key, image);
+  return image;
+}

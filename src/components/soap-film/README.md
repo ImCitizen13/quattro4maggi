@@ -95,12 +95,8 @@ Every slider has a ↺ reset. **Reset all** restores every default.
 | ----- | --------------------------------------- | ------------------------------------------------ |
 | Shape | Scale                                   | Squircle size (also pinchable)                   |
 |       | Exponent                                | Superellipse corner sharpness                    |
-| Flow  | Layer 0/1/2 selector → freq/speed/angle/weight | Curl-noise flow layers (curl generator only) |
-|       | Swirl                                   | Global velocity multiplier (curl only)           |
-|       | Seed                                    | Domain offset (curl only)                        |
-|       | Touch decay                             | How long a touch disturbance lingers (curl only) |
-|       | Sine freq / speed A / speed B           | Domain-warp params (sine generator only)         |
-| Color | Curl / Sine                             | Which thickness generator drives the film        |
+| Color | Palette swatches                        | Default film ramp, or a Live Border palette (switches to Ramp mode) |
+|       | Curl / Sine                             | Which thickness generator drives the film        |
 |       | Ramp / Physical                         | Color mapping mode                               |
 |       | Drainage                                | Noise film → horizontal gravity bands            |
 |       | Thickness scale                         | Ramp wrap count, or nm in physical mode          |
@@ -158,7 +154,9 @@ it can be sampled at a fixed vertex count instead of solved per-point.
 ### SoapFilmTuningPanel.tsx
 
 Mirrors `liquid-bubble-live/BubbleTuningPanel.tsx`'s tab/reset structure.
-The Flow tab's per-layer sliders write into a `FilmLayer` tuple `SharedValue`
-in place (slice, mutate the copy, reassign) via a small `TupleTuningSlider`
-— `uLayer0/1/2` are wired as single `float4` uniforms, so each layer stays
-one `SharedValue`, not four.
+There is no Flow tab: the flow uniforms still drive the shader (and "Reset
+all" restores them) but are no longer tunable. The Color tab opens with a row
+of palette swatches (Default + `LIVE_BORDER_PALETTES` from `src/lib/palettes.ts`).
+A pick is held in `SoapFilm` state and passed to `SoapFilmShader` as
+`rampColors`, which builds a 20x1 LUT via `buildSoapFilmRampImage`
+(cyclic interpolation, so the wrap has no seam; memoized per palette).

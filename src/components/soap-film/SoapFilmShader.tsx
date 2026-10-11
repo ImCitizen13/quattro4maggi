@@ -38,6 +38,7 @@ import {
 } from "react-native-reanimated";
 
 import {
+  buildSoapFilmRampImage,
   getSoapFilmRampImage,
   soapColorEffect,
   soapThicknessEffect,
@@ -119,6 +120,8 @@ export type SoapFilmShaderProps = {
   flow: SoapFilmFlowUniforms;
   /** Required unless `output="thickness"`. */
   color?: SoapFilmColorUniforms;
+  /** Hex palette for the ramp LUT (ramp mode). Omit for the default film ramp. */
+  rampColors?: readonly string[];
 };
 
 // ============================================================================
@@ -130,6 +133,7 @@ export function SoapFilmShader({
   output = "color",
   flow,
   color,
+  rampColors,
 }: SoapFilmShaderProps) {
   const curlUniforms = useDerivedValue(() => ({
     iTime: flow.time.value,
@@ -168,7 +172,13 @@ export function SoapFilmShader({
     uOpacity: color ? color.opacity.value : FILM_OPACITY_DEFAULT,
   }));
 
-  const ramp = useMemo(() => getSoapFilmRampImage(), []);
+  const rampKey = rampColors?.join();
+  const ramp = useMemo(
+    () =>
+      rampColors ? buildSoapFilmRampImage(rampColors) : getSoapFilmRampImage(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rampKey],
+  );
 
   const thicknessEffect =
     generator === "sine" ? soapThicknessSineEffect : soapThicknessEffect;
