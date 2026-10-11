@@ -69,7 +69,7 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 
-import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { IslandFps } from "@/components/common/IslandFps";
 import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
 import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
 import { SPRING_ARC_SNAP } from "@/lib/animations/constants";
@@ -648,7 +648,7 @@ export function ArcCarouselBubble({
           bubbleRadius={bubbleRadius}
         />
       )}
-      {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
+      {SHOW_FPS_OVERLAY && <IslandFps />}
     </View>
   );
 }

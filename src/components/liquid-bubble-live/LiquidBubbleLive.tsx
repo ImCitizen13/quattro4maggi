@@ -25,7 +25,7 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 
-import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { IslandFps } from "@/components/common/IslandFps";
 import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
 import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
 import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
@@ -477,7 +477,7 @@ export function LiquidBubbleLive({
       </GestureDetector>
 
       {/* FPS readout (real numbers need a release build on device). */}
-      {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
+      {SHOW_FPS_OVERLAY && <IslandFps />}
 
       {/* Tuning panel. After the GestureDetector, not inside it, so the
           bubble's pan can't steal the slider's touches. */}

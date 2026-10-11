@@ -125,7 +125,7 @@ WebGPU/TypeGPU variant as the alternative if these three ever prove too many.
   constant. That 9 exists to stop the rim sampling past the edge of a small
   `<ImageShader>` rect; the backdrop is the whole canvas, so the bend can be
   twice as strong without smearing.
-- `SHOW_FPS_OVERLAY` mounts `FpsOverlay`. Note the simulator caps at 60 Hz,
+- `SHOW_FPS_OVERLAY` mounts `IslandFps`. Note the simulator caps at 60 Hz,
   which pins `j120` at 100% and makes it carry no signal — real numbers need
   a release build on a 120 Hz device.
 - `SHOW_TUNING_PANEL` mounts `BubbleTuningPanel` (Wobble + the 7 optics

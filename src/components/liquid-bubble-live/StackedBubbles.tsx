@@ -53,7 +53,7 @@ import {
 } from "react-native-reanimated";
 import { PressableScale } from "pressto";
 
-import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { IslandFps } from "@/components/common/IslandFps";
 import { useSoapFilmUniforms } from "@/components/soap-film/hooks/useSoapFilmUniforms";
 import {
   SoapFilmShader,
@@ -481,7 +481,7 @@ export function StackedBubbles({ restRadius = 110 }: StackedBubblesProps) {
           restRadius={restRadius}
         />
       )}
-      {SHOW_FPS_OVERLAY && <FpsOverlay dark />}
+      {SHOW_FPS_OVERLAY && <IslandFps />}
     </View>
   );
 }
