@@ -59,7 +59,6 @@ import { SoapFilmShader } from "./SoapFilmShader";
 import { SoapFilmPaletteBar } from "./SoapFilmPaletteBar";
 import { SoapFilmTuningPanel } from "./SoapFilmTuningPanel";
 import {
-  FILM_MODE_UNIFORM,
   SQUIRCLE_BASE_SIZE,
   SQUIRCLE_EXPONENT_DEFAULT,
   SQUIRCLE_SCALE_DEFAULT,
