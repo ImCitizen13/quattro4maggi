@@ -89,19 +89,15 @@ grazing angles and dim head-on, the way real soap film looks.
 
 ## Controls
 
-Every slider has a ↺ reset. **Reset all** restores every default.
+No per-slider resets. A circular refresh icon in the panel's top-right corner
+(**Reset all**, shown on slider tabs only) restores every default.
 
 | Tab   | Control                                | What it does                                    |
 | ----- | --------------------------------------- | ------------------------------------------------ |
 | Shape | Scale                                   | Squircle size (also pinchable)                   |
 |       | Exponent                                | Superellipse corner sharpness                    |
-| Flow  | Layer 0/1/2 selector → freq/speed/angle/weight | Curl-noise flow layers (curl generator only) |
-|       | Swirl                                   | Global velocity multiplier (curl only)           |
-|       | Seed                                    | Domain offset (curl only)                        |
-|       | Touch decay                             | How long a touch disturbance lingers (curl only) |
-|       | Sine freq / speed A / speed B           | Domain-warp params (sine generator only)         |
 | Color | Curl / Sine                             | Which thickness generator drives the film        |
-|       | Ramp / Physical                         | Color mapping mode                               |
+|       | Bubble / Ramp                           | Color mapping mode (no Physical button)          |
 |       | Drainage                                | Noise film → horizontal gravity bands            |
 |       | Thickness scale                         | Ramp wrap count, or nm in physical mode          |
 |       | Cos theta                               | View-angle cosine (physical mode)                |
@@ -137,7 +133,7 @@ triggers a React re-render — only the UI-thread uniform recomputes.
 
 Owns every live `SharedValue` behind the `flow`/`color` uniform groups,
 seeded from `soapFilmConfig.ts`. Exports `SOAP_FILM_DEFAULTS` so the tuning
-panel's per-slider reset and "Reset all" read the same numbers the hook
+panel's "Reset all" reads the same numbers the hook
 seeded from, with no duplication.
 
 ### hooks/useFilmTouches.ts
@@ -158,7 +154,17 @@ it can be sampled at a fixed vertex count instead of solved per-point.
 ### SoapFilmTuningPanel.tsx
 
 Mirrors `liquid-bubble-live/BubbleTuningPanel.tsx`'s tab/reset structure.
-The Flow tab's per-layer sliders write into a `FilmLayer` tuple `SharedValue`
-in place (slice, mutate the copy, reassign) via a small `TupleTuningSlider`
-— `uLayer0/1/2` are wired as single `float4` uniforms, so each layer stays
-one `SharedValue`, not four.
+There is no Flow tab: the flow uniforms still drive the shader (and "Reset
+all" restores them) but are no longer tunable. The color mode is owned by
+`SoapFilm` and passed in as `colorMode` / `onColorModeChange`.
+
+### SoapFilmPaletteBar.tsx
+
+Swatches in a bar fixed at the top of the screen, always visible (not gated
+by the tuning panel): "Default" (bubble cosine palette; restores the default
+mode, palette cleared), "Film ramp" (built-in ramp, Ramp mode), then
+`LIVE_BORDER_PALETTES` from `src/lib/palettes.ts` (Ramp mode). Each pick calls
+`onSelect(palette, mode)`; `SoapFilm` owns both.
+A pick is held in `SoapFilm` state and passed to `SoapFilmShader` as
+`rampColors`, which builds a 20x1 LUT via `buildSoapFilmRampImage`
+(cyclic interpolation, so the wrap has no seam; memoized per palette).

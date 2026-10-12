@@ -1,5 +1,5 @@
 /**
- * Liquid Bubbles Multi — demo constants.
+ * Liquid Bubble Interaction — demo constants.
  * Design notes: README.md.
  *
  * Everything a single bubble needs (mode springs, float forces, birth
@@ -7,8 +7,6 @@
  * holds only what is new with several bubbles. No React, no Skia imports —
  * safe to read from a worklet.
  */
-
-import { ReduceMotion } from "react-native-reanimated";
 
 import type { BubbleOpticsValues } from "../liquid-bubble-live/hooks/useBubbleOptics";
 
@@ -424,58 +422,3 @@ export const SELECT_DESCRIPTIONS: readonly (readonly string[])[] = [
     "Tags: #daily #film #light",
   ],
 ];
-
-// ============================================================================
-// Choreography B — greeting shrinks away, bubbles float up from below
-// ============================================================================
-
-/** Points the greeting travels up as it shrinks away. */
-export const B_TEXT_RISE = 120;
-
-/** [start, end] of `progress` over which the greeting leaves. */
-export const B_TEXT_WINDOW: readonly [number, number] = [0, 0.5];
-
-/** `progress` at which the first bubble starts rising. */
-export const B_BUBBLE_START = 0.25;
-
-/** Extra `progress` each later bubble waits before it starts. */
-export const B_BUBBLE_STAGGER = 0.03;
-
-/** Length of each bubble's window, DERIVED so the last one ends at exactly 1. */
-export const B_BUBBLE_WINDOW =
-  1 - B_BUBBLE_START - (INTRO_COUNT - 1) * B_BUBBLE_STAGGER;
-
-/** Extra points below the screen bottom (beyond its own radius) a bubble starts. */
-export const B_RISE_FROM = 40;
-
-/** Fraction into a bubble's window at which its label starts fading in. */
-export const B_LABEL_DELAY = 0.7;
-
-/** Fraction of the screen height a drag must cover for the full 0 → 1. */
-export const B_SCRUB_FRACTION = 0.5;
-
-/**
- * Release speed, pt/s, above which a flick overrides the release position.
- * Only a very hard flick does; otherwise the position decides.
- */
-export const B_FLICK_VELOCITY = 2000;
-
-/**
- * Cap on the release velocity seeded into the settle spring, progress/s —
- * even a hard flick settles at a controlled pace.
- */
-export const B_MAX_SETTLE_VELOCITY = 2;
-
-/**
- * Full 0 → 1 run for the Explore button (and Reset's 1 → 0), linear: the
- * per-stage curves already shape the motion, as in choreography A's `play()`.
- */
-export const B_SHOW_MS = 1600;
-
-/** Spring that settles `progress` after a drag release. */
-export const B_SPRING = {
-  dampingRatio: 0.8,
-  duration: 900,
-  mass: 1,
-  reduceMotion: ReduceMotion.System,
-};

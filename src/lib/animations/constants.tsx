@@ -168,7 +168,7 @@ export const SPRING_BUBBLE_RECENTER = {
 };
 
 /**
- * Liquid Bubbles Multi: a pressed bubble rising to the top centre while the
+ * Liquid Bubble Interaction: a pressed bubble rising to the top centre while the
  * others scroll off and the detail card slides up under it. One soft
  * overshoot, so the card and the bubble settle into place together.
  */

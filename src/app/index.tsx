@@ -73,8 +73,8 @@ const demos: Demo[] = [
     ],
   },
   {
-    name: "Liquid Bubbles Multi",
-    href: "/liquid-bubbles-multi" as const,
+    name: "Liquid Bubble Interaction",
+    href: "/liquid-bubble-interaction" as const,
     tags: [
       { name: "skia", color: "green" },
       { name: "reanimated", color: "#6a539a" },

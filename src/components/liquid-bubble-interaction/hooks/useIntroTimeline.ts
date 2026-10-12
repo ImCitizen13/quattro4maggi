@@ -166,7 +166,7 @@ export type UseIntroTimelineReturn = {
 };
 
 /** A bubble's fixed personality, built once at module load. */
-export type IntroSpec = {
+type IntroSpec = {
   /** Resting offset from the center, pt (already tilted + jittered). */
   dx: number;
   dy: number;
@@ -205,8 +205,7 @@ const REACH_JITTER: readonly number[] = [1, 1.08, 0.94, 1.03];
 /** Per-bubble wobble multipliers: a couple of them jiggle more. */
 const WOBBLE_MUL: readonly number[] = [1.15, 0.9, 1.3, 1];
 
-/** Exported so choreography B lands on the exact same quad. */
-export const SPECS: readonly IntroSpec[] = CORNERS.slice(0, INTRO_COUNT).map(
+const SPECS: readonly IntroSpec[] = CORNERS.slice(0, INTRO_COUNT).map(
   ([sx, sy], i) => {
     const k = REACH_JITTER[i % REACH_JITTER.length];
     const ux = sx * INTRO_SPREAD_X * k;

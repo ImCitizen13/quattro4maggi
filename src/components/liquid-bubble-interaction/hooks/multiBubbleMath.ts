@@ -1,5 +1,5 @@
 /**
- * Liquid Bubbles Multi — one bubble's float life cycle as a pure step.
+ * Liquid Bubble Interaction — one bubble's float life cycle as a pure step.
  * Design notes: README.md → "hooks/multiBubbleMath.ts".
  *
  * FLOW (called once per bubble per frame by `useMultiBubblePhysics`):

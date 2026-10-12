@@ -1,4 +1,4 @@
-# Liquid Bubbles Multi
+# Liquid Bubble Interaction
 
 A small "Explore thoughts" trigger bubble sits under the greeting. Tap it and
 the greeting collapses into four labelled glass bubbles, heading toward one
@@ -13,7 +13,7 @@ single bubble's state.
 
 ## Files
 
-- `LiquidBubblesMulti.tsx`: screen — greeting, the bubbles, panels, FPS
+- `LiquidBubbleInteraction.tsx`: screen — greeting, the bubbles, panels, FPS
 - `LabeledBubble.tsx`: one bubble as one component — its label, then its glass pass
 - `BubbleFilmOverlay.tsx`: the optional soap film over a labeled bubble's glass (liquid-bubble-live's overlay pass, per buffer slot)
 - `SelectCard.tsx`: the frosted squircle card that slides up under a pressed bubble, with its points
@@ -33,7 +33,7 @@ single bubble's state.
 - `hooks/useBubbleSelect.ts`: press an intro bubble — it and its card centre on screen, the others scroll off, the card slides up (one spring)
 - `animation_timeline.md`: the intro's stages, curves, constants and the reasoning — the reference for changing how it feels
 
-Tests: `bun test src/components/liquid-bubbles-multi`
+Tests: `bun test src/components/liquid-bubble-interaction`
 
 ## Structure
 
@@ -42,7 +42,7 @@ the sliders write SharedValues, so dragging one never re-renders React.
 
 ```mermaid
 flowchart TD
-    LBM["LiquidBubblesMulti<br/>measures, keys the scene by size"]
+    LBM["LiquidBubbleInteraction<br/>measures, keys the scene by size"]
     SCENE["MultiBubbleScene"]
     CLOCK["useClock<br/>seconds, for the resting drift only"]
     PANELS["Text / Bubble panels<br/>sliders write SharedValues"]
@@ -105,7 +105,7 @@ flowchart TD
 
 ## Design notes
 
-### LiquidBubblesMulti.tsx
+### LiquidBubbleInteraction.tsx
 
 ```
  onLayout → size → scene (keyed by size: the physics captures the walls)
@@ -512,7 +512,7 @@ Float/respawn physics as plain numbers (ported from the retired single-bubble
  waiting / unused / R ≤ 0:  12 zeros (R = 0 = nothing to draw)
 ```
 
-- **Own state key** (`__liquidBubblesMulti`), so it never collides with the
+- **Own state key** (`__liquidBubbleInteraction`), so it never collides with the
   `useBubbleShape` singleton.
 - **Float before shape**, in the same frame: the buffer never lags the
   float by a frame.

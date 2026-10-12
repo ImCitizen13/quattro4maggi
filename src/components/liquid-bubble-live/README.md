@@ -5,7 +5,7 @@ glass bends whatever is drawn behind it, live.
 
 Drag to move it (it springs back to the center on release), pinch to resize
 it. It refracts through a Skia `<BackdropFilter>`. The shader, tuning panel
-and physics here are also reused by `liquid-bubbles-multi` and `soap-film`.
+and physics here are also reused by `liquid-bubble-interaction` and `soap-film`.
 
 ## Files
 
@@ -14,7 +14,7 @@ and physics here are also reused by `liquid-bubbles-multi` and `soap-film`.
 - `filmOverlayShader.ts`: the soap-film overlay pass (film from `soap-film`)
 - `bubbleModes.ts`: physics + look constants
 - `liveConfig.ts`: background + clip constants
-- `backgroundShaders.ts`: the animated background scene (used by `liquid-bubbles-multi`)
+- `backgroundShaders.ts`: the animated background scene (used by `liquid-bubble-interaction`)
 - `BubbleTuningPanel.tsx`: the controls
 - `hooks/`: gestures, shape physics (`bubbleModeMath` + test), optics, film motion, clock
 - `multi_bubble.md`: design notes + cost comparison for several bubbles on one screen
@@ -56,7 +56,7 @@ Tests: `bun test src/components/liquid-bubble-live/hooks/bubbleModeMath.test.ts`
 ### BouncingImagesBubble.tsx
 
 One glass bubble in the middle of the screen, spanning the screen width at
-start, with random pictures from `assets/Bubbles/128` bouncing inside it.
+start, with random pictures from `assets/Bubbles/256` bouncing inside it.
 
 ```
  mount (JS)   IMAGE_COUNT distinct random sources, non-overlapping start spots
@@ -297,7 +297,7 @@ Pure data: the buffer shape shared between the physics step
 (`hooks/bubbleModeMath.ts`) and the `iParams` uniform in `shaders.ts`, plus
 the spring/idle tuning constants that `stepBubbleModes` reads. No React, no
 Skia, no Reanimated imports here — safe to import from a worklet or from
-plain TS. Also shared with `liquid-bubbles-multi`, so changing a constant
+plain TS. Also shared with `liquid-bubble-interaction`, so changing a constant
 here restyles every demo that imports it.
 
 ### liveConfig.ts
@@ -313,7 +313,7 @@ No React, no Skia imports — safe to read from a worklet.
 
 ### backgroundShaders.ts
 
-The animated background scene (used by `liquid-bubbles-multi`; Bounce draws
+The animated background scene (used by `liquid-bubble-interaction`; Bounce draws
 an image instead).
 
 It is drawn as a plain `<Fill>` INSIDE the same `<Canvas>` as the bubble,
@@ -341,7 +341,7 @@ the thing being measured.
 ### BubbleTuningPanel.tsx
 
 Live tuning levers for the harmonic bubble, shared by `BouncingImagesBubble`
-and `liquid-bubbles-multi`. Every slider writes a `SharedValue` on the UI
+and `liquid-bubble-interaction`. Every slider writes a `SharedValue` on the UI
 thread (`TuningSlider`), so dragging never re-renders React.
 
 **Flow:**
@@ -349,7 +349,7 @@ thread (`TuningSlider`), so dragging never re-renders React.
 1. Tab row: Hide · Shape · Refraction · Surface · Rim (React state — changes
    only on tap). Wraps onto two lines on a ~393pt phone.
 2. Shape → Size, Wobble, Inertia, Strength (the Float toggle and Buoyancy
-   only show when a demo passes them, as `liquid-bubbles-multi` does).
+   only show when a demo passes them, as `liquid-bubble-interaction` does).
 3. Refraction → Refract, Lens falloff, Lens, Dispersion, Edge width.
 4. Surface → Film, Film bands, Tint, Specular.
 5. Rim → Rim dark, Rim width, Rainbow mix, Rainbow glow, Halo
@@ -432,7 +432,7 @@ each frame) + bboxX/Y/W/H SharedValues.
 
 Owns the live "look" levers of the harmonic bubble and builds the shader
 `uniforms` from them. Used by `BouncingImagesBubble` and
-`liquid-bubbles-multi`.
+`liquid-bubble-interaction`.
 
 **Flow:**
 
@@ -456,7 +456,7 @@ Owns the live "look" levers of the harmonic bubble and builds the shader
   from the rest passes `overrides: Partial<BubbleOpticsValues>` instead of
   editing `bubbleModes.ts`, whose constants are shared by all of these
   demos — changing them there restyles every one at once.
-  `liquid-bubbles-multi` uses it (`MULTI_OPTICS`).
+  `liquid-bubble-interaction` uses it (`MULTI_OPTICS`).
 - It seeds the returned `defaults` as well as the live values, which is the
   point: otherwise the panel's Reset would throw a demo back to the global
   look rather than its own. `overrides.refract` wins over the standalone

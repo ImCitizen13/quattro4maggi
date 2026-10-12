@@ -1,4 +1,4 @@
-import { LiquidBubblesMulti } from "@/components/liquid-bubbles-multi/LiquidBubblesMulti";
+import { LiquidBubbleInteraction } from "@/components/liquid-bubble-interaction/LiquidBubbleInteraction";
 import { Stack } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -15,7 +15,7 @@ export default function Index() {
           headerShown: false,
         }}
       />
-      <LiquidBubblesMulti />
+      <LiquidBubbleInteraction />
     </View>
   );
 }

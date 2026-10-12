@@ -24,6 +24,9 @@ Clone them. Learn from them. Ship them.
 | [Live Border Card](./src/components/live-border-card/README.md) | ![live-border-card](./assets/demos/live-border-card.gif) | Animated glowing borders with rotating color gradients and customizable glow effects |
 | [Pull To Refresh](./src/components/pull-to-refresh/README.md) | ![pull-to-refresh](./assets/demos/pull-to-refresh.gif) | Gesture-driven pull-to-refresh with a three-stage animation, switchable iOS/Android layout models, and a sticky Threads-style glyph header driven by the same lifecycle |
 | [Gargantua TypeGPU](./src/components/gargantua-type-gpu/README.md) | ![gargantua-starfield](./assets/demos/gargantua-type-gpu.gif) | A full-screen WebGPU experience built with Expo Router, and TypeGPU |
+| [Soap Film](./src/components/soap-film/README.md) | — | Animated soap-film iridescence you can disturb by dragging, with the thickness field and its color mapping kept as separate stages |
+| [Liquid Bubble Live](./src/components/liquid-bubble-live/README.md) | — | One draggable, pinchable glass bubble that refracts bouncing images live through a Skia backdrop shader |
+| [Liquid Bubble Interaction](./src/components/liquid-bubble-interaction/README.md) | — | A trigger bubble that blooms the greeting into four labelled glass bubbles that float and bounce in a single shader pass |
 
 ---
 
