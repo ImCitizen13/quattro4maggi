@@ -31,6 +31,7 @@ import {
   Canvas,
   Fill,
   FilterMode,
+  Group,
   Image,
   ImageShader,
   MipmapMode,
@@ -69,6 +70,7 @@ import {
 import { BubbleTuningPanel } from "./BubbleTuningPanel";
 import { useBubbleFilmMotion } from "./hooks/useBubbleFilmMotion";
 import { useBubblePinchGesture } from "./hooks/useBubbleGestures";
+import { buildBubbleOutlinePath } from "./hooks/bubbleOutlinePath";
 import { useBubbleOptics } from "./hooks/useBubbleOptics";
 import { useBubbleShape } from "./hooks/useBubbleShape";
 import { useClock } from "./hooks/useClock";
@@ -91,6 +93,24 @@ const REFRACT_SLIDER_MAX = 40;
 
 /** Soap-film overlay on at mount (live toggle: Surface tab). */
 const SOAP_FILM_ON_DEFAULT = true;
+
+/**
+ * Crisp silhouette. `true`: the BackdropFilter and the soap-film overlay are
+ * clipped to the bubble's exact deformed outline (an anti-aliased PATH clip,
+ * rasterized at device resolution). `false`: the old rectangular clip, where
+ * the edge is only the shader's smoothstep, 1 texel per point (jagged on 3x).
+ * Trade-off: the path hugs the rim, so the outer halo (Halo / Halo spread in
+ * the Optics tab) is clipped away while this is on.
+ */
+const CRISP_EDGE = true;
+
+/**
+ * Pull the clip path this many points inside the shader's zero-crossing
+ * (`d = r - dist = 0`, where alpha is 0.5). By `d = 0.5` alpha is ~0.9, so the
+ * clip edge lands where the glass is already (nearly) opaque and no half-
+ * transparent fringe survives inside it.
+ */
+const EDGE_INSET = 0.5;
 
 /** Full-screen background the bubble refracts (fit: cover). */
 const BACKGROUND_SOURCE = require("../../../assets/liquid-glass-bubble/stars_bg.jpg");
@@ -455,6 +475,12 @@ export function BouncingImagesBubble({
     );
   });
 
+  // Exact bubble outline from the same param buffer the shader reads (UI
+  // thread, no React render). Only mounted as the clip when CRISP_EDGE.
+  const outlinePath = useDerivedValue(() =>
+    buildBubbleOutlinePath(paramBuffer.value, EDGE_INSET),
+  );
+
   // ==========================================================================
   // Bouncing images
   // ==========================================================================
@@ -633,7 +659,7 @@ export function BouncingImagesBubble({
 
           {/* ---- Bubble: refracts everything above within clipRect ---- */}
           <BackdropFilter
-            clip={clipRect}
+            clip={CRISP_EDGE ? outlinePath : clipRect}
             filter={
               <RuntimeShader
                 source={liveBubbleEffect}
@@ -644,25 +670,30 @@ export function BouncingImagesBubble({
 
           {/* ---- Soap-film overlay, same shape, composited on top ---- */}
           {soapFilmOn && (
-            <Rect rect={clipRect}>
-              <Shader source={filmOverlayEffect} uniforms={filmOverlayUniforms}>
-                <SoapFilmShader
-                  generator="curl"
-                  output="thickness"
-                  flow={filmFlow}
-                />
-                <ImageShader
-                  image={filmRamp}
-                  tx="repeat"
-                  ty="clamp"
-                  fit="none"
-                  sampling={{
-                    filter: FilterMode.Linear,
-                    mipmap: MipmapMode.None,
-                  }}
-                />
-              </Shader>
-            </Rect>
+            <Group clip={CRISP_EDGE ? outlinePath : undefined}>
+              <Rect rect={clipRect}>
+                <Shader
+                  source={filmOverlayEffect}
+                  uniforms={filmOverlayUniforms}
+                >
+                  <SoapFilmShader
+                    generator="curl"
+                    output="thickness"
+                    flow={filmFlow}
+                  />
+                  <ImageShader
+                    image={filmRamp}
+                    tx="repeat"
+                    ty="clamp"
+                    fit="none"
+                    sampling={{
+                      filter: FilterMode.Linear,
+                      mipmap: MipmapMode.None,
+                    }}
+                  />
+                </Shader>
+              </Rect>
+            </Group>
           )}
         </Canvas>
       </GestureDetector>
