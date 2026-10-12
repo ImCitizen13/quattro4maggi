@@ -31,6 +31,7 @@ import {
   Canvas,
   Fill,
   FilterMode,
+  Group,
   Image,
   ImageShader,
   MipmapMode,
@@ -41,7 +42,12 @@ import {
   useImage,
 } from "react-native-skia";
 import React, { useMemo, useState } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import {
+  PixelRatio,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   useAnimatedReaction,
@@ -88,6 +94,31 @@ const SHOW_TUNING_PANEL = true;
 
 /** Upper bound of the Refract slider, pt. */
 const REFRACT_SLIDER_MAX = 40;
+
+/**
+ * Render the bubble's backdrop at device resolution instead of logical
+ * points. Skia can't apply the canvas matrix to a `RuntimeShader` image
+ * filter, so it snapshots the backdrop at 1 texel per local unit (= 1 per
+ * point); on a 3x screen the images moving behind the glass then snap to a
+ * 3-device-pixel grid and visibly pixelate/jump.
+ *
+ * Fix: draw everything inside a `1 / pd` group (local unit = device pixel)
+ * and put the backdrop back in points with a matching `pd` group; the bubble
+ * pass sits between the two and gets its point-valued inputs x `pd`.
+ *
+ * Costs ~pd² (≈ 9x) the texels per pass. false = the old look, for FPS
+ * comparison. Same approach as liquid-bubble-interaction.
+ */
+const CRISP_BUBBLES = true;
+
+/** Local units per point inside the canvas. 1 = the old, logical-res look. */
+const PD = CRISP_BUBBLES ? PixelRatio.get() : 1;
+
+/** Outer group: puts the canvas in device pixels for the bubble pass. */
+const DPR_DOWN = [{ scale: 1 / PD }];
+
+/** Inner group: backdrop and film overlay stay authored in points. */
+const DPR_UP = [{ scale: PD }];
 
 /** Soap-film overlay on at mount (live toggle: Surface tab). */
 const SOAP_FILM_ON_DEFAULT = true;
@@ -418,10 +449,24 @@ export function BouncingImagesBubble({
   );
   const filmRamp = useMemo(() => getSoapFilmRampImage(), []);
 
-  const bubbleUniforms = useDerivedValue(() => ({
-    ...uniforms.value,
-    iFilm: soapFilmOnValue.value === 1 ? 0 : uniforms.value.iFilm,
-  }));
+  // The bubble pass runs in device pixels (outside DPR_UP): scale every
+  // length in points by PD. cx, cy, R (iParams 0..2), iRefract and the rim
+  // width (iOptics.y) are points; harmonics are unitless and the other
+  // lengths are fractions of R, so they follow for free.
+  const bubbleUniforms = useDerivedValue(() => {
+    const u = uniforms.value;
+    const p = u.iParams.slice();
+    p[0] *= PD;
+    p[1] *= PD;
+    p[2] *= PD;
+    return {
+      ...u,
+      iParams: p,
+      iFilm: soapFilmOnValue.value === 1 ? 0 : u.iFilm,
+      iRefract: u.iRefract * PD,
+      iOptics: [u.iOptics[0], u.iOptics[1] * PD, u.iOptics[2], u.iOptics[3]],
+    };
+  });
 
   const filmOverlayUniforms = useDerivedValue(() => ({
     iParams: uniforms.value.iParams,
@@ -453,6 +498,13 @@ export function BouncingImagesBubble({
       bboxW.value + 2 * pad,
       bboxH.value + 2 * pad,
     );
+  });
+
+  // The same rect in the bubble pass's space (device pixels) for the
+  // BackdropFilter clip; the film overlay uses `clipRect` in points.
+  const clipRectPx = useDerivedValue(() => {
+    const r = clipRect.value;
+    return rect(r.x * PD, r.y * PD, r.width * PD, r.height * PD);
   });
 
   // ==========================================================================
@@ -606,64 +658,79 @@ export function BouncingImagesBubble({
     <View style={styles.container}>
       <GestureDetector gesture={gesture}>
         <Canvas style={[styles.canvas, { width, height }]}>
-          {/* ---- Backdrop (what the bubble refracts), drawn first ---- */}
-          <Fill color="#000000" />
-          {background && (
-            <Image
-              image={background}
-              fit="cover"
-              x={0}
-              y={0}
-              width={width}
-              height={height}
-            />
-          )}
-
-          {sources.map((source, i) => (
-            <BouncingImage
-              key={i}
-              source={source}
-              index={i}
-              sizeMul={sizeMuls[i]}
-              baseSize={baseSize}
-              bodies={bodies}
-              paramBuffer={paramBuffer}
-            />
-          ))}
-
-          {/* ---- Bubble: refracts everything above within clipRect ---- */}
-          <BackdropFilter
-            clip={clipRect}
-            filter={
-              <RuntimeShader
-                source={liveBubbleEffect}
-                uniforms={bubbleUniforms}
-              />
-            }
-          />
-
-          {/* ---- Soap-film overlay, same shape, composited on top ---- */}
-          {soapFilmOn && (
-            <Rect rect={clipRect}>
-              <Shader source={filmOverlayEffect} uniforms={filmOverlayUniforms}>
-                <SoapFilmShader
-                  generator="curl"
-                  output="thickness"
-                  flow={filmFlow}
+          {/* Device-pixel space: one local unit = one device pixel, so the
+              bubble pass snapshots its backdrop at full resolution. */}
+          <Group transform={DPR_DOWN}>
+            {/* ---- Backdrop (what the bubble refracts), drawn first.
+                DPR_UP puts it back in points. ---- */}
+            <Group transform={DPR_UP}>
+              <Fill color="#000000" />
+              {background && (
+                <Image
+                  image={background}
+                  fit="cover"
+                  x={0}
+                  y={0}
+                  width={width}
+                  height={height}
                 />
-                <ImageShader
-                  image={filmRamp}
-                  tx="repeat"
-                  ty="clamp"
-                  fit="none"
-                  sampling={{
-                    filter: FilterMode.Linear,
-                    mipmap: MipmapMode.None,
-                  }}
+              )}
+
+              {sources.map((source, i) => (
+                <BouncingImage
+                  key={i}
+                  source={source}
+                  index={i}
+                  sizeMul={sizeMuls[i]}
+                  baseSize={baseSize}
+                  bodies={bodies}
+                  paramBuffer={paramBuffer}
                 />
-              </Shader>
-            </Rect>
-          )}
+              ))}
+            </Group>
+
+            {/* ---- Bubble: refracts everything above within the clip. Outside
+                DPR_UP, so its uniforms and clip are in device pixels. ---- */}
+            <BackdropFilter
+              clip={clipRectPx}
+              filter={
+                <RuntimeShader
+                  source={liveBubbleEffect}
+                  uniforms={bubbleUniforms}
+                />
+              }
+            />
+
+            {/* ---- Soap-film overlay, same shape, composited on top. A plain
+                shader fill (not an image filter), so it just goes back in
+                points via DPR_UP and its uniforms stay unscaled. ---- */}
+            {soapFilmOn && (
+              <Group transform={DPR_UP}>
+                <Rect rect={clipRect}>
+                  <Shader
+                    source={filmOverlayEffect}
+                    uniforms={filmOverlayUniforms}
+                  >
+                    <SoapFilmShader
+                      generator="curl"
+                      output="thickness"
+                      flow={filmFlow}
+                    />
+                    <ImageShader
+                      image={filmRamp}
+                      tx="repeat"
+                      ty="clamp"
+                      fit="none"
+                      sampling={{
+                        filter: FilterMode.Linear,
+                        mipmap: MipmapMode.None,
+                      }}
+                    />
+                  </Shader>
+                </Rect>
+              </Group>
+            )}
+          </Group>
         </Canvas>
       </GestureDetector>
 
