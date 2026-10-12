@@ -56,7 +56,7 @@ Tests: `bun test src/components/liquid-bubble-live/hooks/bubbleModeMath.test.ts`
 ### BouncingImagesBubble.tsx
 
 One glass bubble in the middle of the screen, spanning the screen width at
-start, with random pictures from `assets/Bubbles/128` bouncing inside it.
+start, with random pictures from `assets/Bubbles/256` bouncing inside it.
 
 ```
  mount (JS)   IMAGE_COUNT distinct random sources, non-overlapping start spots

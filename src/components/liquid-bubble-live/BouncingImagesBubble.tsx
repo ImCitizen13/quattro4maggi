@@ -65,7 +65,7 @@ import { SoapFilmShader } from "@/components/soap-film/SoapFilmShader";
 import { SPRING_BUBBLE_INFLATE } from "@/lib/animations/constants";
 import { getSoapFilmRampImage } from "@/lib/shaders/soapFilm";
 
-import { imageArray } from "../../../assets/Bubbles/128/images.generated";
+import { imageArray } from "../../../assets/Bubbles/256/images.generated";
 import {
   FILM_DRAG_DEFAULT,
   INERTIA_DEFAULT,
