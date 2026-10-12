@@ -4,6 +4,7 @@ import LottieView from "lottie-react-native";
 import { PressableScale } from "pressto";
 import React, { useRef } from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { TECH_TAGS, type TechTag } from "./techTags";
 
 const LOTTIE_ASSETS = {
   "wabi-and-more.json": require("../../../assets/lottie/wabi-and-more_dark.json"),
@@ -13,15 +14,11 @@ const LOTTIE_ASSETS = {
   "scale-flip-card.json": require("../../../assets/lottie/scale-flip-card_dark.json"),
 } as const;
 const BACKGROUND_COLOR = "#1a1a1a";
-export type Tag = {
-  name: string;
-  color: string;
-};
 
 export type Demo = {
   name: string;
   href: Href;
-  tags: Array<Tag>;
+  tags: TechTag[];
   lottieLink?: keyof typeof LOTTIE_ASSETS;
 };
 
@@ -34,12 +31,13 @@ export default function DemoCardView({
 }) {
   const animation = useRef<LottieView>(null);
   const lottie = demo.lottieLink ? LOTTIE_ASSETS[demo.lottieLink] : null;
-  const {width} = useWindowDimensions()
+  const { width } = useWindowDimensions();
+
   return (
     <Link
       style={{
         backgroundColor: "transparent",
-        width: width/2.5,
+        width: width / 2.5,
         justifyContent: "center",
       }}
       key={index}
@@ -58,7 +56,7 @@ export default function DemoCardView({
         <Text style={styles.cardTitle}>{demo.name}</Text>
         {lottie && (
           <LottieView
-          autoPlay
+            autoPlay
             // ref={animation}
             style={{
               width: 100,
@@ -68,30 +66,15 @@ export default function DemoCardView({
             source={lottie}
           />
         )}
-        <View
-          style={{ flexDirection: "row", gap: 12, justifyContent: "center" }}
-        >
-          {demo.tags.map((tag, idx) => {
-            return (
-              <View key={idx}>
-                <Image
-                  source={
-                    tag.name == "skia"
-                      ? require("../../../assets/tags/skia.png")
-                      : require("../../../assets/tags/reanimated.png")
-                  }
-                  contentFit="cover"
-                  style={{
-                    width: 50,
-                    height: 25,
-                    borderWidth: 1,
-                    borderColor: "rgb(66, 66, 66)",
-                    borderRadius: 4,
-                  }}
-                />
-              </View>
-            );
-          })}
+        <View style={styles.tagRow}>
+          {demo.tags.map((tag) => (
+            <Image
+              key={tag}
+              source={TECH_TAGS[tag].image}
+              contentFit="cover"
+              style={styles.tag}
+            />
+          ))}
         </View>
       </PressableScale>
     </Link>
@@ -106,11 +89,23 @@ const styles = StyleSheet.create({
     padding: 20,
     flexDirection: "column",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
   },
   cardTitle: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "600",
+  },
+  tagRow: {
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "center",
+  },
+  tag: {
+    width: 50,
+    height: 25,
+    borderWidth: 1,
+    borderColor: "rgb(66, 66, 66)",
+    borderRadius: 4,
   },
 });
