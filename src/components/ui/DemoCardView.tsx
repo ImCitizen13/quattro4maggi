@@ -23,10 +23,8 @@ export type Demo = {
 };
 
 export default function DemoCardView({
-  index,
   demo,
 }: {
-  index: number;
   demo: Demo;
 }) {
   const animation = useRef<LottieView>(null);
@@ -40,7 +38,6 @@ export default function DemoCardView({
         width: width / 2.5,
         justifyContent: "center",
       }}
-      key={index}
       href={demo.href}
       asChild
     >

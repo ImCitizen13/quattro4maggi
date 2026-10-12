@@ -1,7 +1,11 @@
 import DemoCardView, { type Demo } from "@/components/ui/DemoCardView";
 import { router, Stack } from "expo-router";
-import { FlatList, StyleSheet, Text, useColorScheme, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  FlatList,
+  type ListRenderItem,
+  StyleSheet,
+  useColorScheme,
+} from "react-native";
 
 const demos = [
   {
@@ -64,6 +68,10 @@ const demos = [
 
 export default function HomeScreen() {
   const isDark = useColorScheme() === "dark";
+  const renderItem: ListRenderItem<Demo> = ({ item }) => (
+    <DemoCardView demo={item} />
+  );
+  const keyExtractor = (item: Demo) => item.name;
   return (
     <>
       {/*<Text style={[styles.title, { color: isDark ? "white" : "black" }]}>
@@ -84,13 +92,9 @@ export default function HomeScreen() {
         style={{ flex: 1, padding: 12 }}
         data={demos}
         numColumns={2}
-        columnWrapperStyle={{
-          justifyContent: "center",
-          gap: 12,
-        }}
-        renderItem={({ index, item }) => (
-          <DemoCardView index={index} demo={item} />
-        )}
+        columnWrapperStyle={styles.columnWrapper}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
         contentContainerStyle={styles.grid}
       />
     </>
@@ -108,6 +112,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
 
     marginVertical: 24,
+  },
+  columnWrapper: {
+    justifyContent: "center",
+    gap: 12,
   },
   grid: {
     gap: 12,
