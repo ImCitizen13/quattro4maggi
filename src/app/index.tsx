@@ -1,13 +1,15 @@
 import DemoCardView, { type Demo } from "@/components/ui/DemoCardView";
-import { router, Stack } from "expo-router";
-import {
-  FlatList,
-  type ListRenderItem,
-  StyleSheet,
-  useColorScheme,
-} from "react-native";
+import { Stack } from "expo-router";
+import {  useState } from "react";
+import { type ListRenderItem, StyleSheet } from "react-native";
+import Animated, { LinearTransition } from "react-native-reanimated";
 
 const demos = [
+  {
+    name: "Liquid Bubble Interaction",
+    href: "/liquid-bubble-interaction",
+    tags: ["skia", "reanimated"],
+  },
   {
     name: "Wabi and More",
     href: "/wabi-and-more",
@@ -19,6 +21,16 @@ const demos = [
     href: "/ripple-effect",
     tags: ["skia", "reanimated"],
     lottieLink: "ripple.json",
+  },
+  {
+    name: "Pull To Refresh",
+    href: "/pull-to-refresh",
+    tags: ["reanimated"],
+  },
+  {
+    name: "Gargantua",
+    href: "/gargantua-type-gpu",
+    tags: ["reanimated", "type-gpu"],
   },
   {
     name: "Scale Flip Card",
@@ -38,17 +50,7 @@ const demos = [
     tags: ["skia", "reanimated"],
     lottieLink: "liquid-metal.json",
   },
-  {
-    name: "Pull To Refresh",
-    href: "/pull-to-refresh",
-    tags: ["reanimated"],
-  },
 
-  {
-    name: "Gargantua",
-    href: "/gargantua-type-gpu",
-    tags: ["reanimated", "type-gpu"],
-  },
   {
     name: "Soap Film",
     href: "/soap-film",
@@ -59,15 +61,15 @@ const demos = [
     href: "/liquid-bubble-live",
     tags: ["skia", "reanimated"],
   },
-  {
-    name: "Liquid Bubble Interaction",
-    href: "/liquid-bubble-interaction",
-    tags: ["skia", "reanimated"],
-  },
 ] satisfies Demo[];
 
 export default function HomeScreen() {
-  const isDark = useColorScheme() === "dark";
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const q = searchQuery.trim().toLocaleLowerCase();
+  const demosData = q
+    ? demos.filter((demo) => demo.name.toLowerCase().includes(q))
+    : demos;
+
   const renderItem: ListRenderItem<Demo> = ({ item }) => (
     <DemoCardView demo={item} />
   );
@@ -80,17 +82,19 @@ export default function HomeScreen() {
       <Stack.Screen
         options={{
           headerSearchBarOptions: {
-            placeholder: "What are you looking for?",
+            placeholder: "Search for a demo?",
             onChangeText: (event) => {
-              router.setParams({ query: event.nativeEvent.text });
+              setSearchQuery(event.nativeEvent.text);
             },
           },
         }}
       />
-      <FlatList
+
+      <Animated.FlatList
+        itemLayoutAnimation={LinearTransition}
         contentInsetAdjustmentBehavior="automatic"
-        style={{ flex: 1, padding: 12 }}
-        data={demos}
+        style={styles.container}
+        data={demosData}
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
         renderItem={renderItem}
@@ -104,13 +108,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // padding: 14,
+    paddingVertical: 8,
     // backgroundColor: #ffffff
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-
     marginVertical: 24,
   },
   columnWrapper: {
@@ -119,5 +122,6 @@ const styles = StyleSheet.create({
   },
   grid: {
     gap: 12,
+    paddingBottom: 16
   },
 });
