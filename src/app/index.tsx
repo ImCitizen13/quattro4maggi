@@ -1,11 +1,8 @@
 import DemoCardView, { type Demo } from "@/components/ui/DemoCardView";
-import { router, Stack } from "expo-router";
-import {
-  FlatList,
-  type ListRenderItem,
-  StyleSheet,
-  useColorScheme,
-} from "react-native";
+import { Stack, useLocalSearchParams } from "expo-router";
+import { useMemo, useState } from "react";
+import { type ListRenderItem, StyleSheet } from "react-native";
+import Animated, { LinearTransition } from "react-native-reanimated";
 
 const demos = [
   {
@@ -67,7 +64,12 @@ const demos = [
 ] satisfies Demo[];
 
 export default function HomeScreen() {
-  const isDark = useColorScheme() === "dark";
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const q = searchQuery.trim().toLocaleLowerCase();
+  const demosData = q
+    ? demos.filter((demo) => demo.name.toLowerCase().includes(q))
+    : demos;
+
   const renderItem: ListRenderItem<Demo> = ({ item }) => (
     <DemoCardView demo={item} />
   );
@@ -80,17 +82,19 @@ export default function HomeScreen() {
       <Stack.Screen
         options={{
           headerSearchBarOptions: {
-            placeholder: "What are you looking for?",
+            placeholder: "Search for a demo?",
             onChangeText: (event) => {
-              router.setParams({ query: event.nativeEvent.text });
+              setSearchQuery(event.nativeEvent.text);
             },
           },
         }}
       />
-      <FlatList
+
+      <Animated.FlatList
+        itemLayoutAnimation={LinearTransition}
         contentInsetAdjustmentBehavior="automatic"
         style={{ flex: 1, padding: 12 }}
-        data={demos}
+        data={demosData}
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
         renderItem={renderItem}

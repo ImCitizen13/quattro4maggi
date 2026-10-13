@@ -62,3 +62,5 @@ src/components/premuim/shaders.ts
 
 /agent-rules
 *.local
+
+docs/bugs/
