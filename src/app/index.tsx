@@ -1,10 +1,15 @@
 import DemoCardView, { type Demo } from "@/components/ui/DemoCardView";
-import { Stack, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { Stack } from "expo-router";
+import {  useState } from "react";
 import { type ListRenderItem, StyleSheet } from "react-native";
 import Animated, { LinearTransition } from "react-native-reanimated";
 
 const demos = [
+  {
+    name: "Liquid Bubble Interaction",
+    href: "/liquid-bubble-interaction",
+    tags: ["skia", "reanimated"],
+  },
   {
     name: "Wabi and More",
     href: "/wabi-and-more",
@@ -16,6 +21,16 @@ const demos = [
     href: "/ripple-effect",
     tags: ["skia", "reanimated"],
     lottieLink: "ripple.json",
+  },
+  {
+    name: "Pull To Refresh",
+    href: "/pull-to-refresh",
+    tags: ["reanimated"],
+  },
+  {
+    name: "Gargantua",
+    href: "/gargantua-type-gpu",
+    tags: ["reanimated", "type-gpu"],
   },
   {
     name: "Scale Flip Card",
@@ -35,17 +50,7 @@ const demos = [
     tags: ["skia", "reanimated"],
     lottieLink: "liquid-metal.json",
   },
-  {
-    name: "Pull To Refresh",
-    href: "/pull-to-refresh",
-    tags: ["reanimated"],
-  },
 
-  {
-    name: "Gargantua",
-    href: "/gargantua-type-gpu",
-    tags: ["reanimated", "type-gpu"],
-  },
   {
     name: "Soap Film",
     href: "/soap-film",
@@ -54,11 +59,6 @@ const demos = [
   {
     name: "Liquid Bubble Live",
     href: "/liquid-bubble-live",
-    tags: ["skia", "reanimated"],
-  },
-  {
-    name: "Liquid Bubble Interaction",
-    href: "/liquid-bubble-interaction",
     tags: ["skia", "reanimated"],
   },
 ] satisfies Demo[];
@@ -93,7 +93,7 @@ export default function HomeScreen() {
       <Animated.FlatList
         itemLayoutAnimation={LinearTransition}
         contentInsetAdjustmentBehavior="automatic"
-        style={{ flex: 1, padding: 12 }}
+        style={styles.container}
         data={demosData}
         numColumns={2}
         columnWrapperStyle={styles.columnWrapper}
@@ -108,13 +108,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // padding: 14,
+    paddingVertical: 8,
     // backgroundColor: #ffffff
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
-
     marginVertical: 24,
   },
   columnWrapper: {
@@ -123,5 +122,6 @@ const styles = StyleSheet.create({
   },
   grid: {
     gap: 12,
+    paddingBottom: 16
   },
 });

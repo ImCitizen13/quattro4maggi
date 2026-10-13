@@ -18,6 +18,7 @@ const LOTTIE_ASSETS = {
   "live-border.json": require("../../../assets/lottie/live-border_dark.json"),
   "ripple.json": require("../../../assets/lottie/ripple_dark.json"),
   "scale-flip-card.json": require("../../../assets/lottie/scale-flip-card_dark.json"),
+  "default-lottie.json": require("../../../assets/lottie/default_lottie.json"),
 } as const;
 const BACKGROUND_COLOR = "#1a1a1a";
 
@@ -33,15 +34,16 @@ export default function DemoCardView({
 }: {
   demo: Demo;
 }) {
-  const lottie = demo.lottieLink ? LOTTIE_ASSETS[demo.lottieLink] : null;
+  const lottie = demo.lottieLink ? LOTTIE_ASSETS[demo.lottieLink] : LOTTIE_ASSETS["default-lottie.json"];
   const { width, height } = useWindowDimensions();
-
+  const cellWidth = width / 2.25
+  const cellHeight = height / 4
   return (
     <Link href={demo.href} asChild>
       <Pressable
         style={{
-          width: width / 2.25,
-          height: height / 4,
+          width: cellWidth,
+          height: cellHeight,
           justifyContent: "center",
         }}
       >
@@ -53,12 +55,7 @@ export default function DemoCardView({
         {lottie && (
           <LottieView
             autoPlay
-            // ref={animation}
-            style={{
-              width: 100,
-              height: 100,
-              backgroundColor: BACKGROUND_COLOR,
-            }}
+            style={styles.lottieView}
             source={lottie}
           />
         )}
@@ -93,16 +90,24 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
   },
+
+  lottieView: {
+    width: "80%",
+    height: 80,
+    backgroundColor: BACKGROUND_COLOR,
+},
+
   tagRow: {
     flexDirection: "row",
     gap: 12,
     justifyContent: "center",
+    width: "100%"
   },
   tag: {
-    width: 50,
+    width: "40%",
     height: 25,
     borderWidth: 1,
     borderColor: "rgb(66, 66, 66)",
