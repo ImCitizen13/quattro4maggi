@@ -1,10 +1,16 @@
 import { Image } from "expo-image";
 import { Href, Link } from "expo-router";
 import LottieView from "lottie-react-native";
-import { PressableScale } from "pressto";
-import React, { useRef } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import React from "react";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { TECH_TAGS, type TechTag } from "./techTags";
+import FastSquircleView from "react-native-fast-squircle";
 
 const LOTTIE_ASSETS = {
   "wabi-and-more.json": require("../../../assets/lottie/wabi-and-more_dark.json"),
@@ -27,28 +33,21 @@ export default function DemoCardView({
 }: {
   demo: Demo;
 }) {
-  const animation = useRef<LottieView>(null);
   const lottie = demo.lottieLink ? LOTTIE_ASSETS[demo.lottieLink] : null;
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   return (
-    <Link
-      style={{
-        backgroundColor: "transparent",
-        width: width / 2.5,
-        justifyContent: "center",
-      }}
-      href={demo.href}
-      asChild
-    >
-      <PressableScale
+    <Link href={demo.href} asChild>
+      <Pressable
+        style={{
+          width: width / 2.25,
+          height: height / 4,
+          justifyContent: "center",
+        }}
+      >
+      <FastSquircleView
+        cornerSmoothing={0.6}
         style={styles.card}
-        onPressIn={() => {
-          animation.current?.play();
-        }}
-        onPressOut={() => {
-          animation.current?.pause();
-        }}
       >
         <Text style={styles.cardTitle}>{demo.name}</Text>
         {lottie && (
@@ -73,7 +72,8 @@ export default function DemoCardView({
             />
           ))}
         </View>
-      </PressableScale>
+      </FastSquircleView>
+      </Pressable>
     </Link>
   );
 }
@@ -81,12 +81,15 @@ export default function DemoCardView({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: BACKGROUND_COLOR,
-    borderRadius: 12,
+    borderRadius: 24,
     gap: 12,
-    padding: 20,
+    padding: 18,
+    height: "100%",
+    width: "100%",
     flexDirection: "column",
     justifyContent: "space-between",
     alignItems: "center",
+
   },
   cardTitle: {
     color: "#fff",
