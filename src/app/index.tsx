@@ -61,6 +61,11 @@ const demos = [
     href: "/liquid-bubble-live",
     tags: ["skia", "reanimated"],
   },
+  {
+    name: "Black Hole Text",
+    href: "/black-hole-text",
+    tags: ["skia", "type-gpu"],
+  },
 ] satisfies Demo[];
 
 export default function HomeScreen() {
