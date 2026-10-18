@@ -265,6 +265,32 @@ Platform *does* change the set — `--platform all` yields 2298 files, a strict
 superset of the iOS 1347. `prewarm-worklets` therefore uses `--platform all` so
 one hook covers both iOS and Android builds.
 
+### 5.9 Android OTA update crashes on launch (Bundle Mode)
+
+**Symptom.** An EAS Update publishes and downloads fine on Android, but the app
+keeps showing the embedded (build-time) UI. iOS applies the same update.
+`adb logcat -s AndroidRuntime:E` shows, from `expo-updates-error-recovery`:
+
+> `Exception in HostFunction: java.net.MalformedURLException: no protocol: /data/user/0/<pkg>/files/.expo-internal/<hash>` — stack top `NativeWorklets`
+
+Note the logcat tag is `dev.expo.updates`, not `expo-updates`, so
+`logcat -s expo-updates:V` shows nothing useful.
+
+**Cause.** Bundle Mode makes the UI runtime re-load the app bundle by its source
+URL. `ScriptBufferWrapper.kt` (`react-native-worklets` 0.10.1) accepts only
+`file://` and `assets://`, and sends everything else to an HTTP download. An
+embedded bundle is `assets://…`; an OTA bundle is handed over as a **bare
+absolute path** with no scheme, so `URL("/data/…")` throws. expo-updates marks
+the update failed and falls back to the embedded bundle — hence "downloaded, never
+applied", repeated on every cold start. iOS accepts the path, so it is unaffected.
+
+**Not a build/cache issue.** The bundle is valid; prewarm (§5.8) is irrelevant.
+
+**Fix.** Native, so it needs a **new Android build** — an OTA cannot deliver it.
+`patches/react-native-worklets@0.10.1.patch` (applied by Bun via
+`patchedDependencies`) adds a `uri.startsWith("/")` branch calling
+`initHybridFromFile(uri)`. Remove the patch once upstream handles scheme-less paths.
+
 ---
 
 ## 6. Solutions
@@ -279,6 +305,7 @@ one hook covers both iOS and Android builds.
 | **5.6** Duplicated layouts | Bind the imported layout to a **local const inside the scene factory** and use that in the render closure, so it is *captured* (and routed through TypeGPU's identity cache) rather than re-imported. See the footnote. |
 | **5.7** Host singletons | Gate both to `js-raf`. In `ui-worklet` the overlay's `ui` row already measures this loop, so the `gpu` row is dropped as redundant rather than reported wrong. |
 | **5.8** Missing generated files | Run `bun run prewarm-worklets` — it creates the directory and does the throwaway pass that puts the files on disk. On EAS this runs automatically via the `eas-build-post-install` script, which is **required** for any build using `bundleMode`. Still use `--clear` after touching `babel.config.js` or `metro.config.js`. |
+| **5.9** Android OTA crash | Bun patch to `ScriptBufferWrapper.kt` + a new Android build (§5.9). Verify with `adb logcat -s dev.expo.updates:V AndroidRuntime:E`. |
 
 **Diagnostic tip.** Once §5.4 is fixed, TypeGPU's serializer throws *descriptive*
 errors (`register-serializables.js`) — it names the unsupported resource type, or
