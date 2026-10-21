@@ -64,3 +64,4 @@ src/components/premuim/shaders.ts
 *.local
 
 docs/bugs/
+backlog/
