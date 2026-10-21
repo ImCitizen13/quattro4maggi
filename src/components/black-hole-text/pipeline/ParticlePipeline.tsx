@@ -19,6 +19,7 @@ import type { SharedValue } from "react-native-reanimated";
 
 import { DEFAULT_MASS, MAX_PARTICLES } from "./constants";
 import { useUiDriver } from "./drivers/useUiDriver";
+import { LayoutLogOverlay, markLayout } from "./layoutDebug";
 import { ParticleRenderer } from "./ParticleRenderer";
 import { dummyOrbits } from "./sources/dummyOrbits";
 import type { Bounds, PhysicsSource } from "./types";
@@ -53,7 +54,8 @@ export function ParticlePipeline({
   const [size, setSize] = useState<Bounds | null>(null);
 
   const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
+    const { width, height, y } = e.nativeEvent.layout;
+    markLayout(`canvas onLayout y=${y.toFixed(1)} h=${height.toFixed(1)}`); // TEMP
     setSize((prev) =>
       prev && prev.width === width && prev.height === height
         ? prev
@@ -72,6 +74,7 @@ export function ParticlePipeline({
           stepMs={stepMs}
         />
       )}
+      <LayoutLogOverlay />
     </View>
   );
 }
@@ -93,6 +96,10 @@ function PipelineInner({
 }: PipelineInnerProps) {
   const cx = useSharedValue(size.width / 2);
   const cy = useSharedValue(size.height / 2);
+  // TEMP: SharedValue keeps its first value; the prop does not
+  markLayout(
+    `PipelineInner render prop cy=${(size.height / 2).toFixed(1)} sv cy=${cy.get().toFixed(1)}`
+  );
   const mass = useSharedValue(DEFAULT_MASS);
   const timeScale = useSharedValue(1);
 
