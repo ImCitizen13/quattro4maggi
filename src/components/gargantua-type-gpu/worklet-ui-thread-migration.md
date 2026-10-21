@@ -86,14 +86,17 @@ both modes.
 | Package | Installed | Expo SDK 55 pin | Note |
 |---|---|---|---|
 | `react-native` | 0.83.6 | 0.83.6 | unchanged — **no SDK upgrade needed** |
-| `react-native-worklets` | **0.10.1** | 0.7.4 | off-matrix, ABI-compatible |
+| `react-native-worklets` | **0.10.4** | 0.7.4 | off-matrix, ABI-compatible. Was 0.10.1 until 2026-10-19 — bumped for the Android OTA fix (§5.9) |
 | `react-native-reanimated` | **4.5.1** | 4.2.1 | wants worklets `0.10.x`, RN `0.83–0.86` |
 | `typegpu` | 0.12.4 | — | |
 | `@typegpu/react` | 0.12.0 | — | imported for its serializer registration only |
 | `react-native-webgpu` | 0.8.5 | — | |
 | `expo` | 55.0.17 | — | |
 
-**Why 0.10.1 specifically.** Three constraints intersect:
+**Why the 0.10.x line.** Three constraints intersect (checked against 0.10.1,
+re-checked on 0.10.4 — same exports, same `executeSync`). 0.10.2+ also contains
+the Android OTA fix (§5.9), so stay on **0.10.2 or later**; 0.13.x needs
+Reanimated 4.7.x and is a separate upgrade:
 
 - `@typegpu/react` gates worklet support on five exports —
   `registerCustomSerializable`, `isWorkletFunction`, `runOnUISync`,
@@ -105,8 +108,9 @@ both modes.
   to `runSync`, and `expo-modules-core` still calls `executeSync`
   (`node_modules/expo-modules-core/ios/Worklets/WorkletJSCallInvoker.cpp:28`).
   Compile fails outright.
-- **0.10.1 has both** — the five exports *and* `executeSync`. It is also exactly
-  what Expo SDK 57 pins, so upgrading the SDK later returns this to on-matrix.
+- **0.10.x has both** — the five exports *and* `executeSync`. Expo SDK 57 pins
+  0.10.1, so 0.10.4 is a patch-level step off the matrix. (The `executeSync`
+  constraint is historical: `expo-modules-core` 57.0.21 now calls `runSync`.)
 
 Verify the gate after any bump:
 
@@ -234,7 +238,7 @@ and a `Set`. Neither can be ticked from a worklet.
 | Symptom | Cause |
 |---|---|
 | `Unable to resolve module react-native-worklets/.worklets/<id>.js` | No `metro.config.js` — the resolver does not know the path (§4). |
-| `[Worklets] Babel plugin exception: ENOENT … .worklets/<id>.js` | The `.worklets` directory does not exist. The plugin writes into it but never creates it. |
+| `[Worklets] Babel plugin exception: ENOENT … .worklets/<id>.js` | The `.worklets` directory does not exist. The plugin writes into it but never creates it. (Every release ships `.worklets/dummy.md`, so a clean `bun install` does create it; seen only when the directory was removed or the install skipped it.) |
 | `Failed to get the SHA-1 for: … .worklets/<id>.js` | Directory exists; the file was written *after* Metro crawled the filesystem. |
 
 **Cause.** The files are **real files on disk**, not virtual — the plugin calls
@@ -265,6 +269,34 @@ Platform *does* change the set — `--platform all` yields 2298 files, a strict
 superset of the iOS 1347. `prewarm-worklets` therefore uses `--platform all` so
 one hook covers both iOS and Android builds.
 
+### 5.9 Android OTA update crashes on launch (Bundle Mode)
+
+**Symptom.** An EAS Update publishes and downloads fine on Android, but the app
+keeps showing the embedded (build-time) UI. iOS applies the same update.
+`adb logcat -s AndroidRuntime:E` shows, from `expo-updates-error-recovery`:
+
+> `Exception in HostFunction: java.net.MalformedURLException: no protocol: /data/user/0/<pkg>/files/.expo-internal/<hash>` — stack top `NativeWorklets`
+
+Note the logcat tag is `dev.expo.updates`, not `expo-updates`, so
+`logcat -s expo-updates:V` shows nothing useful.
+
+**Cause.** Bundle Mode makes the UI runtime re-load the app bundle by its source
+URL. `ScriptBufferWrapper.kt` in `react-native-worklets` **≤ 0.10.1** accepts only
+`file://` and `assets://`, and sends everything else to an HTTP download. An
+embedded bundle is `assets://…`; an OTA bundle is handed over as a **bare
+absolute path** with no scheme, so `URL("/data/…")` throws. expo-updates marks
+the update failed and falls back to the embedded bundle — hence "downloaded, never
+applied", repeated on every cold start. iOS accepts the path, so it is unaffected.
+
+**Not a build/cache issue.** The bundle is valid; prewarm (§5.8) is irrelevant.
+
+**Fix.** Fixed upstream in **`react-native-worklets` 0.10.2** (an
+`absPathPrefix = "/"` branch calling `initHybridFromFile(uri)`; still present in
+0.10.4, 0.13.0 and 0.14 nightlies). We bumped to an exact **0.10.4** pin and
+dropped our interim Bun patch. It is native code, so it only takes effect in a
+**new Android build** — an OTA cannot deliver it, and builds made before the bump
+(e.g. build 12) keep the bug. Never go back below 0.10.2.
+
 ---
 
 ## 6. Solutions
@@ -279,6 +311,7 @@ one hook covers both iOS and Android builds.
 | **5.6** Duplicated layouts | Bind the imported layout to a **local const inside the scene factory** and use that in the render closure, so it is *captured* (and routed through TypeGPU's identity cache) rather than re-imported. See the footnote. |
 | **5.7** Host singletons | Gate both to `js-raf`. In `ui-worklet` the overlay's `ui` row already measures this loop, so the `gpu` row is dropped as redundant rather than reported wrong. |
 | **5.8** Missing generated files | Run `bun run prewarm-worklets` — it creates the directory and does the throwaway pass that puts the files on disk. On EAS this runs automatically via the `eas-build-post-install` script, which is **required** for any build using `bundleMode`. Still use `--clear` after touching `babel.config.js` or `metro.config.js`. |
+| **5.9** Android OTA crash | Use worklets ≥ 0.10.2 (pinned 0.10.4) + a new Android build (§5.9). Verify with `adb logcat -s dev.expo.updates:V AndroidRuntime:E`. |
 
 **Diagnostic tip.** Once §5.4 is fixed, TypeGPU's serializer throws *descriptive*
 errors (`register-serializables.js`) — it names the unsupported resource type, or
