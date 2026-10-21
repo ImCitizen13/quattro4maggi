@@ -50,9 +50,9 @@ export type ParticleRendererProps = {
   bufferKey: string;
   /** Bumped by the driver every step */
   frame: SharedValue<number>;
-  /** Black hole center, canvas coordinates */
-  cx: number;
-  cy: number;
+  /** Black hole center, canvas coordinates (same SharedValues physics reads) */
+  cx: SharedValue<number>;
+  cy: SharedValue<number>;
 };
 
 // ============================================================================
@@ -67,7 +67,9 @@ export function ParticleRenderer({
   cy,
 }: ParticleRendererProps) {
   const sprite = useMemo(() => {
-    const surface = Skia.Surface.MakeOffscreen(SPRITE_SIZE, SPRITE_SIZE);
+    // CPU raster surface: MakeOffscreen (GPU) can return null on first mount
+    // before the GPU context exists, and useMemo would cache that null
+    const surface = Skia.Surface.Make(SPRITE_SIZE, SPRITE_SIZE);
     if (!surface) return null;
     const paint = Skia.Paint();
     paint.setAntiAlias(true);
@@ -77,8 +79,8 @@ export function ParticleRenderer({
     surface.getCanvas().drawCircle(c, c, c - 1, paint);
     paint.setAlphaf(1); // core
     surface.getCanvas().drawCircle(c, c, c * 0.5, paint);
-    // Offscreen texture is not drawable in the on-screen context
-    return surface.makeImageSnapshot().makeNonTextureImage();
+    // Raster snapshot: already CPU-backed, drawable in the on-screen context
+    return surface.makeImageSnapshot();
   }, []);
 
   // Static: every sprite samples the whole dot, so one mapper run is enough

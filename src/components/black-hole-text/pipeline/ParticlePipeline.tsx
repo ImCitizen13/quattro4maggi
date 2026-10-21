@@ -4,7 +4,8 @@
  * Composes buffers + physics source + driver + renderer.
  *
  * FLOW:
- * 1. Measure the container via onLayout (renders nothing until measured)
+ * 1. Measure the container via onLayout (renders nothing until measured);
+ *    every layout also writes the cx/cy SharedValues read by physics + disc
  * 2. Driver allocates MAX_PARTICLES once (on the UI runtime) and steps the
  *    first `activeCount.value` of them each frame
  * 3. Renderer (remounted via `key` on count change) draws one Atlas
@@ -19,7 +20,6 @@ import type { SharedValue } from "react-native-reanimated";
 
 import { DEFAULT_MASS, MAX_PARTICLES } from "./constants";
 import { useUiDriver } from "./drivers/useUiDriver";
-import { LayoutLogOverlay, markLayout } from "./layoutDebug";
 import { ParticleRenderer } from "./ParticleRenderer";
 import { dummyOrbits } from "./sources/dummyOrbits";
 import type { Bounds, PhysicsSource } from "./types";
@@ -52,10 +52,16 @@ export function ParticlePipeline({
   stepMs,
 }: ParticlePipelineProps) {
   const [size, setSize] = useState<Bounds | null>(null);
+  // Black hole center. Written on every layout, not seeded from the first
+  // render: on iOS the screen is first laid out at full window height and
+  // react-native-screens corrects it for the header in a later pass.
+  const cx = useSharedValue(0);
+  const cy = useSharedValue(0);
 
   const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height, y } = e.nativeEvent.layout;
-    markLayout(`canvas onLayout y=${y.toFixed(1)} h=${height.toFixed(1)}`); // TEMP
+    const { width, height } = e.nativeEvent.layout;
+    cx.set(width / 2);
+    cy.set(height / 2);
     setSize((prev) =>
       prev && prev.width === width && prev.height === height
         ? prev
@@ -71,10 +77,11 @@ export function ParticlePipeline({
           count={count}
           activeCount={activeCount}
           size={size}
+          cx={cx}
+          cy={cy}
           stepMs={stepMs}
         />
       )}
-      <LayoutLogOverlay />
     </View>
   );
 }
@@ -84,6 +91,8 @@ type PipelineInnerProps = {
   count: number;
   activeCount: SharedValue<number>;
   size: Bounds;
+  cx: SharedValue<number>;
+  cy: SharedValue<number>;
   stepMs: SharedValue<number>;
 };
 
@@ -92,14 +101,10 @@ function PipelineInner({
   count,
   activeCount,
   size,
+  cx,
+  cy,
   stepMs,
 }: PipelineInnerProps) {
-  const cx = useSharedValue(size.width / 2);
-  const cy = useSharedValue(size.height / 2);
-  // TEMP: SharedValue keeps its first value; the prop does not
-  markLayout(
-    `PipelineInner render prop cy=${(size.height / 2).toFixed(1)} sv cy=${cy.get().toFixed(1)}`
-  );
   const mass = useSharedValue(DEFAULT_MASS);
   const timeScale = useSharedValue(1);
 
@@ -119,8 +124,8 @@ function PipelineInner({
       count={count}
       bufferKey={BUFFER_KEY}
       frame={driver.frame}
-      cx={size.width / 2}
-      cy={size.height / 2}
+      cx={cx}
+      cy={cy}
     />
   );
 }
