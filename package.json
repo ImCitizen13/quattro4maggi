@@ -52,7 +52,7 @@
     "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
     "react-native-webgpu": "0.13.0",
-    "react-native-worklets": "0.10.1",
+    "react-native-worklets": "0.10.4",
     "typegpu": "^0.12.4",
     "unplugin-typegpu": "^0.12.3"
   },
