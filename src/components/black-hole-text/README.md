@@ -80,6 +80,63 @@ Open risks:
 - Metro is patched (`patches/metro@0.84.5.patch`, `metro-runtime@0.84.5.patch`,
   backlog id 10) so worklet edits hot-reload without a Metro restart.
 
+## Lessons learned
+
+Each of these cost a debugging session. Read before touching the pipeline.
+
+### Runtimes & worklets (bundle mode)
+
+- **Runtimes don't share memory.** JS, UI and each worker runtime are separate
+  Hermes VMs; captured values are *copied* into a worklet. Share within one
+  runtime via a keyed `globalThis` registry (`particleBuffers.ts`,
+  `renderPool.ts`). Across runtimes you need a copy or native-owned memory.
+- **Imports inside a worklet re-evaluate on the UI runtime.** A value import of
+  `react-native-skia` used in a worklet throws "Accessing TurboModules is not
+  allowed on Worklet Runtimes". Capture on JS (`const skia = Skia`) and pass
+  it in; import Skia as types only in worklet modules. Same for logging:
+  `scheduleOnRN(console.log, …)` fails, pass a JS-defined `log` function.
+- **The plugin strips a bare `void sv.value;` statement**, which drops `sv` from
+  the worklet's `__closure`, so a derived value never re-runs (frozen
+  particles). Make the read do work (`if (frame.value === 0) return EMPTY`).
+  The truth is the factory params in
+  `node_modules/react-native-worklets/.worklets/<hash>.js`.
+
+### Reanimated
+
+- **SharedValue initial values are built on JS and copied to UI.** Build big
+  render arrays lazily on UI inside worklets. `useDerivedValue` runs once on
+  JS at mount, so return an empty constant when the UI registry is absent.
+- **A derived value must depend on whatever makes its inputs ready.** The
+  first UI run precedes the driver's allocation; with only `activeCount` as a
+  dependency it never re-runs (blank canvas). Depend on `frame`.
+- **Listeners are skipped when the new value `===` the old one.** Returning
+  the same mutated array never redraws Atlas, so alternate two arrays.
+
+### Skia
+
+- **`useRSXformBuffer`'s mapper did not re-run per frame here** (only on React
+  renders), and `useRectBuffer` starts a mapper per render (leak). Own the
+  buffers and drive them from `frame`.
+- **Native `drawAtlas` throws if transforms/sprites lengths differ**, and the
+  throw kills the whole Canvas picture. Derive one length from the other.
+- **Draw sprites on `Skia.Surface.Make` (CPU raster).** `MakeOffscreen` can
+  return null before the GPU context exists.
+
+### Layout
+
+- iOS lays the screen out at full height first; the header corrects it later.
+  Never seed geometry from `useSharedValue(initial)`; write it in `onLayout`.
+
+### Verifying on the Simulator
+
+- **Verify motion, not presence.** Diff two 1:1 crops taken 1 s apart
+  (`magick compare -metric AE`) after a **cold** start. A hot reload can leave
+  a frozen last frame that looks like success.
+- Downscaled full-screen captures hide 3–5 px sprites. Crop at full
+  resolution before calling a canvas blank.
+- "Blank on open, works after re-entering" was once stale, unpatched Metro
+  serving mismatched `.worklets` files. Rule out Metro first.
+
 ## Status & handoff
 
 Where everything lives (backlog is local/gitignored):
@@ -96,7 +153,7 @@ Where everything lives (backlog is local/gitignored):
 | 4 | P1 pipeline + dummy orbits | done |
 | 8 | P1b growing RSXform pool + `useDerivedValue`, no remount | done (verified on Simulator) |
 | 9 | P1c blank canvas after dev reload | done |
-| 5 | P2 real physics + JS / UI / worker drivers | spec has physics + product decisions |
+| 5 | P2 real physics + JS / UI / worker drivers | **next**: plan + subtasks 5a–5g in spec |
 | 6 | P3 Nitro C++ step | todo |
 | 7 | P4 WebGPU/TypeGPU compute | todo |
 | 10 | Metro picks up `.worklets` without restart | done |
