@@ -103,23 +103,26 @@ export function ParticleRenderer({
     return surface.makeImageSnapshot();
   }, []);
 
-  // Static rects, one cached view per count tier. Also reads `frame`: the
-  // first UI run precedes the driver's allocation, and activeCount alone would
-  // never re-run it. Afterwards it returns the same cached array (=== → no
-  // listener notification), so the per-frame cost is one lookup.
+  // Both derived values must depend on `frame`. Their first UI run precedes the
+  // driver's allocation, and activeCount alone would never re-run them. The
+  // read has to be USED: the worklets plugin strips a bare `void frame.value;`
+  // statement, which drops `frame` from the closure (→ never re-runs, frozen).
+  // frame 0 = the driver has not stepped yet, so there is nothing to draw.
+
+  // Static rects, one cached view per count tier. After the first allocation
+  // it returns the same cached array (=== → no listener notification), so the
+  // per-frame cost is one lookup.
   const sprites = useDerivedValue<SkRect[]>(() => {
-    void frame.value;
     const n = activeCount.value;
-    if (!getParticleBuffers(bufferKey)) return EMPTY_RECTS;
+    if (frame.value === 0 || !getParticleBuffers(bufferKey)) return EMPTY_RECTS;
     const pool = ensureRenderPool(bufferKey);
     return ensureView(pool, n, skia).rects;
   });
 
   const transforms = useDerivedValue<SkRSXform[]>(() => {
-    void frame.value; // dependency: re-run every driver step
     const rects = sprites.value; // dependency + keeps both lengths equal
     const b = getParticleBuffers(bufferKey);
-    if (!b) return EMPTY_XFS;
+    if (frame.value === 0 || !b) return EMPTY_XFS;
     const pool = ensureRenderPool(bufferKey);
     const view = ensureView(pool, rects.length, skia);
     const xfs = pool.xfs;
