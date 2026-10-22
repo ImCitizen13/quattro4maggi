@@ -66,6 +66,11 @@ const demos = [
     href: "/black-hole-text",
     tags: ["skia", "type-gpu"],
   },
+  {
+    name: "Black Hole GPU",
+    href: "/black-hole-gpu",
+    tags: ["type-gpu"],
+  },
 ] satisfies Demo[];
 
 export default function HomeScreen() {
