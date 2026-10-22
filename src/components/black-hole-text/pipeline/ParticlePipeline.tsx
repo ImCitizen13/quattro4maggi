@@ -8,7 +8,8 @@
  *    every layout also writes the cx/cy SharedValues read by physics + disc
  * 2. Driver allocates MAX_PARTICLES once (on the UI runtime) and steps the
  *    first `activeCount.value` of them each frame
- * 3. Renderer (remounted via `key` on count change) draws one Atlas
+ * 3. Renderer draws one Atlas; count changes flow through `activeCount`
+ *    (SharedValue), so the renderer is never remounted
  * 4. Changing count never reseeds: existing particles keep their orbits
  */
 
@@ -32,9 +33,7 @@ const BUFFER_KEY = "black-hole";
 // ============================================================================
 
 export type ParticlePipelineProps = {
-  /** Particles drawn; remounts the renderer only */
-  count: number;
-  /** Same value as `count`, read by the driver on the UI thread */
+  /** Particles drawn, read by the driver and the renderer on the UI thread */
   activeCount: SharedValue<number>;
   source?: PhysicsSource;
   /** Receives the driver's mean step ms SharedValue */
@@ -46,7 +45,6 @@ export type ParticlePipelineProps = {
 // ============================================================================
 
 export function ParticlePipeline({
-  count,
   activeCount,
   source = dummyOrbits,
   stepMs,
@@ -74,7 +72,6 @@ export function ParticlePipeline({
       {size && (
         <PipelineInner
           source={source}
-          count={count}
           activeCount={activeCount}
           size={size}
           cx={cx}
@@ -88,7 +85,6 @@ export function ParticlePipeline({
 
 type PipelineInnerProps = {
   source: PhysicsSource;
-  count: number;
   activeCount: SharedValue<number>;
   size: Bounds;
   cx: SharedValue<number>;
@@ -98,7 +94,6 @@ type PipelineInnerProps = {
 
 function PipelineInner({
   source,
-  count,
   activeCount,
   size,
   cx,
@@ -120,8 +115,7 @@ function PipelineInner({
 
   return (
     <ParticleRenderer
-      key={count}
-      count={count}
+      activeCount={activeCount}
       bufferKey={BUFFER_KEY}
       frame={driver.frame}
       cx={cx}

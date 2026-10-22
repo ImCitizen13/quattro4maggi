@@ -5,8 +5,8 @@
  * physics source is swappable; the render path (Skia Atlas) is fixed.
  *
  * FLOW:
- * 1. Holds the selected particle count (state for the renderer, SharedValue
- *    for the UI-thread driver)
+ * 1. Holds the selected particle count (state for the HUD, SharedValue
+ *    for the UI-thread driver and renderer)
  * 2. ParticlePipeline allocates 100K particles once, steps the active prefix
  *    of the dummy orbit source on the UI thread and draws one Atlas; raising
  *    the count adds particles without reseeding the existing ones
@@ -52,7 +52,6 @@ export function BlackHoleText(_props: BlackHoleTextProps) {
   return (
     <View style={styles.container}>
       <ParticlePipeline
-        count={count}
         activeCount={activeCount}
         source={dummyOrbits}
         stepMs={stepMs}
