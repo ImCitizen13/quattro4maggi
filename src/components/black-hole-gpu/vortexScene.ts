@@ -7,17 +7,23 @@ import { COMPUTE_WGSL, RENDER_WGSL } from "./vortexShaders";
 export type VortexConfig = {
   /** Tile edge in physical px. */
   tile: number;
-  /** Seconds per orbit at `orbitRadius` (sets GM). */
-  orbitPeriod: number;
-  /** Fraction of the canvas' shorter side used to tune GM. */
-  orbitRadius: number;
+  /** When the hole starts growing in, s after Release. */
+  holeT0: number;
+  /** When the radial release wave starts, s after Release. */
+  vortexT0: number;
+  /** Per-tile force ramp after release, s. */
+  ramp: number;
+  /** Inflow speed at `refRadius`, fraction of the shorter side per second. */
+  inflow: number;
+  /** Radius `inflow` is measured at, fraction of the shorter side. */
+  refRadius: number;
   /** Event horizon radius, fraction of the shorter side. */
   horizon: number;
   /** Release wave speed, fraction of the shorter side per second. */
   wave: number;
-  /** Accretion drag (1/s): higher = faster inspiral. */
+  /** Velocity relaxation toward the flow (1/s): lower = more inertia. */
   drag: number;
-  /** Tangential kick on release, fraction of circular speed. */
+  /** Tangential / inflow speed: higher = more winding per turn inward. */
   swirl: number;
 };
 
@@ -26,10 +32,12 @@ export type VortexScene = {
   count: number;
   /** Advance the sim by `dt` seconds and draw one frame. Returns encode ms. */
   frame: (dt: number) => number;
-  /** Re-seed every tile at home and restart the wave. */
+  /** Re-seed every tile at home and restart the timeline. */
   reset: () => void;
   destroy: () => void;
 };
+
+type Spring = { x: number; v: number };
 
 // ============================================================================
 // Constants
@@ -37,19 +45,37 @@ export type VortexScene = {
 
 export const DEFAULT_VORTEX: VortexConfig = {
   tile: 4,
-  orbitPeriod: 2.5,
-  orbitRadius: 0.5,
+  holeT0: 0.6,
+  vortexT0: 1.4,
+  ramp: 0.6,
+  inflow: 0.15,
+  refRadius: 0.5,
   horizon: 0.06,
-  wave: 0.45,
-  drag: 0.35,
-  swirl: 0.8,
+  wave: 0.25,
+  drag: 3,
+  swirl: 1.6,
 };
 
 const H = 1 / 120;
 const MAX_SUBSTEPS = 8;
 const WORKGROUP = 64;
-// Params struct: 3 × vec2f + 14 × f32 = 20 floats (80 B).
-const PARAM_FLOATS = 20;
+// Params struct: 3 × vec2f + 18 × f32 = 24 floats (96 B).
+const PARAM_FLOATS = 24;
+const P = { time: 8, substeps: 10, hole: 18, shatter: 19 } as const;
+
+// Shatter settles fast with no overshoot; the hole overshoots once.
+const SHATTER_SPRING = { k: 140, d: 24 };
+const HOLE_SPRING = { k: 70, d: 9 };
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/** Semi-implicit damped spring toward `target`, stepped by `h`. */
+const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) => {
+  s.v += (k * (target - s.x) - d * s.v) * h;
+  s.x += s.v * h;
+};
 
 // ============================================================================
 // Scene
@@ -57,7 +83,8 @@ const PARAM_FLOATS = 20;
 
 /**
  * Builds the GPU vortex for one snapshot. Everything is allocated here; `frame`
- * only writes the 80 B uniform and encodes compute + render.
+ * steps the timeline springs, writes the 96 B uniform and encodes compute +
+ * render.
  */
 export const createVortexScene = (
   device: GPUDevice,
@@ -74,9 +101,11 @@ export const createVortexScene = (
   const count = cols * rows;
   const groups = Math.ceil(count / WORKGROUP);
 
-  // GM from Kepler: T = 2π √(r³/GM).
-  const rOrbit = short * config.orbitRadius;
-  const gm = (4 * Math.PI ** 2 * rOrbit ** 3) / config.orbitPeriod ** 2;
+  // Inflow speed c/r equals `inflow` at the reference radius. A tile at r0
+  // reaches the center after r0² / 2c.
+  const rRef = short * config.refRadius;
+  const flow = short * config.inflow * rRef;
+  const horizon = short * config.horizon;
 
   const params = new Float32Array(PARAM_FLOATS);
   params.set([
@@ -88,13 +117,17 @@ export const createVortexScene = (
     0, // time
     H,
     0, // substeps
-    gm,
-    config.tile * 2, // eps
+    flow,
+    horizon * 0.5, // eps
     config.drag,
-    short * config.horizon,
+    horizon,
     short * config.wave,
     config.swirl,
     count,
+    0, // hole
+    0, // shatter
+    config.vortexT0,
+    config.ramp,
     0,
     0,
   ]);
@@ -172,12 +205,18 @@ export const createVortexScene = (
 
   let simTime = 0;
   let acc = 0;
+  const shatter: Spring = { x: 0, v: 0 };
+  const hole: Spring = { x: 0, v: 0 };
 
   const reset = () => {
     simTime = 0;
     acc = 0;
-    params[8] = 0;
-    params[10] = 0;
+    shatter.x = shatter.v = 0;
+    hole.x = hole.v = 0;
+    params[P.time] = 0;
+    params[P.substeps] = 0;
+    params[P.hole] = 0;
+    params[P.shatter] = 0;
     device.queue.writeBuffer(paramBuffer, 0, params);
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginComputePass();
@@ -195,9 +234,18 @@ export const createVortexScene = (
     acc += Math.min(dt, 0.25);
     const substeps = Math.min(Math.floor(acc / H), MAX_SUBSTEPS);
     acc = substeps === MAX_SUBSTEPS ? 0 : acc - substeps * H;
-    params[8] = simTime;
-    params[10] = substeps;
+    params[P.time] = simTime;
+    params[P.substeps] = substeps;
+
+    // Timeline springs, stepped with the physics so they share its clock.
+    for (let i = 0; i < substeps; i++) {
+      const t = simTime + (i + 1) * H;
+      stepSpring(shatter, 1, SHATTER_SPRING.k, SHATTER_SPRING.d, H);
+      stepSpring(hole, t >= config.holeT0 ? 1 : 0, HOLE_SPRING.k, HOLE_SPRING.d, H);
+    }
     simTime += substeps * H;
+    params[P.hole] = hole.x;
+    params[P.shatter] = shatter.x;
     device.queue.writeBuffer(paramBuffer, 0, params);
 
     const encoder = device.createCommandEncoder();

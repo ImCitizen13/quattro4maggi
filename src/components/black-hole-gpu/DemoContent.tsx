@@ -6,7 +6,10 @@ import { StyleSheet, Text, View, type ViewProps } from "react-native";
 // Types
 // ============================================================================
 
-export type DemoContentProps = Pick<ViewProps, "onLayout">;
+export type DemoContentProps = Pick<ViewProps, "onLayout"> & {
+  /** Fires once the image has pixels, so a snapshot can include it. */
+  onImageLoad?: () => void;
+};
 
 // ============================================================================
 // Component
@@ -17,7 +20,7 @@ export type DemoContentProps = Pick<ViewProps, "onLayout">;
  * background so the snapshot has no transparent pixels.
  */
 export const DemoContent = forwardRef<View, DemoContentProps>(
-  ({ onLayout }, ref) => (
+  ({ onLayout, onImageLoad }, ref) => (
     <View
       ref={ref}
       collapsable={false}
@@ -44,6 +47,7 @@ export const DemoContent = forwardRef<View, DemoContentProps>(
         source={require("../../../assets/images/demo_bg.jpg")}
         style={styles.image}
         contentFit="cover"
+        onLoad={onImageLoad}
       />
     </View>
   ),

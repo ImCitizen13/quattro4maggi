@@ -3,15 +3,17 @@
  *
  * FLOW:
  *   DemoContent (RN view, collapsable={false})
- *     └─ Release ─► queue.drawElementImageToTexture ─► snapshot texture
- *          └─ createVortexScene: one particle per tile (storage buffer)
- *               └─ per frame (JS rAF): compute `step` (N × h=1/120) ─► render
- *                    bg + hole, then 6 × N instanced tiles sampling the snapshot
- *     └─ Reset ─► stop loop, show the RN view again
+ *     └─ layout + image loaded ─► queue.drawElementImageToTexture ─► snapshot
+ *     └─ Release ─► createVortexScene: one particle per tile (storage buffer)
+ *          └─ per frame (JS rAF): compute `step` (N × h=1/120) ─► render
+ *               bg + hole, then 6 × N instanced tiles sampling the snapshot
+ *          └─ timeline: shatter (0 s) → hole grows in (0.6 s) → vortex (1.4 s)
+ *     └─ Reset ─► stop loop, show the RN view again (snapshot kept)
  *
  * KEY FEATURES:
- * - All GPU: no Skia, no Atlas, no CPU readback; CPU writes an 80 B uniform
- * - Radial release wave, tangential kick, softened gravity + drag, horizon kill
+ * - All GPU: no Skia, no Atlas, no CPU readback; CPU writes a 96 B uniform
+ * - Pre-captured snapshot: Release starts instantly
+ * - Radial wave; per-tile forces (gravity + swirl, drag) ramp in from rest
  * - Tile chips (8/4/2 px) set the particle count
  */
 import { PressableScale } from "pressto";
@@ -54,13 +56,51 @@ export const BlackHoleGpu = () => {
   const scene = useRef<VortexScene | null>(null);
   const raf = useRef<number | null>(null);
   const busy = useRef(false);
+  const imageLoaded = useRef(false);
+  const capturing = useRef<Promise<ViewSnapshot | null> | null>(null);
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
   const [status, setStatus] = useState("idle");
 
+  const pixelSize = () => {
+    const dpr = PixelRatio.get();
+    return {
+      pxW: Math.round(layout.current.width * dpr),
+      pxH: Math.round(layout.current.height * dpr),
+    };
+  };
+
+  // Snapshot ahead of Release (it takes ~0.4 s on the platform UI thread), once
+  // layout, device and the image are all ready. Kept across Reset; retaken
+  // only when the layout size changes.
+  const precapture = () => {
+    const { pxW, pxH } = pixelSize();
+    if (!device || pxW === 0 || !imageLoaded.current) return;
+    if (snapshot.current || capturing.current) return;
+    capturing.current = captureView(device, viewRef, pxW, pxH)
+      .then((snap) => {
+        snapshot.current = snap;
+        return snap;
+      })
+      .catch(() => null)
+      .finally(() => {
+        capturing.current = null;
+      });
+  };
+
+  useEffect(precapture, [device]);
+
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
+    const changed = width !== layout.current.width || height !== layout.current.height;
     layout.current = { width, height };
+    if (changed) dropSnapshot();
+    precapture();
+  };
+
+  const onImageLoad = () => {
+    imageLoaded.current = true;
+    precapture();
   };
 
   const stop = () => {
@@ -90,17 +130,18 @@ export const BlackHoleGpu = () => {
     busy.current = true;
     stop();
 
-    const dpr = PixelRatio.get();
-    const pxW = Math.round(width * dpr);
-    const pxH = Math.round(height * dpr);
+    const { pxW, pxH } = pixelSize();
     const format = navigator.gpu.getPreferredCanvasFormat();
     const canvas = context.canvas as unknown as { width: number; height: number };
     canvas.width = pxW;
     canvas.height = pxH;
     context.configure({ device, format, alphaMode: "premultiplied" });
 
-    // Re-tiling reuses the snapshot: the RN view is hidden by then.
-    const snap = snapshot.current ?? (await captureView(device, viewRef, pxW, pxH));
+    // Normally pre-captured; fall back to an in-flight or fresh capture.
+    const snap =
+      snapshot.current ??
+      (await capturing.current) ??
+      (await captureView(device, viewRef, pxW, pxH));
     snapshot.current = snap;
     const s = createVortexScene(device, context, format, snap.texture, {
       ...DEFAULT_VORTEX,
@@ -143,7 +184,6 @@ export const BlackHoleGpu = () => {
 
   const reset = () => {
     stop();
-    dropSnapshot();
     setShow("rn");
     setStatus("idle");
   };
@@ -157,7 +197,7 @@ export const BlackHoleGpu = () => {
     <View style={styles.container}>
       <View style={styles.stage}>
         <View style={[styles.fill, show === "gpu" && styles.hidden]}>
-          <DemoContent ref={viewRef} onLayout={onLayout} />
+          <DemoContent ref={viewRef} onLayout={onLayout} onImageLoad={onImageLoad} />
         </View>
         <Canvas
           ref={canvasRef}
