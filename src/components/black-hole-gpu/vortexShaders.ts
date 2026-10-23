@@ -1,5 +1,11 @@
+import tgpu from "typegpu";
+import * as d from "typegpu/data";
+import * as std from "typegpu/std";
+import { Particle } from "./gpuTypes";
+import { computeLayout as C, renderLayout as R } from "./layouts";
+
 // ============================================================================
-// Vortex shaders (11c compute, 11d render) — raw WGSL
+// Vortex shaders (11c compute, 11d render) — raw WGSL bodies in TypeGPU shells
 // ============================================================================
 //
 // Units: physical pixels (origin top-left) and seconds.
@@ -9,197 +15,182 @@
 //   shatter 0→1   tiles shrink apart and jitter in place
 //   hole    0→1   horizon + mass grow in at the center
 //   vortexT0 +    radial wave: each tile's forces ramp 0→1 over `ramp` s
+//
+// Bodies are the original WGSL. TypeGPU resolves the `$uses` names: `C.$.u` /
+// `R.$.u` become the bound uniform, `in.x` the entry's builtin or location
+// argument, `Out` the generated output struct. Never put a backtick in a
+// comment here: it ends the template literal. Never write the word "in" in a
+// body comment either: the resolver reads it as an external and warns (a
+// LogBox toast that covers the HUD). For the same reason the one entry with a
+// location input, tileFs, is TGSL.
 
-const COMMON = /* wgsl */ `
-struct Particle {
-  pos: vec2f,
-  vel: vec2f,
-  home: vec2f,
-  release: f32,
-  state: f32,
-}
+// ---- Shared helpers ---------------------------------------------------------
 
-struct Params {
-  res: vec2f,      // canvas size, px
-  center: vec2f,   // hole center, px
-  texSize: vec2f,  // snapshot size, px
-  tile: f32,       // tile edge, px
-  cols: f32,
-  time: f32,       // sim time at the start of this frame, s
-  h: f32,          // fixed step, s
-  substeps: f32,   // steps to run this frame
-  flow: f32,       // sink strength c (px^2/s): inflow speed = c / r
-  eps: f32,        // min radius for the 1/r field, px
-  drag: f32,       // velocity relaxation rate toward the field, 1/s
-  horizon: f32,    // full-size horizon, px
-  wave: f32,       // release wave speed, px/s
-  swirl: f32,      // tangential / inflow speed ratio (spiral pitch)
-  count: f32,
-  hole: f32,       // 0..1 (spring, may overshoot): scales horizon + mass
-  shatter: f32,    // 0..1: tile gap + jitter
-  vortexT0: f32,   // wave start, s
-  ramp: f32,       // per-tile force ramp, s
-  _pad0: f32,
-  _pad1: f32,
-}
-
-fn hash(n: u32) -> f32 {
+const hash = tgpu.fn([d.u32], d.f32)`(n: u32) -> f32 {
   var x = n * 747796405u + 2891336453u;
   x = ((x >> ((x >> 28u) + 4u)) ^ x) * 277803737u;
   x = (x >> 22u) ^ x;
   return f32(x) / 4294967295.0;
-}
+}`.$name("hash");
 
-fn horizonNow() -> f32 {
-  return u.horizon * max(u.hole, 0.0);
-}
-`;
+/** Current horizon radius: full size scaled by the hole spring. */
+const horizonOf = tgpu.fn([d.f32, d.f32], d.f32)`(horizon: f32, hole: f32) -> f32 {
+  return horizon * max(hole, 0.0);
+}`.$name("horizonOf");
 
-export const COMPUTE_WGSL = /* wgsl */ `
-@group(0) @binding(0) var<uniform> u: Params;
-@group(0) @binding(1) var<storage, read_write> ps: array<Particle>;
-${COMMON}
+// ---- Compute ----------------------------------------------------------------
 
-@compute @workgroup_size(64)
-fn init(@builtin(global_invocation_id) id: vec3u) {
-  let i = id.x;
-  if (i >= u32(u.count)) { return; }
-  let cols = u32(u.cols);
-  let home = (vec2f(f32(i % cols), f32(i / cols)) + 0.5) * u.tile;
+export const initFn = tgpu.computeFn({
+  in: { gid: d.builtin.globalInvocationId },
+  workgroupSize: [64],
+})`{
+  let i = in.gid.x;
+  if (i >= u32(C.$.u.count)) { return; }
+  let cols = u32(C.$.u.cols);
+  let home = (vec2f(f32(i % cols), f32(i / cols)) + 0.5) * C.$.u.tile;
   var p: Particle;
   p.pos = home;
   p.vel = vec2f(0.0);
   p.home = home;
   // Radial wave: nearest tiles go first; jitter breaks up the ring edge.
-  p.release = u.vortexT0 + length(home - u.center) / u.wave + hash(i) * 0.35;
+  p.release = C.$.u.vortexT0 + length(home - C.$.u.center) / C.$.u.wave + hash(i) * 0.35;
   p.state = 1.0;
-  ps[i] = p;
-}
+  C.$.ps[i] = p;
+}`
+  .$uses({ C, hash, Particle })
+  .$name("init");
 
-@compute @workgroup_size(64)
-fn step(@builtin(global_invocation_id) id: vec3u) {
-  let i = id.x;
-  if (i >= u32(u.count)) { return; }
-  var p = ps[i];
+export const stepFn = tgpu.computeFn({
+  in: { gid: d.builtin.globalInvocationId },
+  workgroupSize: [64],
+})`{
+  let i = in.gid.x;
+  if (i >= u32(C.$.u.count)) { return; }
+  var p = C.$.ps[i];
   if (p.state == 0.0) { return; }
 
-  let flow = u.flow * max(u.hole, 0.0);
-  let horizon = horizonNow();
-  var t = u.time;
-  let n = u32(u.substeps);
+  let flow = C.$.u.flow * max(C.$.u.hole, 0.0);
+  let horizon = horizonOf(C.$.u.horizon, C.$.u.hole);
+  var t = C.$.u.time;
+  let n = u32(C.$.u.substeps);
   for (var s = 0u; s < n; s++) {
-    t += u.h;
+    t += C.$.u.h;
     if (p.state == 1.0) {
       if (t < p.release) { continue; }
-      p.state = 2.0; // leaves home at rest; forces ramp in below
+      p.state = 2.0; // leaves home at rest; forces ramp up below
     }
-    // Sink + point vortex: v = c/r · (inward + swirl · tangent). Inflow is
+    // Sink + point vortex: v = c/r * (inward + swirl * tangent). Inflow is
     // always positive, so no orbit can balance it (a swirl *force* did: tiles
-    // got trapped in a ring where v_t^2/r = g). Paths are log spirals.
-    // The field fades in, and velocity relaxes toward it at u.drag, so a tile
+    // got trapped on a ring where v_t^2/r = g). Paths are log spirals.
+    // The field fades up, and velocity relaxes toward it at drag, so a tile
     // accelerates from rest instead of snapping.
-    let w = smoothstep(p.release, p.release + u.ramp, t);
-    let d = u.center - p.pos;
-    let r = max(length(d), u.eps);
+    let w = smoothstep(p.release, p.release + C.$.u.ramp, t);
+    let d = C.$.u.center - p.pos;
+    let r = max(length(d), C.$.u.eps);
     let dir = d / r;
     let tangent = vec2f(-dir.y, dir.x); // counter-clockwise
-    let field = (dir + tangent * u.swirl) * (flow / r) * w;
-    // Relax at least 3× the local angular rate |v|/r: near the hole the flow
-    // turns faster than u.drag can follow and tiles pile up in a ring.
-    let rate = max(u.drag, 3.0 * length(field) / r);
-    p.vel += (field - p.vel) * min(rate * u.h, 1.0);
-    p.pos += p.vel * u.h;
-    if (horizon > 0.0 && length(u.center - p.pos) < horizon) {
+    let field = (dir + tangent * C.$.u.swirl) * (flow / r) * w;
+    // Relax at least 3x the local angular rate |v|/r: near the hole the flow
+    // turns faster than drag can follow and tiles pile up on a ring.
+    let rate = max(C.$.u.drag, 3.0 * length(field) / r);
+    p.vel += (field - p.vel) * min(rate * C.$.u.h, 1.0);
+    p.pos += p.vel * C.$.u.h;
+    if (horizon > 0.0 && length(C.$.u.center - p.pos) < horizon) {
       p.state = 0.0;
       break;
     }
   }
-  ps[i] = p;
-}
-`;
-
-export const RENDER_WGSL = /* wgsl */ `
-@group(0) @binding(0) var<uniform> u: Params;
-@group(0) @binding(1) var<storage, read> ps: array<Particle>;
-@group(0) @binding(2) var snap: texture_2d<f32>;
-${COMMON}
-
-fn toNdc(px: vec2f) -> vec4f {
-  return vec4f(px.x / u.res.x * 2.0 - 1.0, 1.0 - px.y / u.res.y * 2.0, 0.0, 1.0);
-}
+  C.$.ps[i] = p;
+}`
+  .$uses({ C, horizonOf })
+  .$name("step");
 
 // ---- Background + hole ------------------------------------------------------
 
-@vertex
-fn bgVs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
-  let uv = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
-  return vec4f(uv * 2.0 - 1.0, 0.0, 1.0);
-}
+export const bgVs = tgpu.vertexFn({
+  in: { i: d.builtin.vertexIndex },
+  out: { pos: d.builtin.position },
+})`{
+  let uv = vec2f(f32((in.i << 1u) & 2u), f32(in.i & 2u));
+  var out: Out;
+  out.pos = vec4f(uv * 2.0 - 1.0, 0.0, 1.0);
+  return out;
+}`.$name("bgVs");
 
-@fragment
-fn bgFs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+export const bgFs = tgpu.fragmentFn({
+  in: { frag: d.builtin.position },
+  out: d.vec4f,
+})`{
   let space = vec3f(0.035, 0.035, 0.045);
-  let horizon = horizonNow();
+  let horizon = horizonOf(R.$.u.horizon, R.$.u.hole);
   if (horizon <= 0.0) { return vec4f(space, 1.0); }
-  let r = length(frag.xy - u.center) / horizon;
-  // Accretion glow peaking just outside the horizon, fading in with the hole.
+  let r = length(in.frag.xy - R.$.u.center) / horizon;
+  // Accretion glow peaking just outside the horizon, fading up with the hole.
   let ring = exp(-pow((r - 1.25) * 2.2, 2.0)) * 0.9 + exp(-r * 0.6) * 0.25;
-  let glow = vec3f(1.0, 0.55, 0.2) * ring * clamp(u.hole, 0.0, 1.0);
+  let glow = vec3f(1.0, 0.55, 0.2) * ring * clamp(R.$.u.hole, 0.0, 1.0);
   let disc = smoothstep(1.0, 1.06, r);
   return vec4f((space + glow) * disc, 1.0);
-}
+}`
+  .$uses({ R, horizonOf })
+  .$name("bgFs");
 
 // ---- Tiles ------------------------------------------------------------------
 
-struct TileOut {
-  @builtin(position) pos: vec4f,
-  @location(0) texel: vec2f,
-}
+const CORNERS = tgpu.const(d.arrayOf(d.vec2f, 6), [
+  d.vec2f(0, 0),
+  d.vec2f(1, 0),
+  d.vec2f(0, 1),
+  d.vec2f(0, 1),
+  d.vec2f(1, 0),
+  d.vec2f(1, 1),
+]);
 
-const CORNERS = array<vec2f, 6>(
-  vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(0.0, 1.0),
-  vec2f(0.0, 1.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0),
-);
-
-const SHATTER_SCALE = 0.85;
-const JITTER = 0.25; // fraction of a tile
-
-@vertex
-fn tileVs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> TileOut {
-  var out: TileOut;
-  let p = ps[ii];
+export const tileVs = tgpu.vertexFn({
+  in: { vi: d.builtin.vertexIndex, ii: d.builtin.instanceIndex },
+  out: { pos: d.builtin.position, texel: d.vec2f },
+})`{
+  var out: Out;
+  let p = R.$.ps[in.ii];
   if (p.state == 0.0) {
     out.pos = vec4f(2.0, 2.0, 0.0, 1.0); // off-clip, zero-area
     out.texel = vec2f(0.0);
     return out;
   }
-  let c = CORNERS[vi];
+  let c = CORNERS[in.vi];
   // Shatter: tiles shrink apart and wobble, a little out of phase.
-  let phase = hash(ii) * 6.2831;
-  let wobble = vec2f(sin(u.time * 9.0 + phase), cos(u.time * 7.0 + phase * 1.3));
-  var local = (c - 0.5) * u.tile * mix(1.0, SHATTER_SCALE, u.shatter);
+  let phase = hash(in.ii) * 6.2831;
+  let wobble = vec2f(sin(R.$.u.time * 9.0 + phase), cos(R.$.u.time * 7.0 + phase * 1.3));
+  var local = (c - 0.5) * R.$.u.tile * mix(1.0, SHATTER_SCALE, R.$.u.shatter);
   // Floor at 6 px so the wobble still reads with 2 px tiles.
-  var center = p.pos + wobble * (max(u.tile, 6.0) * JITTER * u.shatter);
+  var center = p.pos + wobble * (max(R.$.u.tile, 6.0) * JITTER * R.$.u.shatter);
   if (p.state == 2.0) {
     // Settle the wobble, face motion, shrink into the horizon.
-    let k = smoothstep(p.release, p.release + u.ramp, u.time);
+    let k = smoothstep(p.release, p.release + R.$.u.ramp, R.$.u.time);
     center = mix(center, p.pos, k);
     let ang = atan2(p.vel.y, p.vel.x) * k;
     let cs = cos(ang);
     let sn = sin(ang);
-    let horizon = horizonNow();
-    let s = smoothstep(horizon, horizon * 4.0, length(u.center - p.pos));
+    let horizon = horizonOf(R.$.u.horizon, R.$.u.hole);
+    let s = smoothstep(horizon, horizon * 4.0, length(R.$.u.center - p.pos));
     local = vec2f(local.x * cs - local.y * sn, local.x * sn + local.y * cs) * s;
   }
-  out.pos = toNdc(center + local);
-  out.texel = p.home + (c - 0.5) * u.tile;
+  let px = center + local;
+  out.pos = vec4f(px.x / R.$.u.res.x * 2.0 - 1.0, 1.0 - px.y / R.$.u.res.y * 2.0, 0.0, 1.0);
+  out.texel = p.home + (c - 0.5) * R.$.u.tile;
   return out;
-}
+}`
+  .$uses({ R, hash, horizonOf, CORNERS, SHATTER_SCALE: 0.85, JITTER: 0.25 })
+  .$name("tileVs");
 
-@fragment
-fn tileFs(in: TileOut) -> @location(0) vec4f {
-  let dims = vec2i(textureDimensions(snap));
-  let xy = clamp(vec2i(floor(in.texel)), vec2i(0), dims - 1);
-  return textureLoad(snap, xy, 0);
-}
-`;
+// TGSL shell form (no "use gpu"): a raw body would have to read the location
+// input as a struct field of "in", which the resolver warns about.
+export const tileFs = tgpu
+  .fragmentFn({
+    in: { texel: d.vec2f },
+    out: d.vec4f,
+  })(({ texel }) => {
+    const dims = d.vec2i(std.textureDimensions(R.$.snap));
+    const xy = std.clamp(d.vec2i(std.floor(texel)), d.vec2i(0), std.sub(dims, d.vec2i(1)));
+    return std.textureLoad(R.$.snap, xy, 0);
+  })
+  .$name("tileFs");
