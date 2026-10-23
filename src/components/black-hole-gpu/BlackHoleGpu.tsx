@@ -20,6 +20,7 @@
  * - Snapshot and scene share one device (useDevice makes a new one per call)
  * - Render loop on the UI runtime (120 Hz), JS rAF switchable from the HUD
  * - FpsOverlay: ui row + js-raf gpu row
+ * - Speed slider 0.25×–4× (SharedValue, live, no rebuild)
  */
 import { PressableScale } from "pressto";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -29,8 +30,10 @@ import {
   PixelRatio,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 import { Canvas, useDevice } from "react-native-webgpu";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
@@ -39,9 +42,16 @@ import {
   type RenderMode,
   useWebGPUOnDevice,
 } from "../gargantua-type-gpu/hooks/useWebGPU";
+import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 import { DemoContent } from "./DemoContent";
 import { captureView, type ViewSnapshot } from "./snapshot";
-import { createVortexScene, DEFAULT_VORTEX, type VortexStats } from "./vortexScene";
+import {
+  createVortexScene,
+  DEFAULT_VORTEX,
+  SPEED_MAX,
+  SPEED_MIN,
+  type VortexStats,
+} from "./vortexScene";
 
 // ============================================================================
 // Types
@@ -77,6 +87,8 @@ const formatStats = ({ count, encodeMs }: VortexStats) =>
 export const BlackHoleGpu = () => {
   const { device } = useDevice();
   const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
+  const speed = useSharedValue(1);
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
   const snapshot = useRef<ViewSnapshot | null>(null);
@@ -97,6 +109,7 @@ export const BlackHoleGpu = () => {
       createVortexScene({
         snapshot: run.snapshot.texture,
         config: { ...DEFAULT_VORTEX, tile: run.tile },
+        speed,
         onReady: () => {
           setShow("gpu");
           busy.current = false;
@@ -252,6 +265,14 @@ export const BlackHoleGpu = () => {
             </Text>
           </PressableScale>
         </View>
+        <TuningSlider
+          label="Speed ×"
+          value={speed}
+          min={SPEED_MIN}
+          max={SPEED_MAX}
+          decimals={2}
+          width={winW - 32}
+        />
         <View style={styles.row}>
           {TILE_SIZES.map((size) => (
             <PressableScale

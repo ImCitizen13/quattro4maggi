@@ -1,6 +1,7 @@
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
 import { scheduleOnRN } from "react-native-worklets";
+import type { SharedValue } from "react-native-reanimated";
 import type {
   SceneProps,
   SceneResult,
@@ -50,6 +51,8 @@ export type VortexSceneOptions = {
   /** View snapshot, created on the same device the scene renders on. */
   snapshot: GPUTexture;
   config?: VortexConfig;
+  /** Sim speed multiplier, read every frame (clamped to SPEED_MIN..SPEED_MAX). */
+  speed: SharedValue<number>;
   /** Called after setup has drawn and presented the first frame (all tiles at home). */
   onReady?: () => void;
   /** Called every `STATS_EVERY` frames on the JS thread (via scheduleOnRN). */
@@ -76,7 +79,10 @@ export const DEFAULT_VORTEX: VortexConfig = {
 };
 
 const H = 1 / 120;
+/** Cap at 1x speed; scaled up with the speed multiplier in `frame`. */
 const MAX_SUBSTEPS = 8;
+export const SPEED_MIN = 0.25;
+export const SPEED_MAX = 4;
 const WORKGROUP = 64;
 const STATS_EVERY = 30;
 
@@ -117,9 +123,18 @@ const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) 
  * The render loop may run on the UI runtime (ui-worklet mode), so `render` is a
  * worklet and everything it captures is TypeGPU resources, native GPU objects
  * and plain numbers/objects.
+ *
+ * `speed` is a SharedValue read once per frame: changing it never rebuilds
+ * the scene.
  */
 export const createVortexScene =
-  ({ snapshot, config = DEFAULT_VORTEX, onReady, onStats }: VortexSceneOptions) =>
+  ({
+    snapshot,
+    config = DEFAULT_VORTEX,
+    speed,
+    onReady,
+    onStats,
+  }: VortexSceneOptions) =>
   ({ device, context, presentationFormat }: SceneProps): SceneResult => {
     const root = tgpu.initFromDevice({ device });
 
@@ -203,14 +218,17 @@ export const createVortexScene =
     let statsStart = 0;
 
     /** Advance the sim by `dt` seconds and encode one frame. Returns encode ms. */
-    const frame = (dt: number) => {
+    const frame = (dt: number, timeScale: number) => {
       "worklet";
       const t0 = performance.now();
       // Fixed-step accumulator: equal work per simulated second, clamped so a
-      // stall never spirals.
-      acc += Math.min(dt, 0.25);
-      const substeps = Math.min(Math.floor(acc / H), MAX_SUBSTEPS);
-      acc = substeps === MAX_SUBSTEPS ? 0 : acc - substeps * H;
+      // stall never spirals. Speed scales sim time per real second; the
+      // substep cap scales with it so 4x doesn't fall behind. Springs run on
+      // sim time, so the whole timeline speeds up together.
+      acc += Math.min(dt, 0.25) * timeScale;
+      const maxSub = Math.ceil(MAX_SUBSTEPS * Math.max(1, timeScale));
+      const substeps = Math.min(Math.floor(acc / H), maxSub);
+      acc = substeps === maxSub ? 0 : acc - substeps * H;
       const time = simTime;
 
       // Timeline springs, stepped with the physics so they share its clock.
@@ -255,7 +273,7 @@ export const createVortexScene =
 
     // First frame (dt = 0) shows every tile at home; only then may the RN
     // view hide.
-    frame(0);
+    frame(0, 1);
     // SceneProps types the context as the web GPUCanvasContext; on RN it is
     // react-native-webgpu's context, which adds `present()`.
     (context as GPUCanvasContext & { present: () => void }).present();
@@ -268,7 +286,9 @@ export const createVortexScene =
         "worklet";
         const dt = last === 0 ? 0 : (timestamp - last) / 1000;
         last = timestamp;
-        encodeMs += frame(dt);
+        // Clamp in the worklet, before the sim sees the value.
+        const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
+        encodeMs += frame(dt, timeScale);
         frames += 1;
         if (statsStart === 0) statsStart = timestamp;
         if (frames === STATS_EVERY) {
