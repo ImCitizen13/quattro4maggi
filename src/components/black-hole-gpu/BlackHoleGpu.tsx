@@ -3,8 +3,8 @@
  *
  * FLOW:
  *   DemoContent (RN view, collapsable={false})
- *     └─ layout + image loaded ─► queue.drawElementImageToTexture ─► snapshot
- *     └─ Release ─► `run` state ─► useWebGPUOnDevice builds createVortexScene
+ *     └─ Release ─► 120 ms ─► drawElementImageToTexture ─► snapshot ─► run
+ *          └─ `run` state ─► useWebGPUOnDevice builds createVortexScene
  *          (TypeGPU root: one particle per tile, storage buffer)
  *          └─ setup presents frame 0 (tiles at home) ─► onReady hides the RN view
  *          └─ per frame (ui-worklet): compute `step` (N × h=1/120) ─► render
@@ -14,7 +14,8 @@
  *
  * KEY FEATURES:
  * - All GPU: no Skia, no Atlas, no CPU readback; CPU writes a 96 B uniform
- * - Pre-captured snapshot: Release starts instantly
+ * - Snapshot captured on Release (after a short delay), nothing on mount — no navigation stall
+ * - Sticky toggle (chip)
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
  * - Sticky patches (value noise + per-tile jitter) release late, new pattern per run
  * - Tile chips (8/4/2 px) set the particle count
@@ -60,6 +61,8 @@ export type ShowMode = "rn" | "gpu";
 export type VortexRun = {
   id: number;
   tile: number;
+  /** Sticky patches on. */
+  sticky: boolean;
   snapshot: ViewSnapshot;
   /** Stickiness seed, new each run. */
   seed: number;
@@ -70,6 +73,10 @@ export type VortexRun = {
 // ============================================================================
 
 const TILE_SIZES = [8, 4, 2] as const;
+
+// Pause between the Release press and the capture: drawElementImageToTexture
+// blocks the platform UI thread ~0.4 s, so let the press animation settle first.
+const RELEASE_DELAY_MS = 120;
 
 // UI-thread loop only for now (user decision 2026-10-23). The hook still
 // supports "js-raf" (gargantua uses it); restore a toggle here if needed.
@@ -98,15 +105,13 @@ export const BlackHoleGpu = () => {
   const speed = useSharedValue(1);
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
-  const snapshot = useRef<ViewSnapshot | null>(null);
-  const staleSnapshot = useRef<GPUTexture | null>(null);
   const busy = useRef(false);
   const imageLoaded = useRef(false);
-  const capturing = useRef<Promise<ViewSnapshot | null> | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [run, setRun] = useState<VortexRun | null>(null);
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
+  const [sticky, setSticky] = useState(true);
   const [status, setStatus] = useState("idle");
 
   const scene = useMemo(
@@ -114,7 +119,11 @@ export const BlackHoleGpu = () => {
       run &&
       createVortexScene({
         snapshot: run.snapshot.texture,
-        config: { ...DEFAULT_VORTEX, tile: run.tile },
+        config: {
+          ...DEFAULT_VORTEX,
+          tile: run.tile,
+          sticky: run.sticky ? DEFAULT_VORTEX.sticky : 0,
+        },
         seed: run.seed,
         speed,
         onReady: () => {
@@ -137,106 +146,106 @@ export const BlackHoleGpu = () => {
     };
   };
 
-  // Snapshot ahead of Release (it takes ~0.4 s on the platform UI thread), once
-  // layout, device and the image are all ready. Kept across Reset; retaken
-  // only when the layout size changes.
-  const precapture = () => {
-    const { pxW, pxH } = pixelSize();
-    if (!device || pxW === 0 || !imageLoaded.current) return;
-    if (snapshot.current || capturing.current) return;
-    // Race: layout can settle (e.g. the nav header) while this ~0.4 s capture
-    // is in flight. onLayout drops the snapshot, but its re-precapture bails
-    // because we are still capturing. So on resolve, discard a snapshot taken at
-    // an outdated size and re-run precapture. A failed capture must not retry.
-    let stale = false;
-    capturing.current = captureView(device, viewRef, pxW, pxH)
-      .then((snap) => {
-        const now = pixelSize();
-        if (snap && (now.pxW !== pxW || now.pxH !== pxH)) {
-          snap.texture.destroy();
-          stale = true;
-          return null;
-        }
-        snapshot.current = snap;
-        return snap;
-      })
-      .catch(() => null)
-      .finally(() => {
-        capturing.current = null;
-        if (stale) precapture();
-      });
-  };
+  // Snapshot ownership. `live` is the running scene's texture; reset or a run
+  // on a new snapshot moves it to `retired`. React runs every passive cleanup
+  // (the hook's included, which cancels the loop) before any setup, so the
+  // scene is gone when this effect destroys the retired textures.
+  const live = useRef<GPUTexture | null>(null);
+  const retired = useRef<GPUTexture[]>([]);
+  // Bumped by reset and unmount: an in-flight capture checks it and bails.
+  const epoch = useRef(0);
+  useEffect(() => {
+    retired.current.forEach((t) => t.destroy());
+    retired.current = [];
+  }, [run]);
+  useEffect(
+    () => () => {
+      epoch.current += 1;
+      live.current?.destroy();
+      retired.current.forEach((t) => t.destroy());
+    },
+    [],
+  );
 
-  useEffect(precapture, [device]);
+  const retire = () => {
+    if (live.current) retired.current.push(live.current);
+    live.current = null;
+  };
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     const changed = width !== layout.current.width || height !== layout.current.height;
     layout.current = { width, height };
     if (changed) {
-      if (run) {
-        // The running scene still draws the old texture: defer its destroy
-        // until the scene is gone.
-        staleSnapshot.current = snapshot.current?.texture ?? null;
-        snapshot.current = null;
-        reset();
-      } else {
-        dropSnapshot();
-      }
+      // reset retires the texture; the effect above destroys it.
+      if (run) reset();
       setSize({ width, height });
     }
-    precapture();
   };
 
   const onImageLoad = () => {
     imageLoaded.current = true;
-    precapture();
   };
 
-  const dropSnapshot = () => {
-    snapshot.current?.texture.destroy();
-    snapshot.current = null;
-  };
-
-  // React runs every passive cleanup before any setup, so the hook's cleanup
-  // has already cancelled the loop (both modes cancel synchronously) when this
-  // destroys the texture.
-  useEffect(() => {
-    if (run === null && staleSnapshot.current) {
-      staleSnapshot.current.destroy();
-      staleSnapshot.current = null;
+  const startRun = (snapshot: ViewSnapshot, tileSize: number, stickyOn: boolean) => {
+    if (live.current !== snapshot.texture) {
+      retire();
+      live.current = snapshot.texture;
     }
-  }, [run]);
-
-  // Unmount only: free the snapshots (the hook frees the scene).
-  const teardown = useRef(() => {});
-  teardown.current = () => {
-    dropSnapshot();
-    staleSnapshot.current?.destroy();
-    staleSnapshot.current = null;
-  };
-  useEffect(() => () => teardown.current(), []);
-
-  const release = async (tileSize: number) => {
-    const { width, height } = layout.current;
-    if (!device || width === 0 || height === 0 || busy.current) return;
-    busy.current = true;
-    const { pxW, pxH } = pixelSize();
-    // Normally pre-captured; fall back to an in-flight or fresh capture.
-    const snap =
-      snapshot.current ??
-      (await capturing.current) ??
-      (await captureView(device, viewRef, pxW, pxH));
-    snapshot.current = snap;
     setRun((prev) => ({
       id: (prev?.id ?? 0) + 1,
       tile: tileSize,
-      snapshot: snap,
+      sticky: stickyOn,
+      snapshot,
       seed: Math.floor(Math.random() * 1e6),
     }));
   };
 
+  // Rebuild the running scene with new options, reusing its snapshot (the RN
+  // view is hidden while a scene runs, so a recapture would be blank).
+  const restart = (opts: { tile: number; sticky: boolean }) => {
+    if (!run || busy.current) return;
+    busy.current = true;
+    startRun(run.snapshot, opts.tile, opts.sticky);
+  };
+
+  // Fresh capture on every press. busy is cleared by onReady, or here on failure.
+  const release = async () => {
+    const { width, height } = layout.current;
+    if (!device || width === 0 || height === 0 || !imageLoaded.current || busy.current) {
+      return;
+    }
+    if (run) {
+      restart({ tile, sticky });
+      return;
+    }
+    busy.current = true;
+    const myEpoch = epoch.current;
+    await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));
+    // Reset or unmount during the delay (reset already cleared busy).
+    if (epoch.current !== myEpoch) return;
+    const { pxW, pxH } = pixelSize();
+    let snap: ViewSnapshot;
+    try {
+      snap = await captureView(device, viewRef, pxW, pxH);
+    } catch {
+      busy.current = false;
+      return;
+    }
+    // Reset/unmount during the capture, or the layout changed (wrong size).
+    const now = pixelSize();
+    if (epoch.current !== myEpoch || now.pxW !== pxW || now.pxH !== pxH) {
+      snap.texture.destroy();
+      if (epoch.current === myEpoch) busy.current = false;
+      return;
+    }
+    startRun(snap, tile, sticky);
+  };
+
   const reset = () => {
+    epoch.current += 1;
+    retire();
+    busy.current = false;
     setRun(null);
     setShow("rn");
     setStatus("idle");
@@ -244,7 +253,13 @@ export const BlackHoleGpu = () => {
 
   const pickTile = (size: number) => {
     setTile(size);
-    if (run) release(size);
+    if (run) restart({ tile: size, sticky });
+  };
+
+  const toggleSticky = () => {
+    const next = !sticky;
+    setSticky(next);
+    if (run) restart({ tile, sticky: next });
   };
 
   return (
@@ -280,9 +295,15 @@ export const BlackHoleGpu = () => {
               <Text style={styles.label}>{size} px</Text>
             </PressableScale>
           ))}
+          <PressableScale
+            style={[styles.chip, sticky && styles.chipActive]}
+            onPress={toggleSticky}
+          >
+            <Text style={styles.label}>Sticky</Text>
+          </PressableScale>
         </View>
         <View style={styles.row}>
-          <PressableScale style={styles.button} onPress={() => release(tile)}>
+          <PressableScale style={styles.button} onPress={release}>
             <Text style={styles.label}>Release</Text>
           </PressableScale>
           <PressableScale style={styles.button} onPress={reset}>

@@ -49,8 +49,10 @@ const cellHash = tgpu.fn([d.vec2f, d.u32], d.f32)`(c: vec2f, s: u32) -> f32 {
 /**
  * Stickiness 0..1: coherent value-noise patches on the home position plus a
  * little per-tile jitter. Sticky tiles release later and ramp up slower.
+ * Returns 0 when sticky is off (sticky <= 0).
  */
-const stickOf = tgpu.fn([d.vec2f, d.u32, d.f32, d.f32], d.f32)`(home: vec2f, i: u32, seed: f32, patchPx: f32) -> f32 {
+const stickOf = tgpu.fn([d.vec2f, d.u32, d.f32, d.f32, d.f32], d.f32)`(home: vec2f, i: u32, seed: f32, patchPx: f32, sticky: f32) -> f32 {
+  if (sticky <= 0.0) { return 0.0; }
   let g = home / patchPx;
   let c = floor(g);
   let f = g - c;
@@ -83,7 +85,7 @@ export const initFn = tgpu.computeFn({
   p.vel = vec2f(0.0);
   p.home = home;
   // Radial wave: nearest tiles go first; jitter breaks up the ring edge.
-  let k = stickOf(home, i, C.$.u.seed, C.$.u.patchPx);
+  let k = stickOf(home, i, C.$.u.seed, C.$.u.patchPx, C.$.u.sticky);
   p.release = C.$.u.vortexT0 + length(home - C.$.u.center) / C.$.u.wave + hash(i) * 0.35 + k * C.$.u.sticky;
   p.state = 1.0;
   C.$.ps[i] = p;
@@ -105,7 +107,7 @@ export const stepFn = tgpu.computeFn({
   var t = C.$.u.time;
   let n = u32(C.$.u.substeps);
   // Sticky tiles ramp up slower: they lag, resist, then let go.
-  let k = stickOf(p.home, i, C.$.u.seed, C.$.u.patchPx);
+  let k = stickOf(p.home, i, C.$.u.seed, C.$.u.patchPx, C.$.u.sticky);
   let rampK = C.$.u.ramp * (1.0 + 2.0 * k);
   for (var s = 0u; s < n; s++) {
     t += C.$.u.h;
@@ -195,7 +197,7 @@ export const tileVs = tgpu.vertexFn({
   let center = p.pos;
   if (p.state == 2.0) {
     // Face motion, shrink into the horizon.
-    let rampK = R.$.u.ramp * (1.0 + 2.0 * stickOf(p.home, in.ii, R.$.u.seed, R.$.u.patchPx));
+    let rampK = R.$.u.ramp * (1.0 + 2.0 * stickOf(p.home, in.ii, R.$.u.seed, R.$.u.patchPx, R.$.u.sticky));
     let k = smoothstep(p.release, p.release + rampK, R.$.u.time);
     let ang = atan2(p.vel.y, p.vel.x) * k;
     let cs = cos(ang);
