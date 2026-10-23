@@ -7,7 +7,7 @@
  *     └─ Release ─► `run` state ─► useWebGPUOnDevice builds createVortexScene
  *          (TypeGPU root: one particle per tile, storage buffer)
  *          └─ setup presents frame 0 (tiles at home) ─► onReady hides the RN view
- *          └─ per frame (js-raf | ui-worklet): compute `step` (N × h=1/120) ─► render
+ *          └─ per frame (ui-worklet): compute `step` (N × h=1/120) ─► render
  *               bg + hole, then 6 × N instanced tiles sampling the snapshot
  *          └─ timeline: shatter (0 s) → hole grows in (0.6 s) → vortex (1.4 s)
  *     └─ Reset ─► run = null (hook tears the scene down), show the RN view
@@ -18,8 +18,8 @@
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
  * - Tile chips (8/4/2 px) set the particle count
  * - Snapshot and scene share one device (useDevice makes a new one per call)
- * - Render loop on the UI runtime (120 Hz), JS rAF switchable from the HUD
- * - FpsOverlay: ui row + js-raf gpu row
+ * - Render loop on the UI runtime (120 Hz)
+ * - FpsOverlay ui row
  * - Speed slider 0.25×–4× (SharedValue, live, no rebuild)
  */
 import { PressableScale } from "pressto";
@@ -37,11 +37,7 @@ import { useSharedValue } from "react-native-reanimated";
 import { Canvas, useDevice } from "react-native-webgpu";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
-import { useFrameSampler } from "@/components/common/frameSampler";
-import {
-  type RenderMode,
-  useWebGPUOnDevice,
-} from "../gargantua-type-gpu/hooks/useWebGPU";
+import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
 import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 import { DemoContent } from "./DemoContent";
 import { captureView, type ViewSnapshot } from "./snapshot";
@@ -67,6 +63,10 @@ export type VortexRun = { id: number; tile: number; snapshot: ViewSnapshot };
 // ============================================================================
 
 const TILE_SIZES = [8, 4, 2] as const;
+
+// UI-thread loop only for now (user decision 2026-10-23). The hook still
+// supports "js-raf" (gargantua uses it); restore a toggle here if needed.
+const RENDER_MODE = "ui-worklet" as const;
 
 // TypeGPU logs this once per process on the first UI-runtime transfer (no
 // WeakRef in worklet runtimes → strong identity cache). Harmless, but its
@@ -101,7 +101,6 @@ export const BlackHoleGpu = () => {
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
   const [status, setStatus] = useState("idle");
-  const [mode, setMode] = useState<RenderMode>("ui-worklet");
 
   const scene = useMemo(
     () =>
@@ -118,13 +117,8 @@ export const BlackHoleGpu = () => {
       }),
     [run],
   );
-  // The overlay's `ui` row reads the UI-thread display link; the `gpu` row is
-  // ticked by the js-raf loop. In ui-worklet both would measure the same clock,
-  // so the `gpu` row is dropped there.
-  const gpuSampler = useFrameSampler("gpu");
   const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, {
-    mode,
-    sampler: gpuSampler,
+    mode: RENDER_MODE,
   });
 
   const pixelSize = () => {
@@ -251,20 +245,10 @@ export const BlackHoleGpu = () => {
           style={[styles.overlay, show === "rn" && styles.hidden]}
           pointerEvents="none"
         />
-        <FpsOverlay dark sources={mode === "js-raf" ? [gpuSampler] : []} />
+        <FpsOverlay dark />
       </View>
       <View style={[styles.hud, { paddingBottom: 16 + insets.bottom }]}>
-        <View style={styles.statusRow}>
-          <Text style={styles.status}>{status}</Text>
-          <PressableScale
-            style={styles.pill}
-            onPress={() => setMode((m) => (m === "js-raf" ? "ui-worklet" : "js-raf"))}
-          >
-            <Text style={styles.pillLabel}>
-              {mode === "ui-worklet" ? "UI thread" : "JS rAF"}
-            </Text>
-          </PressableScale>
-        </View>
+        <Text style={styles.status}>{status}</Text>
         <TuningSlider
           label="Speed ×"
           value={speed}
@@ -308,21 +292,12 @@ const styles = StyleSheet.create({
   overlay: StyleSheet.absoluteFill,
   hidden: { opacity: 0 },
   hud: { padding: 16, gap: 12 },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   status: {
-    flex: 1,
     color: "#fff",
     opacity: 0.7,
     fontSize: 12,
     fontVariant: ["tabular-nums"],
   },
-  pill: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: "#2a2a2a",
-  },
-  pillLabel: { color: "#fff", fontSize: 12, fontWeight: "600" },
   row: { flexDirection: "row", gap: 12 },
   chip: {
     flex: 1,
