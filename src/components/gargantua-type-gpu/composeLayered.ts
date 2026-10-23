@@ -21,6 +21,13 @@ import * as std from "typegpu/std";
  * color attachment (view + loadOp) and an optional backdrop texture view from
  * the composer, instead of grabbing the swapchain themselves. This is the
  * one source of truth for "where to render this frame, and from what to read."
+ *
+ * Frame veto: a layer's `render` may return exactly `false` to say "nothing
+ * was drawn". The composer then stops: the remaining layers and the blit are
+ * skipped and the composed `render` returns `false`, so `useWebGPU` skips
+ * `present()`. Any other return (`undefined`, `true`) means "drawn", so layers
+ * that return nothing keep working unchanged. Meant for the base layer (an
+ * idle standby scene); a later layer vetoing would leave earlier work unshown.
  */
 
 /**
@@ -55,7 +62,7 @@ export type LayerRender = (
   timestamp: number,
   attachment: LayerAttachment,
   backdrop: GPUTextureView | null,
-) => void;
+) => void | boolean;
 
 export interface LayerSceneResult {
   render: LayerRender;
@@ -68,7 +75,7 @@ export interface LayerSceneResult {
  * `render(timestamp)` matching the hook's contract.
  */
 export interface ComposedSceneResult {
-  render: (timestamp: number) => void;
+  render: (timestamp: number) => void | boolean;
   cleanup?: () => void | Promise<void>;
   resize?: (canvasWidth: number, canvasHeight: number) => void;
 }
@@ -199,8 +206,14 @@ export function composeLayered(layers: Layer[]) {
           "worklet";
           for (let i = 0; i < renders.length; i++) {
             const view = context.getCurrentTexture().createView();
-            renders[i](t, { view, loadOp: i === 0 ? "clear" : "load" }, null);
+            const drawn = renders[i](
+              t,
+              { view, loadOp: i === 0 ? "clear" : "load" },
+              null,
+            );
+            if (drawn === false) return false;
           }
+          return true;
         },
         cleanup: async () => {
           for (const r of initialized) await r.cleanup?.();
@@ -280,7 +293,9 @@ export function composeLayered(layers: Layer[]) {
             const backdrop = current === 0 ? viewA! : viewB!;
             // Reader passes always clear their destination — the layer's
             // shader is responsible for compositing the backdrop in.
-            child(t, { view: targetView, loadOp: "clear" }, backdrop);
+            if (child(t, { view: targetView, loadOp: "clear" }, backdrop) === false) {
+              return false;
+            }
             written[next] = true;
             current = next;
           } else {
@@ -288,7 +303,9 @@ export function composeLayered(layers: Layer[]) {
             // target this frame clears; subsequent writes load.
             const targetView = current === 0 ? viewA! : viewB!;
             const loadOp = written[current] ? "load" : "clear";
-            child(t, { view: targetView, loadOp }, null);
+            if (child(t, { view: targetView, loadOp }, null) === false) {
+              return false;
+            }
             written[current] = true;
           }
         }
@@ -308,6 +325,7 @@ export function composeLayered(layers: Layer[]) {
           })
           .with(bg)
           .draw(6);
+        return true;
       },
       cleanup: async () => {
         for (const r of initialized) await r.cleanup?.();

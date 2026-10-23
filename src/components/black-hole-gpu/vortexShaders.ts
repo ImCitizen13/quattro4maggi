@@ -17,6 +17,11 @@ import { computeLayout as C, renderLayout as R } from "./layouts";
 //   sticky patches (value noise on home) release up to `sticky` s late and
 //   ramp up to 3x slower
 //
+// The tile pass draws only tiles over a cleared space color. The hole, its
+// glow and the lensing are drawn afterwards by the lens layer (lensShaders),
+// which reads the tile pass as its backdrop and reuses fullscreenVs and
+// horizonOf from here.
+//
 // Bodies are the original WGSL. TypeGPU resolves the `$uses` names: `C.$.u` /
 // `R.$.u` become the bound uniform, `in.x` the entry's builtin or location
 // argument, `Out` the generated output struct. Never put a backtick in a
@@ -35,7 +40,7 @@ const hash = tgpu.fn([d.u32], d.f32)`(n: u32) -> f32 {
 }`.$name("hash");
 
 /** Current horizon radius: full size scaled by the hole spring. */
-const horizonOf = tgpu.fn([d.f32, d.f32], d.f32)`(horizon: f32, hole: f32) -> f32 {
+export const horizonOf =tgpu.fn([d.f32, d.f32], d.f32)`(horizon: f32, hole: f32) -> f32 {
   return horizon * max(hole, 0.0);
 }`.$name("horizonOf");
 
@@ -141,9 +146,10 @@ export const stepFn = tgpu.computeFn({
   .$uses({ C, horizonOf, stickOf })
   .$name("step");
 
-// ---- Background + hole ------------------------------------------------------
+// ---- Fullscreen vertex ------------------------------------------------------
 
-export const bgVs = tgpu.vertexFn({
+/** Fullscreen triangle from the vertex index (draw 3). Used by the lens pass. */
+export const fullscreenVs = tgpu.vertexFn({
   in: { i: d.builtin.vertexIndex },
   out: { pos: d.builtin.position },
 })`{
@@ -151,24 +157,7 @@ export const bgVs = tgpu.vertexFn({
   var out: Out;
   out.pos = vec4f(uv * 2.0 - 1.0, 0.0, 1.0);
   return out;
-}`.$name("bgVs");
-
-export const bgFs = tgpu.fragmentFn({
-  in: { frag: d.builtin.position },
-  out: d.vec4f,
-})`{
-  let space = vec3f(0.035, 0.035, 0.045);
-  let horizon = horizonOf(R.$.u.horizon, R.$.u.hole);
-  if (horizon <= 0.0) { return vec4f(space, 1.0); }
-  let r = length(in.frag.xy - R.$.u.center) / horizon;
-  // Accretion glow peaking just outside the horizon, fading up with the hole.
-  let ring = exp(-pow((r - 1.25) * 2.2, 2.0)) * 0.9 + exp(-r * 0.6) * 0.25;
-  let glow = vec3f(1.0, 0.55, 0.2) * ring * clamp(R.$.u.hole, 0.0, 1.0);
-  let disc = smoothstep(1.0, 1.06, r);
-  return vec4f((space + glow) * disc, 1.0);
-}`
-  .$uses({ R, horizonOf })
-  .$name("bgFs");
+}`.$name("fullscreenVs");
 
 // ---- Tiles ------------------------------------------------------------------
 

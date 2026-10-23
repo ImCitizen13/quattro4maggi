@@ -8,8 +8,10 @@
  *     └─ Release ─► 120 ms ─► drawElementImageToTexture INTO the scene's texture
  *          └─ `phase` SharedValue flips ─► the UI loop starts the run (sim reset,
  *             particles seeded at home, frame 0) ─► onStarted hides the RN view
- *          └─ per frame (ui-worklet): compute `step` (N × h=1/120) ─► render
- *               bg + hole, then 6 × N instanced tiles sampling the snapshot
+ *          └─ per frame (ui-worklet, composeLayered): vortex layer = compute
+ *               `step` (N × h=1/120) ─► 6 × N instanced tiles sampling the
+ *               snapshot over space ─► lens layer (reads that as its backdrop):
+ *               gravitational lensing + glow + black disc ─► blit to the swapchain
  *          └─ timeline: hole grows in (0 s) → release wave (0.6 s)
  *     └─ Reset ─► phase = 0 (one transparent frame, then no present), show the RN view
  *
@@ -45,7 +47,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
 import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
+import { composeLayered } from "../gargantua-type-gpu/composeLayered";
 import { DemoContent } from "./DemoContent";
+import { createLensScene, type LensShared } from "./lensScene";
 import { captureInto, createSnapshotTexture } from "./snapshot";
 import {
   createVortexScene,
@@ -165,22 +169,29 @@ export const BlackHoleGpu = () => {
     busy.current = false;
   };
 
-  const scene = useMemo(
-    () =>
-      snapTex &&
-      createVortexScene({
-        snapshot: snapTex,
-        config: { ...DEFAULT_VORTEX, tile },
-        speed,
-        phase,
-        seed: seedSv,
-        sticky: stickySv,
-        onStarted,
-        onStats: (s: VortexStats) => setStatus(formatStats(s)),
-      }),
+  // Two layers: the vortex (tiles over space) then the lens, which reads it as
+  // its backdrop. `shared` is the vortex-to-lens handoff, fresh per scene.
+  const scene = useMemo(() => {
+    if (!snapTex) return null;
+    const shared: LensShared = {};
+    return composeLayered([
+      {
+        scene: createVortexScene({
+          snapshot: snapTex,
+          config: { ...DEFAULT_VORTEX, tile },
+          speed,
+          phase,
+          seed: seedSv,
+          sticky: stickySv,
+          shared,
+          onStarted,
+          onStats: (s: VortexStats) => setStatus(formatStats(s)),
+        }),
+      },
+      { scene: createLensScene(shared), readsBackdrop: true },
+    ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapTex, tile],
-  );
+  }, [snapTex, tile]);
   const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, {
     mode: RENDER_MODE,
   });

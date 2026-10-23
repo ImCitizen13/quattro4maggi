@@ -17,7 +17,7 @@ export const computeLayout = tgpu
   })
   .$name("computeLayout");
 
-/** Render (bg + tiles): uniform + read-only particles + the view snapshot. */
+/** Render (tiles): uniform + read-only particles + the view snapshot. */
 export const renderLayout = tgpu
   .bindGroupLayout({
     u: { uniform: Params },
@@ -25,3 +25,12 @@ export const renderLayout = tgpu
     snap: { texture: d.texture2d(d.f32) },
   })
   .$name("renderLayout");
+
+/** Lens: Params uniform + the composer's backdrop + a linear sampler. */
+export const lensLayout = tgpu
+  .bindGroupLayout({
+    u: { uniform: Params },
+    backdrop: { texture: d.texture2d(d.f32) },
+    samp: { sampler: "filtering" },
+  })
+  .$name("lensLayout");

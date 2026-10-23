@@ -3,12 +3,13 @@ import * as d from "typegpu/data";
 import { scheduleOnRN } from "react-native-worklets";
 import type { SharedValue } from "react-native-reanimated";
 import type {
+  LayerSceneResult,
   SceneProps,
-  SceneResult,
-} from "../gargantua-type-gpu/hooks/useWebGPU";
+} from "../gargantua-type-gpu/composeLayered";
 import { Params, Particle, type ParamsData } from "./gpuTypes";
 import { computeLayout, renderLayout } from "./layouts";
-import { bgFs, bgVs, initFn, stepFn, tileFs, tileVs } from "./vortexShaders";
+import type { LensShared } from "./lensScene";
+import { initFn, stepFn, tileFs, tileVs } from "./vortexShaders";
 
 // ============================================================================
 // Types
@@ -63,6 +64,8 @@ export type VortexSceneOptions = {
   seed: SharedValue<number>;
   /** Max sticky delay (s) for the next run, 0 = off; read when a run starts. */
   sticky: SharedValue<number>;
+  /** Handoff to the lens layer: setup stores the root and Params buffer here. */
+  shared: LensShared;
   /** A run's first frame has been presented (tiles at home). JS thread. */
   onStarted?: () => void;
   /** Called every `STATS_EVERY` frames on the JS thread (via scheduleOnRN). */
@@ -101,6 +104,9 @@ const STATS_EVERY = 30;
 // The hole grows in from Release and overshoots once.
 const HOLE_SPRING = { k: 70, d: 9 };
 
+// Space color the tile pass clears to (the lens layer samples it as backdrop).
+const SPACE_COLOR = [0.035, 0.035, 0.045, 1] as const;
+
 // Alpha-over for the premultiplied snapshot texels.
 const PREMULTIPLIED_OVER: GPUBlendState = {
   color: { srcFactor: "one", dstFactor: "one-minus-src-alpha" },
@@ -123,14 +129,19 @@ const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) 
 // ============================================================================
 
 /**
- * Scene factory for `useWebGPU`: the GPU vortex for one snapshot texture.
+ * Layer scene (first layer of `composeLayered`): the GPU vortex for one
+ * snapshot texture. It renders the tiles over the space color into the
+ * composer's target; the lens layer after it (`createLensScene`, readsBackdrop)
+ * draws the hole, glow and lensing from that. Setup publishes its root and
+ * Params buffer through `shared` for the lens, so this layer must be listed
+ * first and owns (and destroys) both.
  *
  * Setup allocates everything through a TypeGPU root (so the resources can
  * later cross to the UI runtime) and then stands by: it draws nothing and
  * presents nothing. The `phase` SharedValue drives the run from the UI loop:
  * a new non-zero value starts a run (sim reset, particles seeded at home, first
  * frame drawn, `onStarted`), 0 goes idle (one transparent frame, then `render`
- * returns false so the hook skips `present()`). The caller fills the snapshot
+ * returns false, which the composer turns into a skipped lens + present). The caller fills the snapshot
  * texture before flipping `phase`; `render` steps the timeline springs, writes
  * the uniform and encodes compute + render in one submit.
  *
@@ -149,10 +160,11 @@ export const createVortexScene =
     phase,
     seed,
     sticky,
+    shared,
     onStarted,
     onStats,
   }: VortexSceneOptions) =>
-  ({ device, context, presentationFormat }: SceneProps): SceneResult => {
+  ({ device, presentationFormat }: SceneProps): LayerSceneResult => {
     const root = tgpu.initFromDevice({ device });
 
     const W = snapshot.width;
@@ -199,14 +211,10 @@ export const createVortexScene =
 
     const initPipeline = root.createComputePipeline({ compute: initFn });
     const stepPipeline = root.createComputePipeline({ compute: stepFn });
-    // Clears the frame: no blend.
-    const bgPipeline = root.createRenderPipeline({
-      vertex: bgVs,
-      fragment: bgFs,
-      targets: { format: presentationFormat },
-      primitive: { topology: "triangle-list" },
-    });
-    // Composites tiles over the bg pass.
+    // Hand the lens layer what it shares (it never destroys either).
+    shared.root = root;
+    shared.params = paramBuffer;
+    // Composites tiles over the cleared space color.
     const tilePipeline = root.createRenderPipeline({
       vertex: tileVs,
       fragment: tileFs,
@@ -242,6 +250,7 @@ export const createVortexScene =
      * seed/sticky and seeds every tile at home before drawing (no sim steps).
      */
     const frame = (
+      view: GPUTextureView,
       dt: number,
       timeScale: number,
       start: boolean,
@@ -303,14 +312,13 @@ export const createVortexScene =
       const rpass = encoder.beginRenderPass({
         colorAttachments: [
           {
-            view: context.getCurrentTexture().createView(),
-            clearValue: [0, 0, 0, 1],
+            view,
+            clearValue: [...SPACE_COLOR],
             loadOp: "clear",
             storeOp: "store",
           },
         ],
       });
-      bgPipeline.with(rpass).with(renderGroup).draw(3);
       tilePipeline.with(rpass).with(renderGroup).draw(6, count);
       rpass.end();
       device.queue.submit([encoder.finish()]);
@@ -318,13 +326,13 @@ export const createVortexScene =
     };
 
     /** One transparent frame: keeps the layer's drawables cycling while idle. */
-    const clearFrame = () => {
+    const clearFrame = (view: GPUTextureView) => {
       "worklet";
       const encoder = device.createCommandEncoder();
       const rpass = encoder.beginRenderPass({
         colorAttachments: [
           {
-            view: context.getCurrentTexture().createView(),
+            view,
             clearValue: [0, 0, 0, 0],
             loadOp: "clear",
             storeOp: "store",
@@ -339,8 +347,9 @@ export const createVortexScene =
     // starts the run from the render loop.
     return {
       // Runs on the UI runtime in ui-worklet mode; a worklet is still a plain
-      // callable in js-raf. Returns false when nothing was drawn (idle).
-      render: (timestamp: number) => {
+      // callable in js-raf. Returns false when nothing was drawn (idle): the
+      // composer then skips the lens and the blit.
+      render: (timestamp, attachment, _backdrop) => {
         "worklet";
         const p = phase.value;
         if (p !== lastPhase) {
@@ -350,13 +359,17 @@ export const createVortexScene =
           encodeMs = 0;
           statsStart = 0;
           if (p === 0) {
-            // Idle: one transparent frame, then stop presenting.
-            clearFrame();
+            // Idle: zero the hole so the lens passes the transparent frame
+            // through, draw it once, then stop presenting.
+            hole.x = 0;
+            hole.v = 0;
+            paramBuffer.writePartial({ hole: 0 });
+            clearFrame(attachment.view);
             return true;
           }
           // Run start: tiles at home, dt = 0.
           const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
-          frame(0, timeScale, true, seed.value, sticky.value);
+          frame(attachment.view, 0, timeScale, true, seed.value, sticky.value);
           if (onStarted) scheduleOnRN(onStarted);
           return true;
         }
@@ -365,7 +378,7 @@ export const createVortexScene =
         last = timestamp;
         // Clamp in the worklet, before the sim sees the value.
         const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
-        encodeMs += frame(dt, timeScale, false, 0, 0);
+        encodeMs += frame(attachment.view, dt, timeScale, false, 0, 0);
         frames += 1;
         if (statsStart === 0) statsStart = timestamp;
         if (frames === STATS_EVERY) {
