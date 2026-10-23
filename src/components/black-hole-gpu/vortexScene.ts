@@ -67,8 +67,8 @@ type Spring = { x: number; v: number };
 
 export const DEFAULT_VORTEX: VortexConfig = {
   tile: 4,
-  holeT0: 0.6,
-  vortexT0: 1.4,
+  holeT0: 0,
+  vortexT0: 0.6,
   ramp: 0.6,
   inflow: 0.15,
   refRadius: 0.5,
@@ -86,8 +86,7 @@ export const SPEED_MAX = 4;
 const WORKGROUP = 64;
 const STATS_EVERY = 30;
 
-// Shatter settles fast with no overshoot; the hole overshoots once.
-const SHATTER_SPRING = { k: 140, d: 24 };
+// The hole grows in from Release and overshoots once.
 const HOLE_SPRING = { k: 70, d: 9 };
 
 // Alpha-over for the premultiplied snapshot texels.
@@ -167,7 +166,7 @@ export const createVortexScene =
       swirl: config.swirl,
       count,
       hole: 0,
-      shatter: 0,
+      _pad2: 0,
       vortexT0: config.vortexT0,
       ramp: config.ramp,
       _pad0: 0,
@@ -211,7 +210,6 @@ export const createVortexScene =
     let simTime = 0;
     let acc = 0;
     let last = 0;
-    const shatter: Spring = { x: 0, v: 0 };
     const hole: Spring = { x: 0, v: 0 };
     let frames = 0;
     let encodeMs = 0;
@@ -234,7 +232,6 @@ export const createVortexScene =
       // Timeline springs, stepped with the physics so they share its clock.
       for (let i = 0; i < substeps; i++) {
         const t = simTime + (i + 1) * H;
-        stepSpring(shatter, 1, SHATTER_SPRING.k, SHATTER_SPRING.d, H);
         stepSpring(hole, t >= config.holeT0 ? 1 : 0, HOLE_SPRING.k, HOLE_SPRING.d, H);
       }
       simTime += substeps * H;
@@ -242,7 +239,6 @@ export const createVortexScene =
         time,
         substeps,
         hole: hole.x,
-        shatter: shatter.x,
       });
 
       const encoder = device.createCommandEncoder();

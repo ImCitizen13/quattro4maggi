@@ -9,7 +9,7 @@
  *          └─ setup presents frame 0 (tiles at home) ─► onReady hides the RN view
  *          └─ per frame (ui-worklet): compute `step` (N × h=1/120) ─► render
  *               bg + hole, then 6 × N instanced tiles sampling the snapshot
- *          └─ timeline: shatter (0 s) → hole grows in (0.6 s) → vortex (1.4 s)
+ *          └─ timeline: hole grows in (0 s) → release wave (0.6 s)
  *     └─ Reset ─► run = null (hook tears the scene down), show the RN view
  *
  * KEY FEATURES:

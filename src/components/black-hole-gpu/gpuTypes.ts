@@ -53,8 +53,8 @@ export const Params = d
     count: d.f32,
     /** 0..1 (spring, may overshoot): scales horizon + mass. */
     hole: d.f32,
-    /** 0..1: tile gap + jitter. */
-    shatter: d.f32,
+    /** Free slot (was shatter). */
+    _pad2: d.f32,
     /** Wave start, s. */
     vortexT0: d.f32,
     /** Per-tile force ramp, s. */

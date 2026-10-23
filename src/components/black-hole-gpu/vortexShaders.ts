@@ -11,9 +11,8 @@ import { computeLayout as C, renderLayout as R } from "./layouts";
 // Units: physical pixels (origin top-left) and seconds.
 // Particle.state: 0 = consumed, 1 = at home (waiting for the wave), 2 = free.
 //
-// Timeline (CPU drives `shatter` and `hole` with springs, see vortexScene):
-//   shatter 0→1   tiles shrink apart and jitter in place
-//   hole    0→1   horizon + mass grow in at the center
+// Timeline (CPU drives `hole` with a spring, see vortexScene):
+//   hole    0→1   horizon + mass grow in at the center from Release
 //   vortexT0 +    radial wave: each tile's forces ramp 0→1 over `ramp` s
 //
 // Bodies are the original WGSL. TypeGPU resolves the `$uses` names: `C.$.u` /
@@ -157,16 +156,11 @@ export const tileVs = tgpu.vertexFn({
     return out;
   }
   let c = CORNERS[in.vi];
-  // Shatter: tiles shrink apart and wobble, a little out of phase.
-  let phase = hash(in.ii) * 6.2831;
-  let wobble = vec2f(sin(R.$.u.time * 9.0 + phase), cos(R.$.u.time * 7.0 + phase * 1.3));
-  var local = (c - 0.5) * R.$.u.tile * mix(1.0, SHATTER_SCALE, R.$.u.shatter);
-  // Floor at 6 px so the wobble still reads with 2 px tiles.
-  var center = p.pos + wobble * (max(R.$.u.tile, 6.0) * JITTER * R.$.u.shatter);
+  var local = (c - 0.5) * R.$.u.tile;
+  let center = p.pos;
   if (p.state == 2.0) {
-    // Settle the wobble, face motion, shrink into the horizon.
+    // Face motion, shrink into the horizon.
     let k = smoothstep(p.release, p.release + R.$.u.ramp, R.$.u.time);
-    center = mix(center, p.pos, k);
     let ang = atan2(p.vel.y, p.vel.x) * k;
     let cs = cos(ang);
     let sn = sin(ang);
@@ -179,7 +173,7 @@ export const tileVs = tgpu.vertexFn({
   out.texel = p.home + (c - 0.5) * R.$.u.tile;
   return out;
 }`
-  .$uses({ R, hash, horizonOf, CORNERS, SHATTER_SCALE: 0.85, JITTER: 0.25 })
+  .$uses({ R, horizonOf, CORNERS })
   .$name("tileVs");
 
 // TGSL shell form (no "use gpu"): a raw body would have to read the location
