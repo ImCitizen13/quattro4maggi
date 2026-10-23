@@ -7,7 +7,7 @@
  *     └─ Release ─► `run` state ─► useWebGPUOnDevice builds createVortexScene
  *          (TypeGPU root: one particle per tile, storage buffer)
  *          └─ setup presents frame 0 (tiles at home) ─► onReady hides the RN view
- *          └─ per frame (js-raf): compute `step` (N × h=1/120) ─► render
+ *          └─ per frame (js-raf | ui-worklet): compute `step` (N × h=1/120) ─► render
  *               bg + hole, then 6 × N instanced tiles sampling the snapshot
  *          └─ timeline: shatter (0 s) → hole grows in (0.6 s) → vortex (1.4 s)
  *     └─ Reset ─► run = null (hook tears the scene down), show the RN view
@@ -18,21 +18,26 @@
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
  * - Tile chips (8/4/2 px) set the particle count
  * - Snapshot and scene share one device (useDevice makes a new one per call)
+ * - Render loop on the UI runtime (120 Hz), JS rAF switchable from the HUD
  */
 import { PressableScale } from "pressto";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
+  LogBox,
   PixelRatio,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { Canvas, useDevice } from "react-native-webgpu";
-import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
+import {
+  type RenderMode,
+  useWebGPUOnDevice,
+} from "../gargantua-type-gpu/hooks/useWebGPU";
 import { DemoContent } from "./DemoContent";
 import { captureView, type ViewSnapshot } from "./snapshot";
-import { createVortexScene, DEFAULT_VORTEX } from "./vortexScene";
+import { createVortexScene, DEFAULT_VORTEX, type VortexStats } from "./vortexScene";
 
 // ============================================================================
 // Types
@@ -49,6 +54,18 @@ export type VortexRun = { id: number; tile: number; snapshot: ViewSnapshot };
 
 const TILE_SIZES = [8, 4, 2] as const;
 
+// TypeGPU logs this once per process on the first UI-runtime transfer (no
+// WeakRef in worklet runtimes → strong identity cache). Harmless, but its
+// LogBox toast sits over the chip row and swallows taps.
+LogBox.ignoreLogs(["WeakRef is not available in this worklet runtime"]);
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+const formatStats = ({ count, fps, encodeMs }: VortexStats) =>
+  `${count.toLocaleString()} tiles · ${fps.toFixed(0)} fps · encode ${encodeMs.toFixed(2)} ms`;
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -58,6 +75,7 @@ export const BlackHoleGpu = () => {
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
   const snapshot = useRef<ViewSnapshot | null>(null);
+  const staleSnapshot = useRef<GPUTexture | null>(null);
   const busy = useRef(false);
   const imageLoaded = useRef(false);
   const capturing = useRef<Promise<ViewSnapshot | null> | null>(null);
@@ -66,6 +84,7 @@ export const BlackHoleGpu = () => {
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
   const [status, setStatus] = useState("idle");
+  const [mode, setMode] = useState<RenderMode>("ui-worklet");
 
   const scene = useMemo(
     () =>
@@ -77,11 +96,11 @@ export const BlackHoleGpu = () => {
           setShow("gpu");
           busy.current = false;
         },
-        onStats: setStatus,
+        onStats: (s: VortexStats) => setStatus(formatStats(s)),
       }),
     [run],
   );
-  const canvasRef = useWebGPUOnDevice(device, scene, [scene], size);
+  const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, { mode });
 
   const pixelSize = () => {
     const dpr = PixelRatio.get();
@@ -98,14 +117,26 @@ export const BlackHoleGpu = () => {
     const { pxW, pxH } = pixelSize();
     if (!device || pxW === 0 || !imageLoaded.current) return;
     if (snapshot.current || capturing.current) return;
+    // Race: layout can settle (e.g. the nav header) while this ~0.4 s capture
+    // is in flight. onLayout drops the snapshot, but its re-precapture bails
+    // because we are still capturing. So on resolve, discard a snapshot taken at
+    // an outdated size and re-run precapture. A failed capture must not retry.
+    let stale = false;
     capturing.current = captureView(device, viewRef, pxW, pxH)
       .then((snap) => {
+        const now = pixelSize();
+        if (snap && (now.pxW !== pxW || now.pxH !== pxH)) {
+          snap.texture.destroy();
+          stale = true;
+          return null;
+        }
         snapshot.current = snap;
         return snap;
       })
       .catch(() => null)
       .finally(() => {
         capturing.current = null;
+        if (stale) precapture();
       });
   };
 
@@ -116,7 +147,15 @@ export const BlackHoleGpu = () => {
     const changed = width !== layout.current.width || height !== layout.current.height;
     layout.current = { width, height };
     if (changed) {
-      dropSnapshot();
+      if (run) {
+        // The running scene still draws the old texture: defer its destroy
+        // until the scene is gone.
+        staleSnapshot.current = snapshot.current?.texture ?? null;
+        snapshot.current = null;
+        reset();
+      } else {
+        dropSnapshot();
+      }
       setSize({ width, height });
     }
     precapture();
@@ -132,9 +171,23 @@ export const BlackHoleGpu = () => {
     snapshot.current = null;
   };
 
-  // Unmount only: free the snapshot (the hook frees the scene).
+  // React runs every passive cleanup before any setup, so the hook's cleanup
+  // has already cancelled the loop (both modes cancel synchronously) when this
+  // destroys the texture.
+  useEffect(() => {
+    if (run === null && staleSnapshot.current) {
+      staleSnapshot.current.destroy();
+      staleSnapshot.current = null;
+    }
+  }, [run]);
+
+  // Unmount only: free the snapshots (the hook frees the scene).
   const teardown = useRef(() => {});
-  teardown.current = dropSnapshot;
+  teardown.current = () => {
+    dropSnapshot();
+    staleSnapshot.current?.destroy();
+    staleSnapshot.current = null;
+  };
   useEffect(() => () => teardown.current(), []);
 
   const release = async (tileSize: number) => {
@@ -175,7 +228,17 @@ export const BlackHoleGpu = () => {
         />
       </View>
       <View style={styles.hud}>
-        <Text style={styles.status}>{status}</Text>
+        <View style={styles.statusRow}>
+          <Text style={styles.status}>{status}</Text>
+          <PressableScale
+            style={styles.pill}
+            onPress={() => setMode((m) => (m === "js-raf" ? "ui-worklet" : "js-raf"))}
+          >
+            <Text style={styles.pillLabel}>
+              {mode === "ui-worklet" ? "UI thread" : "JS rAF"}
+            </Text>
+          </PressableScale>
+        </View>
         <View style={styles.row}>
           {TILE_SIZES.map((size) => (
             <PressableScale
@@ -211,7 +274,21 @@ const styles = StyleSheet.create({
   overlay: StyleSheet.absoluteFill,
   hidden: { opacity: 0 },
   hud: { padding: 16, gap: 12 },
-  status: { color: "#fff", opacity: 0.7, fontSize: 12, fontVariant: ["tabular-nums"] },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  status: {
+    flex: 1,
+    color: "#fff",
+    opacity: 0.7,
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+  },
+  pill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: "#2a2a2a",
+  },
+  pillLabel: { color: "#fff", fontSize: 12, fontWeight: "600" },
   row: { flexDirection: "row", gap: 12 },
   chip: {
     flex: 1,

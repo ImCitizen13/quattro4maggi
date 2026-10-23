@@ -1,5 +1,6 @@
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
+import { scheduleOnRN } from "react-native-worklets";
 import type {
   SceneProps,
   SceneResult,
@@ -35,14 +36,24 @@ export type VortexConfig = {
   swirl: number;
 };
 
+/** Rolling render stats reported to the HUD. */
+export type VortexStats = {
+  /** Tile (particle) count. */
+  count: number;
+  /** Frames per second over the last `STATS_EVERY` frames. */
+  fps: number;
+  /** Mean CPU encode + submit time per frame, ms. */
+  encodeMs: number;
+};
+
 export type VortexSceneOptions = {
   /** View snapshot, created on the same device the scene renders on. */
   snapshot: GPUTexture;
   config?: VortexConfig;
   /** Called after setup has drawn and presented the first frame (all tiles at home). */
   onReady?: () => void;
-  /** Called every `STATS_EVERY` frames with a HUD line. js-raf only. */
-  onStats?: (text: string) => void;
+  /** Called every `STATS_EVERY` frames on the JS thread (via scheduleOnRN). */
+  onStats?: (stats: VortexStats) => void;
 };
 
 type Spring = { x: number; v: number };
@@ -85,6 +96,7 @@ const PREMULTIPLIED_OVER: GPUBlendState = {
 
 /** Semi-implicit damped spring toward `target`, stepped by `h`. */
 const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) => {
+  "worklet";
   s.v += (k * (target - s.x) - d * s.v) * h;
   s.x += s.v * h;
 };
@@ -101,6 +113,10 @@ const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) 
  * the first frame before `onReady` so the RN view can be hidden without a
  * blank frame. `render` steps the timeline springs, writes the uniform and
  * encodes compute + render in one submit.
+ *
+ * The render loop may run on the UI runtime (ui-worklet mode), so `render` is a
+ * worklet and everything it captures is TypeGPU resources, native GPU objects
+ * and plain numbers/objects.
  */
 export const createVortexScene =
   ({ snapshot, config = DEFAULT_VORTEX, onReady, onStats }: VortexSceneOptions) =>
@@ -188,6 +204,7 @@ export const createVortexScene =
 
     /** Advance the sim by `dt` seconds and encode one frame. Returns encode ms. */
     const frame = (dt: number) => {
+      "worklet";
       const t0 = performance.now();
       // Fixed-step accumulator: equal work per simulated second, clamped so a
       // stall never spirals.
@@ -245,7 +262,10 @@ export const createVortexScene =
     onReady?.();
 
     return {
+      // Runs on the UI runtime in ui-worklet mode; a worklet is still a plain
+      // callable in js-raf.
       render: (timestamp: number) => {
+        "worklet";
         const dt = last === 0 ? 0 : (timestamp - last) / 1000;
         last = timestamp;
         encodeMs += frame(dt);
@@ -253,10 +273,9 @@ export const createVortexScene =
         if (statsStart === 0) statsStart = timestamp;
         if (frames === STATS_EVERY) {
           const fps = (frames * 1000) / (timestamp - statsStart);
-          onStats?.(
-            `${count.toLocaleString()} tiles · ${fps.toFixed(0)} fps · ` +
-              `encode ${(encodeMs / frames).toFixed(2)} ms`,
-          );
+          if (onStats) {
+            scheduleOnRN(onStats, { count, fps, encodeMs: encodeMs / frames });
+          }
           frames = 0;
           encodeMs = 0;
           statsStart = timestamp;
