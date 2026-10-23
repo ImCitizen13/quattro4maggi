@@ -2,18 +2,21 @@
  * BlackHoleGpu — a React Native view swallowed by a GPU particle vortex.
  *
  * FLOW:
+ *   push transition ends ─► snapshot texture + standby scene are built once
+ *     (TypeGPU root: one particle per tile, storage buffer); nothing is drawn
  *   DemoContent (RN view, collapsable={false})
- *     └─ Release ─► 120 ms ─► drawElementImageToTexture ─► snapshot ─► run
- *          └─ `run` state ─► useWebGPUOnDevice builds createVortexScene
- *          (TypeGPU root: one particle per tile, storage buffer)
- *          └─ setup presents frame 0 (tiles at home) ─► onReady hides the RN view
+ *     └─ Release ─► 120 ms ─► drawElementImageToTexture INTO the scene's texture
+ *          └─ `phase` SharedValue flips ─► the UI loop starts the run (sim reset,
+ *             particles seeded at home, frame 0) ─► onStarted hides the RN view
  *          └─ per frame (ui-worklet): compute `step` (N × h=1/120) ─► render
  *               bg + hole, then 6 × N instanced tiles sampling the snapshot
  *          └─ timeline: hole grows in (0 s) → release wave (0.6 s)
- *     └─ Reset ─► run = null (hook tears the scene down), show the RN view
+ *     └─ Reset ─► phase = 0 (one transparent frame, then no present), show the RN view
  *
  * KEY FEATURES:
  * - All GPU: no Skia, no Atlas, no CPU readback; CPU writes a 96 B uniform
+ * - Scene pre-built after the push transition; Release = 120 ms + capture + phase flip
+ * - No scene rebuild on Release/Reset/Sticky; only tile or layout size change rebuilds
  * - Snapshot captured on Release (after a short delay), nothing on mount — no navigation stall
  * - Sticky toggle (chip)
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
@@ -24,6 +27,7 @@
  * - FpsOverlay ui row
  * - Speed slider 0.25×–4× (SharedValue, live, no rebuild)
  */
+import { useNavigation } from "expo-router";
 import { PressableScale } from "pressto";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,7 +46,7 @@ import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
 import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 import { DemoContent } from "./DemoContent";
-import { captureView, type ViewSnapshot } from "./snapshot";
+import { captureInto, createSnapshotTexture } from "./snapshot";
 import {
   createVortexScene,
   DEFAULT_VORTEX,
@@ -57,15 +61,11 @@ import {
 
 export type ShowMode = "rn" | "gpu";
 
-/** One Release: a new id rebuilds the scene. */
-export type VortexRun = {
-  id: number;
-  tile: number;
-  /** Sticky patches on. */
-  sticky: boolean;
-  snapshot: ViewSnapshot;
-  /** Stickiness seed, new each run. */
-  seed: number;
+type TransitionNavigation = {
+  addListener: (
+    type: "transitionEnd",
+    callback: (e: { data: { closing: boolean } }) => void,
+  ) => () => void;
 };
 
 // ============================================================================
@@ -77,6 +77,9 @@ const TILE_SIZES = [8, 4, 2] as const;
 // Pause between the Release press and the capture: drawElementImageToTexture
 // blocks the platform UI thread ~0.4 s, so let the press animation settle first.
 const RELEASE_DELAY_MS = 120;
+
+// Build the scene anyway if the push transition's `transitionEnd` never fires.
+const TRANSITION_FALLBACK_MS = 1000;
 
 // UI-thread loop only for now (user decision 2026-10-23). The hook still
 // supports "js-raf" (gargantua uses it); restore a toggle here if needed.
@@ -100,85 +103,101 @@ const formatStats = ({ count, encodeMs }: VortexStats) =>
 
 export const BlackHoleGpu = () => {
   const { device } = useDevice();
+  // The stack's `transitionEnd` event isn't in the generic navigation typing.
+  const navigation = useNavigation() as unknown as TransitionNavigation;
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const speed = useSharedValue(1);
+  // Read by the UI-runtime loop: phase 0 = idle, a new non-zero value = start a run.
+  const phase = useSharedValue(0);
+  const seedSv = useSharedValue(0);
+  const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
+  const runId = useRef(0);
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
   const busy = useRef(false);
   const imageLoaded = useRef(false);
+  // Bumped by reset, layout change and unmount: an in-flight Release bails.
+  const epoch = useRef(0);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  const [run, setRun] = useState<VortexRun | null>(null);
+  const [transitioned, setTransitioned] = useState(false);
+  // A run was requested and not reset.
+  const [active, setActive] = useState(false);
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
   const [sticky, setSticky] = useState(true);
   const [status, setStatus] = useState("idle");
 
+  // Wait for the push transition so the pre-build doesn't compete with it.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("transitionEnd", (e) => {
+      if (!e.data.closing) setTransitioned(true);
+    });
+    const timer = setTimeout(() => setTransitioned(true), TRANSITION_FALLBACK_MS);
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
+  }, [navigation]);
+
+  useEffect(
+    () => () => {
+      epoch.current += 1;
+    },
+    [],
+  );
+
+  const dpr = PixelRatio.get();
+  const pxW = size ? Math.round(size.width * dpr) : 0;
+  const pxH = size ? Math.round(size.height * dpr) : 0;
+
+  // The scene's snapshot texture, owned here and refilled by every Release.
+  const snapTex = useMemo(
+    () =>
+      device && transitioned && pxW > 0 && pxH > 0
+        ? createSnapshotTexture(device, pxW, pxH)
+        : null,
+    [device, transitioned, pxW, pxH],
+  );
+
+  const onStarted = () => {
+    setShow("gpu");
+    busy.current = false;
+  };
+
   const scene = useMemo(
     () =>
-      run &&
+      snapTex &&
       createVortexScene({
-        snapshot: run.snapshot.texture,
-        config: {
-          ...DEFAULT_VORTEX,
-          tile: run.tile,
-          sticky: run.sticky ? DEFAULT_VORTEX.sticky : 0,
-        },
-        seed: run.seed,
+        snapshot: snapTex,
+        config: { ...DEFAULT_VORTEX, tile },
         speed,
-        onReady: () => {
-          setShow("gpu");
-          busy.current = false;
-        },
+        phase,
+        seed: seedSv,
+        sticky: stickySv,
+        onStarted,
         onStats: (s: VortexStats) => setStatus(formatStats(s)),
       }),
-    [run],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snapTex, tile],
   );
   const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, {
     mode: RENDER_MODE,
   });
 
-  const pixelSize = () => {
-    const dpr = PixelRatio.get();
-    return {
-      pxW: Math.round(layout.current.width * dpr),
-      pxH: Math.round(layout.current.height * dpr),
-    };
-  };
-
-  // Snapshot ownership. `live` is the running scene's texture; reset or a run
-  // on a new snapshot moves it to `retired`. React runs every passive cleanup
-  // (the hook's included, which cancels the loop) before any setup, so the
-  // scene is gone when this effect destroys the retired textures.
-  const live = useRef<GPUTexture | null>(null);
-  const retired = useRef<GPUTexture[]>([]);
-  // Bumped by reset and unmount: an in-flight capture checks it and bails.
-  const epoch = useRef(0);
-  useEffect(() => {
-    retired.current.forEach((t) => t.destroy());
-    retired.current = [];
-  }, [run]);
-  useEffect(
-    () => () => {
-      epoch.current += 1;
-      live.current?.destroy();
-      retired.current.forEach((t) => t.destroy());
-    },
-    [],
-  );
-
-  const retire = () => {
-    if (live.current) retired.current.push(live.current);
-    live.current = null;
-  };
+  // Declared after the hook's effect: on a texture change React runs the hook's
+  // cleanup first (it cancels the UI loop and tears the scene down), so the
+  // texture is destroyed only once nothing samples it.
+  useEffect(() => () => snapTex?.destroy(), [snapTex]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     const changed = width !== layout.current.width || height !== layout.current.height;
     layout.current = { width, height };
     if (changed) {
-      // reset retires the texture; the effect above destroys it.
-      if (run) reset();
+      // Texture and scene rebuild from the new size; stop any run / capture on
+      // the old one.
+      reset();
       setSize({ width, height });
     }
   };
@@ -187,79 +206,64 @@ export const BlackHoleGpu = () => {
     imageLoaded.current = true;
   };
 
-  const startRun = (snapshot: ViewSnapshot, tileSize: number, stickyOn: boolean) => {
-    if (live.current !== snapshot.texture) {
-      retire();
-      live.current = snapshot.texture;
-    }
-    setRun((prev) => ({
-      id: (prev?.id ?? 0) + 1,
-      tile: tileSize,
-      sticky: stickyOn,
-      snapshot,
-      seed: Math.floor(Math.random() * 1e6),
-    }));
-  };
-
-  // Rebuild the running scene with new options, reusing its snapshot (the RN
-  // view is hidden while a scene runs, so a recapture would be blank).
-  const restart = (opts: { tile: number; sticky: boolean }) => {
-    if (!run || busy.current) return;
+  // Begin a run on the current texture: busy until the loop reports onStarted.
+  const startPhase = (stickyOn: boolean) => {
     busy.current = true;
-    startRun(run.snapshot, opts.tile, opts.sticky);
+    seedSv.value = Math.floor(Math.random() * 1e6);
+    stickySv.value = stickyOn ? DEFAULT_VORTEX.sticky : 0;
+    runId.current += 1;
+    phase.value = runId.current;
   };
 
-  // Fresh capture on every press. busy is cleared by onReady, or here on failure.
+  // Fresh capture on the first press; while a run is active the RN view is
+  // hidden (a recapture would be blank), so it restarts on the same texture.
   const release = async () => {
-    const { width, height } = layout.current;
-    if (!device || width === 0 || height === 0 || !imageLoaded.current || busy.current) {
+    if (!device || !scene || !snapTex || !imageLoaded.current || busy.current) {
       return;
     }
-    if (run) {
-      restart({ tile, sticky });
+    if (active) {
+      startPhase(sticky);
       return;
     }
     busy.current = true;
     const myEpoch = epoch.current;
     await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));
-    // Reset or unmount during the delay (reset already cleared busy).
+    // Reset, relayout or unmount during the delay (reset already cleared busy).
     if (epoch.current !== myEpoch) return;
-    const { pxW, pxH } = pixelSize();
-    let snap: ViewSnapshot;
     try {
-      snap = await captureView(device, viewRef, pxW, pxH);
+      await captureInto(device, viewRef, snapTex);
     } catch {
-      busy.current = false;
-      return;
-    }
-    // Reset/unmount during the capture, or the layout changed (wrong size).
-    const now = pixelSize();
-    if (epoch.current !== myEpoch || now.pxW !== pxW || now.pxH !== pxH) {
-      snap.texture.destroy();
       if (epoch.current === myEpoch) busy.current = false;
       return;
     }
-    startRun(snap, tile, sticky);
+    if (epoch.current !== myEpoch) return;
+    setActive(true);
+    startPhase(sticky);
   };
 
   const reset = () => {
     epoch.current += 1;
-    retire();
     busy.current = false;
-    setRun(null);
+    phase.value = 0;
+    setActive(false);
     setShow("rn");
     setStatus("idle");
   };
 
+  // The tile change rebuilds the scene (setTile → useMemo dep). While a run is
+  // active `phase` still holds its non-zero id and the new scene starts with
+  // lastPhase = -1, so its first frame starts a run on the same texture by
+  // itself; busy just covers that frame until onStarted clears it.
   const pickTile = (size: number) => {
+    if (size === tile) return;
+    if (active) busy.current = true;
     setTile(size);
-    if (run) restart({ tile: size, sticky });
   };
 
   const toggleSticky = () => {
     const next = !sticky;
     setSticky(next);
-    if (run) restart({ tile, sticky: next });
+    if (active && !busy.current) startPhase(next);
   };
 
   return (
@@ -272,7 +276,7 @@ export const BlackHoleGpu = () => {
           ref={canvasRef}
           style={[
             styles.overlay,
-            show === "rn" && (run ? styles.starting : styles.hidden),
+            show === "rn" && (scene ? styles.starting : styles.hidden),
           ]}
           pointerEvents="none"
         />
@@ -328,10 +332,11 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   overlay: StyleSheet.absoluteFill,
   hidden: { opacity: 0 },
-  // Canvas while a run starts (until onReady): Core Animation doesn't recycle
-  // drawables of a fully transparent layer, so at opacity 0 the third
-  // getCurrentTexture() waits out Metal's 1 s nextDrawable timeout. 0.01 keeps
-  // the layer composited without showing the previous run's last frame.
+  // Canvas while the standby scene exists and the RN view shows (idle, or a
+  // run starting until onStarted): the scene keeps the layer composited at 0.01
+  // and its idle frame is transparent. At opacity 0 Core Animation never
+  // recycles drawables → the third getCurrentTexture() waits out Metal's 1 s
+  // nextDrawable timeout.
   starting: { opacity: 0.01 },
   hud: { padding: 16, gap: 12 },
   status: {

@@ -69,7 +69,8 @@ export type SceneProps = {
   canvasHeight: number;
 };
 
-export type RenderScene = (timestamp: number) => void;
+/** Return `false` to skip `present()` this frame (nothing drawn). */
+export type RenderScene = (timestamp: number) => void | boolean;
 export type SceneCleanup = (() => void | Promise<void>) | void;
 export type SceneResize = (canvasWidth: number, canvasHeight: number) => void;
 export type SceneResult =
@@ -356,8 +357,8 @@ export const useWebGPUOnDevice = (
             const loop = () => {
               frameId.value = requestAnimationFrame(loop);
               try {
-                renderScene(Date.now());
-                context.present();
+                const drawn = renderScene(Date.now());
+                if (drawn !== false) context.present();
               } catch (error) {
                 console.error("[WebGPU render error]", error);
               }
@@ -382,8 +383,8 @@ export const useWebGPUOnDevice = (
             const timestamp = Date.now();
             const workStart = performance.now();
             try {
-              renderScene(timestamp);
-              context.present();
+              const drawn = renderScene(timestamp);
+              if (drawn !== false) context.present();
             } catch (error) {
               // Keep RAF alive while still surfacing frame-level failures.
               console.error("[WebGPU render error]", error);

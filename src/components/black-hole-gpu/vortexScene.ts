@@ -52,15 +52,19 @@ export type VortexStats = {
 };
 
 export type VortexSceneOptions = {
-  /** View snapshot, created on the same device the scene renders on. */
+  /** Snapshot texture (owned by the caller, filled by captureInto on Release). Same device. */
   snapshot: GPUTexture;
   config?: VortexConfig;
-  /** Stickiness pattern seed; a new one per run varies the patches. */
-  seed?: number;
   /** Sim speed multiplier, read every frame (clamped to SPEED_MIN..SPEED_MAX). */
   speed: SharedValue<number>;
-  /** Called after setup has drawn and presented the first frame (all tiles at home). */
-  onReady?: () => void;
+  /** 0 = idle (no draw); a new non-zero value starts a run (sim reset + particle init). */
+  phase: SharedValue<number>;
+  /** Stickiness seed for the next run, read when a run starts. */
+  seed: SharedValue<number>;
+  /** Max sticky delay (s) for the next run, 0 = off; read when a run starts. */
+  sticky: SharedValue<number>;
+  /** A run's first frame has been presented (tiles at home). JS thread. */
+  onStarted?: () => void;
   /** Called every `STATS_EVERY` frames on the JS thread (via scheduleOnRN). */
   onStats?: (stats: VortexStats) => void;
 };
@@ -119,28 +123,33 @@ const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) 
 // ============================================================================
 
 /**
- * Scene factory for `useWebGPU`: the GPU vortex for one snapshot.
+ * Scene factory for `useWebGPU`: the GPU vortex for one snapshot texture.
  *
  * Setup allocates everything through a TypeGPU root (so the resources can
- * later cross to the UI runtime), seeds the particles, then draws and presents
- * the first frame before `onReady` so the RN view can be hidden without a
- * blank frame. `render` steps the timeline springs, writes the uniform and
- * encodes compute + render in one submit.
+ * later cross to the UI runtime) and then stands by: it draws nothing and
+ * presents nothing. The `phase` SharedValue drives the run from the UI loop:
+ * a new non-zero value starts a run (sim reset, particles seeded at home, first
+ * frame drawn, `onStarted`), 0 goes idle (one transparent frame, then `render`
+ * returns false so the hook skips `present()`). The caller fills the snapshot
+ * texture before flipping `phase`; `render` steps the timeline springs, writes
+ * the uniform and encodes compute + render in one submit.
  *
  * The render loop may run on the UI runtime (ui-worklet mode), so `render` is a
- * worklet and everything it captures is TypeGPU resources, native GPU objects
- * and plain numbers/objects.
+ * worklet and everything it captures is TypeGPU resources, native GPU objects,
+ * SharedValues and plain numbers/objects.
  *
- * `speed` is a SharedValue read once per frame: changing it never rebuilds
- * the scene.
+ * `speed` is a SharedValue read once per frame; `seed` and `sticky` are read
+ * when a run starts. None of them rebuilds the scene.
  */
 export const createVortexScene =
   ({
     snapshot,
     config = DEFAULT_VORTEX,
-    seed = 0,
     speed,
-    onReady,
+    phase,
+    seed,
+    sticky,
+    onStarted,
     onStats,
   }: VortexSceneOptions) =>
   ({ device, context, presentationFormat }: SceneProps): SceneResult => {
@@ -178,8 +187,9 @@ export const createVortexScene =
       patchPx: short * config.patch,
       vortexT0: config.vortexT0,
       ramp: config.ramp,
-      seed,
-      sticky: config.sticky,
+      // Written per run (see `frame` with start).
+      seed: 0,
+      sticky: 0,
     };
 
     const paramBuffer = root.createBuffer(Params, initial).$usage("uniform");
@@ -223,34 +233,68 @@ export const createVortexScene =
     let frames = 0;
     let encodeMs = 0;
     let statsStart = 0;
+    // Last phase value seen; -1 so a scene built mid-run starts it at once.
+    let lastPhase = -1;
 
-    /** Advance the sim by `dt` seconds and encode one frame. Returns encode ms. */
-    const frame = (dt: number, timeScale: number) => {
+    /**
+     * Advance the sim by `dt` seconds and encode one frame. Returns encode ms.
+     * `start` begins a run: resets the clock and springs, writes the run's
+     * seed/sticky and seeds every tile at home before drawing (no sim steps).
+     */
+    const frame = (
+      dt: number,
+      timeScale: number,
+      start: boolean,
+      startSeed: number,
+      startSticky: number,
+    ) => {
       "worklet";
       const t0 = performance.now();
+      if (start) {
+        simTime = 0;
+        acc = 0;
+        hole.x = 0;
+        hole.v = 0;
+        paramBuffer.writePartial({
+          time: 0,
+          substeps: 0,
+          hole: 0,
+          seed: startSeed,
+          sticky: startSticky,
+        });
+      }
       // Fixed-step accumulator: equal work per simulated second, clamped so a
       // stall never spirals. Speed scales sim time per real second; the
       // substep cap scales with it so 4x doesn't fall behind. Springs run on
       // sim time, so the whole timeline speeds up together.
-      acc += Math.min(dt, 0.25) * timeScale;
-      const maxSub = Math.ceil(MAX_SUBSTEPS * Math.max(1, timeScale));
-      const substeps = Math.min(Math.floor(acc / H), maxSub);
-      acc = substeps === maxSub ? 0 : acc - substeps * H;
-      const time = simTime;
+      let substeps = 0;
+      if (!start) {
+        acc += Math.min(dt, 0.25) * timeScale;
+        const maxSub = Math.ceil(MAX_SUBSTEPS * Math.max(1, timeScale));
+        substeps = Math.min(Math.floor(acc / H), maxSub);
+        acc = substeps === maxSub ? 0 : acc - substeps * H;
+        const time = simTime;
 
-      // Timeline springs, stepped with the physics so they share its clock.
-      for (let i = 0; i < substeps; i++) {
-        const t = simTime + (i + 1) * H;
-        stepSpring(hole, t >= config.holeT0 ? 1 : 0, HOLE_SPRING.k, HOLE_SPRING.d, H);
+        // Timeline springs, stepped with the physics so they share its clock.
+        for (let i = 0; i < substeps; i++) {
+          const t = simTime + (i + 1) * H;
+          stepSpring(hole, t >= config.holeT0 ? 1 : 0, HOLE_SPRING.k, HOLE_SPRING.d, H);
+        }
+        simTime += substeps * H;
+        paramBuffer.writePartial({
+          time,
+          substeps,
+          hole: hole.x,
+        });
       }
-      simTime += substeps * H;
-      paramBuffer.writePartial({
-        time,
-        substeps,
-        hole: hole.x,
-      });
 
       const encoder = device.createCommandEncoder();
+      if (start) {
+        // Queue writes land before this submit, so init sees the new uniform.
+        const ipass = encoder.beginComputePass();
+        initPipeline.with(ipass).with(computeGroup).dispatchWorkgroups(groups);
+        ipass.end();
+      }
       if (substeps > 0) {
         const cpass = encoder.beginComputePass();
         stepPipeline.with(cpass).with(computeGroup).dispatchWorkgroups(groups);
@@ -273,27 +317,55 @@ export const createVortexScene =
       return performance.now() - t0;
     };
 
-    // Seed every tile at home (writes the full initial uniform first).
-    initPipeline.with(computeGroup).dispatchWorkgroups(groups);
+    /** One transparent frame: keeps the layer's drawables cycling while idle. */
+    const clearFrame = () => {
+      "worklet";
+      const encoder = device.createCommandEncoder();
+      const rpass = encoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: context.getCurrentTexture().createView(),
+            clearValue: [0, 0, 0, 0],
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      });
+      rpass.end();
+      device.queue.submit([encoder.finish()]);
+    };
 
-    // First frame (dt = 0) shows every tile at home; only then may the RN
-    // view hide.
-    frame(0, 1);
-    // SceneProps types the context as the web GPUCanvasContext; on RN it is
-    // react-native-webgpu's context, which adds `present()`.
-    (context as GPUCanvasContext & { present: () => void }).present();
-    onReady?.();
-
+    // Standby: no init dispatch and no frame 0 here; the first non-zero phase
+    // starts the run from the render loop.
     return {
       // Runs on the UI runtime in ui-worklet mode; a worklet is still a plain
-      // callable in js-raf.
+      // callable in js-raf. Returns false when nothing was drawn (idle).
       render: (timestamp: number) => {
         "worklet";
+        const p = phase.value;
+        if (p !== lastPhase) {
+          lastPhase = p;
+          last = 0;
+          frames = 0;
+          encodeMs = 0;
+          statsStart = 0;
+          if (p === 0) {
+            // Idle: one transparent frame, then stop presenting.
+            clearFrame();
+            return true;
+          }
+          // Run start: tiles at home, dt = 0.
+          const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
+          frame(0, timeScale, true, seed.value, sticky.value);
+          if (onStarted) scheduleOnRN(onStarted);
+          return true;
+        }
+        if (p === 0) return false;
         const dt = last === 0 ? 0 : (timestamp - last) / 1000;
         last = timestamp;
         // Clamp in the worklet, before the sim sees the value.
         const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
-        encodeMs += frame(dt, timeScale);
+        encodeMs += frame(dt, timeScale, false, 0, 0);
         frames += 1;
         if (statsStart === 0) statsStart = timestamp;
         if (frames === STATS_EVERY) {
@@ -305,6 +377,7 @@ export const createVortexScene =
           encodeMs = 0;
           statsStart = timestamp;
         }
+        return true;
       },
       cleanup: () => {
         paramBuffer.destroy();
