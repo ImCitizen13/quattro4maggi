@@ -4,9 +4,10 @@ import type {
   LayerSceneResult,
   SceneProps,
 } from "../gargantua-type-gpu/composeLayered";
-import type { Params } from "./gpuTypes";
+import { LensTune, type Params } from "./gpuTypes";
 import { lensLayout } from "./layouts";
 import { lensFs } from "./lensShaders";
+import type { LensTuneValues } from "./lensTune";
 import { fullscreenVs } from "./vortexShaders";
 
 // ============================================================================
@@ -30,18 +31,21 @@ export type LensShared = {
 // ============================================================================
 
 /**
- * Layer scene: the gravitational lens over the vortex tiles.
+ * Layer scene: the tunable gravitational lens + glass bubble over the vortex tiles.
  *
  * FLOW:
  *   setup ─► take `root` + `params` from the vortex layer (via `shared`)
+ *         ─► LensTune uniform buffer (seeded from the `tune` SharedValues)
  *         ─► linear sampler, one fullscreen render pipeline (no blend)
- *   per frame (composer, readsBackdrop) ─► bind group (params, backdrop, sampler)
+ *   per frame (composer, readsBackdrop) ─► write the 14 tune values
+ *         ─► bind group (params, tune, backdrop, sampler)
  *         ─► one fullscreen pass into the composer's target ─► submit
  *
  * KEY FEATURES:
  * - Reads the tile pass as its backdrop and reconstructs the whole frame:
  *   point-mass lens (flipped second image inside the Einstein radius), small
- *   chromatic split, accretion glow and the black disc
+ *   chromatic split, glass bubble (gargantua look), accretion glow and the
+ *   black disc; every knob is a live SharedValue (no rebuild)
  * - Exact passthrough of the backdrop (alpha included) until the hole exists,
  *   so the idle transparent frame stays transparent
  * - Shares the vortex layer's root and Params buffer: no copies, no extra
@@ -49,7 +53,7 @@ export type LensShared = {
  * - The bind group is built per frame because the backdrop ping-pongs
  */
 export const createLensScene =
-  (shared: LensShared): LayerScene =>
+  (shared: LensShared, tune: LensTuneValues): LayerScene =>
   ({ presentationFormat }: SceneProps): LayerSceneResult => {
     // Copy out of `shared` here: the worklet below must capture only these
     // locals, never the (non-serializable-by-design) handoff object.
@@ -79,6 +83,27 @@ export const createLensScene =
      */
     const layout = lensLayout;
 
+    // Seeded from the SharedValues (not the defaults) so a scene rebuild
+    // resumes at the user's current tuning.
+    const tuneBuffer = root
+      .createBuffer(LensTune, {
+        einstein: tune.einstein.value,
+        falloff: tune.falloff.value,
+        chroma: tune.chroma.value,
+        glow: tune.glow.value,
+        disc: tune.disc.value,
+        bubble: tune.bubble.value,
+        refraction: tune.refraction.value,
+        shapeN: tune.shapeN.value,
+        edge: tune.edge.value,
+        dispersion: tune.dispersion.value,
+        rim: tune.rim.value,
+        specular: tune.specular.value,
+        halo: tune.halo.value,
+        spread: tune.spread.value,
+      })
+      .$usage("uniform");
+
     const pipeline = root.createRenderPipeline({
       vertex: fullscreenVs,
       fragment: lensFs,
@@ -92,8 +117,25 @@ export const createLensScene =
         "worklet";
         // Defensive: the layer must be declared with readsBackdrop: true.
         if (!backdrop) return;
+        tuneBuffer.write({
+          einstein: tune.einstein.value,
+          falloff: tune.falloff.value,
+          chroma: tune.chroma.value,
+          glow: tune.glow.value,
+          disc: tune.disc.value,
+          bubble: tune.bubble.value,
+          refraction: tune.refraction.value,
+          shapeN: tune.shapeN.value,
+          edge: tune.edge.value,
+          dispersion: tune.dispersion.value,
+          rim: tune.rim.value,
+          specular: tune.specular.value,
+          halo: tune.halo.value,
+          spread: tune.spread.value,
+        });
         const bindGroup = root.createBindGroup(layout, {
           u: params,
+          t: tuneBuffer,
           backdrop,
           samp: sampler,
         });
@@ -112,8 +154,10 @@ export const createLensScene =
         pass.end();
         root.device.queue.submit([encoder.finish()]);
       },
-      // Nothing owned: the sampler belongs to the root, and the root and Params
-      // buffer belong to the vortex layer, which destroys them.
-      cleanup: () => {},
+      // Owns only the tune buffer: the sampler belongs to the root, and the
+      // root and Params buffer belong to the vortex layer, which destroys them.
+      cleanup: () => {
+        tuneBuffer.destroy();
+      },
     };
   };

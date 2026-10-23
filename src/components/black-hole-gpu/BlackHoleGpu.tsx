@@ -28,6 +28,9 @@
  * - Render loop on the UI runtime (120 Hz)
  * - FpsOverlay ui row
  * - Speed slider 0.25×–4× (SharedValue, live, no rebuild)
+ * - Lens button toggles LensPanel (portal, floats above the HUD): 14 live SharedValue
+ *   knobs for the gravity lens and the gargantua glass bubble, plus three presets;
+ *   the stage never resizes when it opens
  */
 import { useNavigation } from "expo-router";
 import { PressableScale } from "pressto";
@@ -49,7 +52,9 @@ import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
 import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 import { composeLayered } from "../gargantua-type-gpu/composeLayered";
 import { DemoContent } from "./DemoContent";
+import { LensPanel } from "./LensPanel";
 import { createLensScene, type LensShared } from "./lensScene";
+import { useLensTune } from "./lensTune";
 import { captureInto, createSnapshotTexture } from "./snapshot";
 import {
   createVortexScene,
@@ -116,6 +121,7 @@ export const BlackHoleGpu = () => {
   const phase = useSharedValue(0);
   const seedSv = useSharedValue(0);
   const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
+  const lensTune = useLensTune();
   const runId = useRef(0);
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
@@ -131,6 +137,7 @@ export const BlackHoleGpu = () => {
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
   const [sticky, setSticky] = useState(true);
   const [status, setStatus] = useState("idle");
+  const [lensOpen, setLensOpen] = useState(false);
 
   // Wait for the push transition so the pre-build doesn't compete with it.
   useEffect(() => {
@@ -188,7 +195,7 @@ export const BlackHoleGpu = () => {
           onStats: (s: VortexStats) => setStatus(formatStats(s)),
         }),
       },
-      { scene: createLensScene(shared), readsBackdrop: true },
+      { scene: createLensScene(shared, lensTune), readsBackdrop: true },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapTex, tile]);
@@ -293,6 +300,13 @@ export const BlackHoleGpu = () => {
         />
         <FpsOverlay dark />
       </View>
+      {lensOpen && (
+        <LensPanel
+          values={lensTune}
+          width={winW}
+          onClose={() => setLensOpen(false)}
+        />
+      )}
       <View style={[styles.hud, { paddingBottom: 16 + insets.bottom }]}>
         <Text style={styles.status}>{status}</Text>
         <TuningSlider
@@ -326,6 +340,12 @@ export const BlackHoleGpu = () => {
           </PressableScale>
           <PressableScale style={styles.button} onPress={reset}>
             <Text style={styles.label}>Reset</Text>
+          </PressableScale>
+          <PressableScale
+            style={[styles.button, lensOpen && styles.chipActive]}
+            onPress={() => setLensOpen((open) => !open)}
+          >
+            <Text style={styles.label}>Lens</Text>
           </PressableScale>
         </View>
       </View>

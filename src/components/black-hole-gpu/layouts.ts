@@ -1,6 +1,6 @@
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
-import { Params, Particle } from "./gpuTypes";
+import { LensTune, Params, Particle } from "./gpuTypes";
 
 // ============================================================================
 // Bind group layouts
@@ -26,10 +26,11 @@ export const renderLayout = tgpu
   })
   .$name("renderLayout");
 
-/** Lens: Params uniform + the composer's backdrop + a linear sampler. */
+/** Lens: Params uniform + LensTune uniform + the composer's backdrop + a linear sampler. */
 export const lensLayout = tgpu
   .bindGroupLayout({
     u: { uniform: Params },
+    t: { uniform: LensTune },
     backdrop: { texture: d.texture2d(d.f32) },
     samp: { sampler: "filtering" },
   })

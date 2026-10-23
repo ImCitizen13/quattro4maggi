@@ -66,5 +66,43 @@ export const Params = d
   })
   .$name("Params");
 
+/**
+ * Lens tuning uniform, 14 × f32 (TypeGPU pads it to the struct alignment).
+ * Written every frame from SharedValues; defaults live in lensTune.ts.
+ */
+export const LensTune = d
+  .struct({
+    /** Einstein radius as a multiple of the horizon radius. */
+    einstein: d.f32,
+    /** Deflection fades out around falloff * Einstein radius. */
+    falloff: d.f32,
+    /** Gravity chromatic split, fraction of the deflection. */
+    chroma: d.f32,
+    /** Accretion glow gain. */
+    glow: d.f32,
+    /** Black disc radius as a multiple of the horizon radius. */
+    disc: d.f32,
+    /** Glass bubble radius as a multiple of the horizon radius (0 = off). */
+    bubble: d.f32,
+    /** Signed refraction: positive = barrel, negative = pincushion. */
+    refraction: d.f32,
+    /** Superellipse exponent of the bubble outline (2 = circle). */
+    shapeN: d.f32,
+    /** Rim band width, fraction of the bubble radius. */
+    edge: d.f32,
+    /** Rim chromatic dispersion, fraction of the bubble radius. */
+    dispersion: d.f32,
+    /** Prismatic rim strength. */
+    rim: d.f32,
+    /** Specular highlight gain. */
+    specular: d.f32,
+    /** Outer halo opacity. */
+    halo: d.f32,
+    /** Outer halo width, fraction of the bubble radius. */
+    spread: d.f32,
+  })
+  .$name("LensTune");
+
+export type LensTuneData = d.Infer<typeof LensTune>;
 export type ParticleData = d.Infer<typeof Particle>;
 export type ParamsData = d.Infer<typeof Params>;
