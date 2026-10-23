@@ -16,6 +16,7 @@
  * - All GPU: no Skia, no Atlas, no CPU readback; CPU writes a 96 B uniform
  * - Pre-captured snapshot: Release starts instantly
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
+ * - Sticky patches (value noise + per-tile jitter) release late, new pattern per run
  * - Tile chips (8/4/2 px) set the particle count
  * - Snapshot and scene share one device (useDevice makes a new one per call)
  * - Render loop on the UI runtime (120 Hz)
@@ -56,7 +57,13 @@ import {
 export type ShowMode = "rn" | "gpu";
 
 /** One Release: a new id rebuilds the scene. */
-export type VortexRun = { id: number; tile: number; snapshot: ViewSnapshot };
+export type VortexRun = {
+  id: number;
+  tile: number;
+  snapshot: ViewSnapshot;
+  /** Stickiness seed, new each run. */
+  seed: number;
+};
 
 // ============================================================================
 // Constants
@@ -108,6 +115,7 @@ export const BlackHoleGpu = () => {
       createVortexScene({
         snapshot: run.snapshot.texture,
         config: { ...DEFAULT_VORTEX, tile: run.tile },
+        seed: run.seed,
         speed,
         onReady: () => {
           setShow("gpu");
@@ -220,7 +228,12 @@ export const BlackHoleGpu = () => {
       (await capturing.current) ??
       (await captureView(device, viewRef, pxW, pxH));
     snapshot.current = snap;
-    setRun((prev) => ({ id: (prev?.id ?? 0) + 1, tile: tileSize, snapshot: snap }));
+    setRun((prev) => ({
+      id: (prev?.id ?? 0) + 1,
+      tile: tileSize,
+      snapshot: snap,
+      seed: Math.floor(Math.random() * 1e6),
+    }));
   };
 
   const reset = () => {

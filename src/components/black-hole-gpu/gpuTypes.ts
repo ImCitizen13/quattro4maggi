@@ -53,14 +53,16 @@ export const Params = d
     count: d.f32,
     /** 0..1 (spring, may overshoot): scales horizon + mass. */
     hole: d.f32,
-    /** Free slot (was shatter). */
-    _pad2: d.f32,
+    /** Sticky patch cell size, px. */
+    patchPx: d.f32,
     /** Wave start, s. */
     vortexT0: d.f32,
     /** Per-tile force ramp, s. */
     ramp: d.f32,
-    _pad0: d.f32,
-    _pad1: d.f32,
+    /** Stickiness pattern seed (new per run). */
+    seed: d.f32,
+    /** Max extra release delay for fully sticky tiles, s. */
+    sticky: d.f32,
   })
   .$name("Params");
 

@@ -35,6 +35,10 @@ export type VortexConfig = {
   drag: number;
   /** Tangential / inflow speed: higher = more winding per turn inward. */
   swirl: number;
+  /** Max extra release delay for fully sticky tiles, s. */
+  sticky: number;
+  /** Sticky patch cell size, fraction of the shorter side. */
+  patch: number;
 };
 
 /** Rolling render stats reported to the HUD. */
@@ -51,6 +55,8 @@ export type VortexSceneOptions = {
   /** View snapshot, created on the same device the scene renders on. */
   snapshot: GPUTexture;
   config?: VortexConfig;
+  /** Stickiness pattern seed; a new one per run varies the patches. */
+  seed?: number;
   /** Sim speed multiplier, read every frame (clamped to SPEED_MIN..SPEED_MAX). */
   speed: SharedValue<number>;
   /** Called after setup has drawn and presented the first frame (all tiles at home). */
@@ -76,6 +82,8 @@ export const DEFAULT_VORTEX: VortexConfig = {
   wave: 0.25,
   drag: 3,
   swirl: 1.6,
+  sticky: 1.6,
+  patch: 0.06,
 };
 
 const H = 1 / 120;
@@ -130,6 +138,7 @@ export const createVortexScene =
   ({
     snapshot,
     config = DEFAULT_VORTEX,
+    seed = 0,
     speed,
     onReady,
     onStats,
@@ -166,11 +175,11 @@ export const createVortexScene =
       swirl: config.swirl,
       count,
       hole: 0,
-      _pad2: 0,
+      patchPx: short * config.patch,
       vortexT0: config.vortexT0,
       ramp: config.ramp,
-      _pad0: 0,
-      _pad1: 0,
+      seed,
+      sticky: config.sticky,
     };
 
     const paramBuffer = root.createBuffer(Params, initial).$usage("uniform");
