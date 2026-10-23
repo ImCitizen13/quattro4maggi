@@ -270,7 +270,10 @@ export const BlackHoleGpu = () => {
         </View>
         <Canvas
           ref={canvasRef}
-          style={[styles.overlay, show === "rn" && styles.hidden]}
+          style={[
+            styles.overlay,
+            show === "rn" && (run ? styles.starting : styles.hidden),
+          ]}
           pointerEvents="none"
         />
         <FpsOverlay dark />
@@ -325,6 +328,11 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   overlay: StyleSheet.absoluteFill,
   hidden: { opacity: 0 },
+  // Canvas while a run starts (until onReady): Core Animation doesn't recycle
+  // drawables of a fully transparent layer, so at opacity 0 the third
+  // getCurrentTexture() waits out Metal's 1 s nextDrawable timeout. 0.01 keeps
+  // the layer composited without showing the previous run's last frame.
+  starting: { opacity: 0.01 },
   hud: { padding: 16, gap: 12 },
   status: {
     color: "#fff",
