@@ -19,6 +19,7 @@
  * - Tile chips (8/4/2 px) set the particle count
  * - Snapshot and scene share one device (useDevice makes a new one per call)
  * - Render loop on the UI runtime (120 Hz), JS rAF switchable from the HUD
+ * - FpsOverlay: ui row + js-raf gpu row
  */
 import { PressableScale } from "pressto";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -31,6 +32,9 @@ import {
   View,
 } from "react-native";
 import { Canvas, useDevice } from "react-native-webgpu";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { useFrameSampler } from "@/components/common/frameSampler";
 import {
   type RenderMode,
   useWebGPUOnDevice,
@@ -63,8 +67,8 @@ LogBox.ignoreLogs(["WeakRef is not available in this worklet runtime"]);
 // Helpers
 // ============================================================================
 
-const formatStats = ({ count, fps, encodeMs }: VortexStats) =>
-  `${count.toLocaleString()} tiles · ${fps.toFixed(0)} fps · encode ${encodeMs.toFixed(2)} ms`;
+const formatStats = ({ count, encodeMs }: VortexStats) =>
+  `${count.toLocaleString()} tiles · encode ${encodeMs.toFixed(2)} ms`;
 
 // ============================================================================
 // Component
@@ -72,6 +76,7 @@ const formatStats = ({ count, fps, encodeMs }: VortexStats) =>
 
 export const BlackHoleGpu = () => {
   const { device } = useDevice();
+  const insets = useSafeAreaInsets();
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
   const snapshot = useRef<ViewSnapshot | null>(null);
@@ -100,7 +105,14 @@ export const BlackHoleGpu = () => {
       }),
     [run],
   );
-  const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, { mode });
+  // The overlay's `ui` row reads the UI-thread display link; the `gpu` row is
+  // ticked by the js-raf loop. In ui-worklet both would measure the same clock,
+  // so the `gpu` row is dropped there.
+  const gpuSampler = useFrameSampler("gpu");
+  const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, {
+    mode,
+    sampler: gpuSampler,
+  });
 
   const pixelSize = () => {
     const dpr = PixelRatio.get();
@@ -226,8 +238,9 @@ export const BlackHoleGpu = () => {
           style={[styles.overlay, show === "rn" && styles.hidden]}
           pointerEvents="none"
         />
+        <FpsOverlay dark sources={mode === "js-raf" ? [gpuSampler] : []} />
       </View>
-      <View style={styles.hud}>
+      <View style={[styles.hud, { paddingBottom: 16 + insets.bottom }]}>
         <View style={styles.statusRow}>
           <Text style={styles.status}>{status}</Text>
           <PressableScale
