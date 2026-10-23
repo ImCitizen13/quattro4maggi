@@ -3,11 +3,12 @@
 A React Native view is snapshotted into a WebGPU texture, cut into tile
 particles (one per 8 / 4 / 2 px tile, up to ~470K on an iPhone 17 Pro), and
 swallowed by a black hole. Physics and rendering are all GPU: a compute pass
-steps the particles, one instanced draw renders them. No Skia, no Atlas, no
-CPU readback. The render loop runs on the UI runtime.
+steps the particles, one instanced draw renders them, and a gravitational
+lens layer bends the result. No Skia, no Atlas, no CPU readback. The render
+loop runs on the UI runtime.
 
-**Status:** id 11 done, id 12 done except 12f (lens layer) and the 120 Hz
-device reading. See [Status & handoff](#status--handoff).
+**Status:** id 11 done, id 12 done except the 120 Hz device reading (12f lens
+shipped). See [Status & handoff](#status--handoff).
 
 ## Architecture
 
@@ -18,16 +19,27 @@ push transition ends (transitionEnd, 1 s fallback)
           │ setup, JS thread (vortexScene.ts)
           ▼
      TypeGPU root · Params uniform (96 B) · Particle buffer (32 B × N)
-     init / step compute · bg / tile render pipelines · bind groups   ← all built once
+     init / step compute · tile render pipeline · bind groups   ← all built once
+     lensScene.ts (shares root + Params via LensShared): sampler · lens pipeline
           │ transferred to the UI runtime (useWebGPUOnDevice, ui-worklet)
           ▼
-render(ts) 'worklet', every frame — reads SharedValues:
-   phase  0 → one transparent frame, then return false (hook skips present)
+composeLayered (per frame) — layers: [vortex (base), lens (readsBackdrop)]
+   a layer returning false vetoes the frame: skips the rest + blit, composer
+   returns false (hook skips present); undefined = drawn
+
+vortex render(ts, attachment) 'worklet' — reads SharedValues:
+   phase  0 → one transparent frame, then return false (veto)
           new id → reset clock + hole spring, write seed/sticky,
                    init dispatch + frame 0 in one submit, scheduleOnRN(onStarted)
    speed  timeScale 0.25×–4× (clamped in the worklet)
    frame: fixed-step accumulator (h = 1/120) → hole spring → writePartial
-          → compute step → bg (clear) + 6 × N instanced tiles → submit
+          → compute step → tile pass into the composer attachment
+          (clears to SPACE_COLOR) + 6 × N instanced tiles → submit
+   idle frame zeroes `hole`, so the lens passes the transparent frame through
+
+lens render(ts, attachment, backdrop) 'worklet':
+   per-frame bind group (params, backdrop, sampler) from a local layout alias
+   (migration doc 5.6) → fullscreen pass (no blend) → submit
 
 Release ─► 120 ms ─► captureInto(scene texture) (~0.3 s) ─► phase = ++runId
 Reset   ─► phase = 0, show the RN view
@@ -45,10 +57,13 @@ and ramp up to 3× slower.
 - `BlackHoleGpu.tsx` — state only: transition gate, snapshot texture, scene memo, phase/seed/sticky/speed SharedValues, HUD
 - `DemoContent.tsx` — the RN view that gets swallowed (`collapsable={false}`, reports image load)
 - `snapshot.ts` — `createSnapshotTexture`, `captureInto` (`queue.drawElementImageToTexture`)
-- `vortexScene.ts` — scene factory for `useWebGPU`: setup, `frame` / `clearFrame` / `render` worklets, `VortexConfig` defaults
-- `vortexShaders.ts` — raw WGSL bodies in TypeGPU shells (`initFn`, `stepFn`, `bgVs/Fs`, `tileVs`), `tileFs` in TGSL; helpers `hash`, `horizonOf`, `cellHash`, `stickOf`
+- `vortexScene.ts` — base layer of `composeLayered`: setup, `frame` / `clearFrame` / `render` worklets, `VortexConfig` defaults; draws into the composer attachment and fills `LensShared`
+- `vortexShaders.ts` — raw WGSL bodies in TypeGPU shells (`initFn`, `stepFn`, `fullscreenVs`, `tileVs`), `tileFs` in TGSL; helpers `hash`, `horizonOf`, `cellHash`, `stickOf`
+- `lensScene.ts` — lens layer (`readsBackdrop`); `LensShared` hands over the vortex `root` + `Params`
+- `lensShaders.ts` — `lensFs`: point-mass lens `src = r - RE²/r`, `RE = 1.8 × horizon × hole`, far-field falloff (6 RE), chromatic split `0.03 × deflection`, black disc at the current horizon, accretion glow (moved from the old `bgFs`)
 - `gpuTypes.ts` — `Particle` (pos, vel, home, release, state) and `Params` schemas
-- `layouts.ts` — compute vs render bind group layouts (both group 0)
+- `layouts.ts` — compute, render and lens bind group layouts (all group 0)
+- `../gargantua-type-gpu/composeLayered.ts` — layer composer; a layer returning `false` skips the rest + blit and returns `false`
 - `../gargantua-type-gpu/hooks/useWebGPU.tsx` — shared hook; `useWebGPUOnDevice` shares the snapshot's device; `render` returning `false` skips `present()`
 - `babel.config.js` — `importForwarding` entry for this folder
 
@@ -83,6 +98,9 @@ and ramp up to 3× slower.
 | Release tap → first GPU frame | 433–458 ms (120 ms delay + capture + ~20 ms) |
 | Arrival | one ~216 ms hitch ~0.4 s after the push ends (pre-build handoff, still screen) |
 | Cold motion AE (8 / 4 / 2 px) | 295K / 283K / 271K (only `0` = frozen is a fail) |
+| 905f1e8 (lens) cold AE (8 / 4 / 2 px) | 307K / 340K / 348K, 60 fps |
+| 905f1e8 mid-run (Release 4 px → 8 px → Sticky → re-Release) | all moving, AE 310K / 340K / 302K / 300K; Reset AE 0, no residue |
+| 905f1e8 Release → first visible change | 0.68–1.03 s over 3 runs (screenshot-polled, ~350 ms resolution; first frame matches the RN view until the hole grows); no 1 s drawable stall with the composer's extra passes |
 
 ## Lessons learned
 
@@ -128,6 +146,16 @@ Each of these cost a debugging session.
   by the component and refilled in place, never swapped.
 - TypeGPU's one-time `WeakRef is not available…` warning is ignored in
   `LogBox` (its toast swallowed a chip tap).
+- Worklet captures (audited after 905f1e8; no `d` / `std` / layouts / shared /
+  context in any):
+  - vortex `render`: phase, lastPhase, hole, paramBuffer, clearFrame, speed,
+    SPEED_MIN/MAX, frame, seed, sticky, onStarted, last, stats counters,
+    onStats, count
+  - `frame`: hole, paramBuffer, MAX_SUBSTEPS, acc, H, simTime, stepSpring,
+    config, HOLE_SPRING, device, initPipeline, computeGroup, groups,
+    stepPipeline, SPACE_COLOR, tilePipeline, renderGroup, count
+  - `clearFrame`: device
+  - lens `render`: root, layout, params, sampler, pipeline
 - `performance.now` exists on the UI runtime; avoid `toLocaleString` there
   (stats are formatted on JS).
 
@@ -158,6 +186,6 @@ Each of these cost a debugging session.
 | Backlog id | Task | State |
 |---|---|---|
 | 11 | GPU v1: snapshot → compute vortex | done |
-| 12 | GPU v2: speed, no shatter, stickiness, UI loop, lens | 12a–12e done; 12f lens + 120 Hz device reading open |
+| 12 | GPU v2: speed, no shatter, stickiness, UI loop, lens | 12a–12f done; 120 Hz device reading open |
 | 13 | GPU v3: white-explosion choreography | blocked by 12 |
 | 14 | Wrapper that swallows any view by ref | todo |
