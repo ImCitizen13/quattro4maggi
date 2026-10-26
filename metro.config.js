@@ -22,4 +22,12 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const { getBundleModeMetroConfig } = require("react-native-worklets/bundleMode");
 
-module.exports = getBundleModeMetroConfig(getDefaultConfig(__dirname));
+const { withRozenite } = require("@rozenite/metro");
+
+// Rozenite (React Native DevTools plugins, e.g. the Dials panel) is off unless
+// WITH_ROZENITE=true (`bun run start:dials`), so plain starts and EAS builds
+// get the config untouched. See docs/dev-tuning-controls.md.
+module.exports = withRozenite(getBundleModeMetroConfig(getDefaultConfig(__dirname)), {
+  enabled: process.env.WITH_ROZENITE === "true",
+  include: ["rozenite-plugin-dialkit"],
+});
