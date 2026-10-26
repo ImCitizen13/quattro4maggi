@@ -1,11 +1,12 @@
 import { useSharedValue, type SharedValue } from "react-native-reanimated";
-import type { LensTuneData } from "./gpuTypes";
+import { BLACK_HOLE_PALETTES } from "@/lib/palettes";
+import { LENS_MAX_COLORS } from "./gpuTypes";
 
 // ============================================================================
 // Lens tuning knobs (plain TS, JS thread only: no worklets here)
 // ============================================================================
 
-/** Knob names, in `LensTune` struct order. */
+/** Scalar knob names, in `LensTune` struct order. */
 export const LENS_KEYS = [
   "einstein",
   "falloff",
@@ -19,52 +20,93 @@ export const LENS_KEYS = [
   "specular",
   "halo",
   "spread",
-  "rimR",
-  "rimG",
-  "rimB",
-  "haloR",
-  "haloG",
-  "haloB",
-  "specR",
-  "specG",
-  "specB",
   "rainbow",
+  "glow",
 ] as const;
 
 export type LensKey = (typeof LENS_KEYS)[number];
 
 export type LensPresetName = "Gravity" | "Gargantua" | "Both";
 
-export type LensTuneValues = Record<LensKey, SharedValue<number>>;
+export type LensColorName = "rim" | "halo" | "spec";
+
+/**
+ * One SharedValue per color list: flat rgb 0..1 triples, 1..LENS_MAX_COLORS
+ * colors (count = length / 3). Always replaced whole, never mutated.
+ */
+export type LensColorValues = Record<LensColorName, SharedValue<number[]>>;
+
+export type LensTuneValues = Record<LensKey, SharedValue<number>> & {
+  colors: LensColorValues;
+};
 
 export type LensSpec = {
   label: string;
   min: number;
   max: number;
   decimals: number;
-  /** "color" channels have no slider: they are driven by the color strings. */
-  group: "gravity" | "glass" | "color";
+  group: "gravity" | "glass";
+};
+
+export type LensKnobs = Record<LensKey, number>;
+
+export { LENS_MAX_COLORS };
+
+// ============================================================================
+// Knob defaults, ranges, presets
+// ============================================================================
+
+export const LENS_DEFAULTS: LensKnobs = {
+  einstein: 1.8,
+  falloff: 6,
+  chroma: 0.03,
+  bubble: 2.8,
+  refraction: 0.5,
+  shapeN: 2,
+  edge: 0.1,
+  dispersion: 0.9,
+  rim: 0.15,
+  specular: 1,
+  halo: 0.15,
+  spread: 0.2,
+  rainbow: 1,
+  glow: 0,
+};
+
+export const LENS_SPEC: Record<LensKey, LensSpec> = {
+  einstein: { label: "Einstein ×", min: 0, max: 4, decimals: 2, group: "gravity" },
+  falloff: { label: "Falloff ×", min: 1, max: 20, decimals: 1, group: "gravity" },
+  chroma: { label: "Chroma", min: 0, max: 0.2, decimals: 3, group: "gravity" },
+  bubble: { label: "Bubble ×", min: 0, max: 8, decimals: 2, group: "glass" },
+  refraction: { label: "Refraction", min: -2, max: 2, decimals: 2, group: "glass" },
+  shapeN: { label: "Shape n", min: 1, max: 16, decimals: 1, group: "glass" },
+  edge: { label: "Edge", min: 0, max: 0.5, decimals: 2, group: "glass" },
+  dispersion: { label: "Dispersion", min: 0, max: 2, decimals: 2, group: "glass" },
+  rim: { label: "Rim", min: 0, max: 1, decimals: 2, group: "glass" },
+  specular: { label: "Specular", min: 0, max: 2, decimals: 2, group: "glass" },
+  halo: { label: "Halo", min: 0, max: 1, decimals: 2, group: "glass" },
+  spread: { label: "Spread", min: 0, max: 1, decimals: 2, group: "glass" },
+  rainbow: { label: "Rainbow", min: 0, max: 1, decimals: 2, group: "glass" },
+  glow: { label: "Glow", min: 0, max: 4, decimals: 2, group: "glass" },
+};
+
+export const LENS_PRESETS: Record<LensPresetName, LensKnobs> = {
+  Both: LENS_DEFAULTS,
+  Gravity: { ...LENS_DEFAULTS, bubble: 0 },
+  Gargantua: { ...LENS_DEFAULTS, einstein: 0, chroma: 0 },
 };
 
 // ============================================================================
-// Color strings (rim / halo / specular)
+// Color lists (rim / halo / specular)
 // ============================================================================
-
-export type LensColorName = "rim" | "halo" | "spec";
 
 export const LENS_COLOR_NAMES: readonly LensColorName[] = ["rim", "halo", "spec"];
 
-/** Default color strings (all white, matching the original look). */
-export const LENS_COLOR_DEFAULTS: Record<LensColorName, string> = {
-  rim: "#ffffff",
-  halo: "#ffffff",
-  spec: "#ffffff",
-};
-
-const CHANNEL_KEYS: Record<LensColorName, readonly [LensKey, LensKey, LensKey]> = {
-  rim: ["rimR", "rimG", "rimB"],
-  halo: ["haloR", "haloG", "haloB"],
-  spec: ["specR", "specG", "specB"],
+/** Default lists: one white color each (the original look). Presets reset to these. */
+export const LENS_COLOR_DEFAULTS: Record<LensColorName, readonly string[]> = {
+  rim: ["#ffffff"],
+  halo: ["#ffffff"],
+  spec: ["#ffffff"],
 };
 
 export type Rgb = readonly [number, number, number];
@@ -94,88 +136,80 @@ const toByte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
 export const rgbToHex = ([r, g, b]: Rgb): string =>
   "#" + [r, g, b].map((v) => toByte(v).toString(16).padStart(2, "0")).join("");
 
+/** Flat rgb triples of a list of valid color strings (invalid ones throw). */
+const flatten = (inputs: readonly string[]): number[] =>
+  inputs.flatMap((input) => {
+    const rgb = parseColor(input);
+    if (!rgb) throw new Error(`lensTune: invalid color ${input}`);
+    return [...rgb];
+  });
+
+/** Current list of a color as "#rrggbb" strings (1..LENS_MAX_COLORS). */
+export const getLensColors = (values: LensTuneValues, name: LensColorName): string[] => {
+  const flat = values.colors[name].value;
+  const out: string[] = [];
+  for (let i = 0; i + 2 < flat.length; i += 3) {
+    out.push(rgbToHex([flat[i], flat[i + 1], flat[i + 2]]));
+  }
+  return out;
+};
+
 /**
- * Write a color string into the three channel SharedValues.
- * Returns false (and changes nothing) if the string is invalid.
+ * Replace a whole list (clamped to 1..LENS_MAX_COLORS colors). An invalid
+ * entry keeps the previous color at that index, or is dropped if there was
+ * none. Returns false (and changes nothing) if no entry is usable.
  */
-export const setLensColor = (
+export const setLensColors = (
   values: LensTuneValues,
   name: LensColorName,
-  input: string,
+  inputs: readonly string[],
 ): boolean => {
-  const rgb = parseColor(input);
-  if (!rgb) return false;
-  const keys = CHANNEL_KEYS[name];
-  keys.forEach((key, i) => {
-    values[key].value = rgb[i];
+  const prev = values.colors[name].value;
+  const next: number[] = [];
+  inputs.slice(0, LENS_MAX_COLORS).forEach((input, i) => {
+    const rgb = parseColor(input);
+    if (rgb) next.push(...rgb);
+    else if (i * 3 + 2 < prev.length) next.push(prev[i * 3], prev[i * 3 + 1], prev[i * 3 + 2]);
   });
+  if (next.length === 0) return false;
+  values.colors[name].value = next;
   return true;
 };
 
-/** Current channels of a color as "#rrggbb". */
-export const getLensColorHex = (values: LensTuneValues, name: LensColorName): string => {
-  const [r, g, b] = CHANNEL_KEYS[name];
-  return rgbToHex([values[r].value, values[g].value, values[b].value]);
+/**
+ * Set one color of a list. Returns false (and changes nothing) if the string
+ * is invalid or the index is past the end of the list.
+ */
+export const setLensColorAt = (
+  values: LensTuneValues,
+  name: LensColorName,
+  index: number,
+  input: string,
+): boolean => {
+  const rgb = parseColor(input);
+  const prev = values.colors[name].value;
+  if (!rgb || index < 0 || index * 3 + 2 >= prev.length) return false;
+  const next = prev.slice();
+  next.splice(index * 3, 3, ...rgb);
+  values.colors[name].value = next;
+  return true;
 };
 
+/** The first LENS_MAX_COLORS colors of a BLACK_HOLE_PALETTES entry. */
+export const paletteColors = (index: number): string[] =>
+  (BLACK_HOLE_PALETTES[index] ?? BLACK_HOLE_PALETTES[0]).colors.slice(0, LENS_MAX_COLORS);
 
-export const LENS_DEFAULTS: LensTuneData = {
-  einstein: 1.8,
-  falloff: 6,
-  chroma: 0.03,
-  bubble: 2.8,
-  refraction: 0.5,
-  shapeN: 2,
-  edge: 0.1,
-  dispersion: 0.9,
-  rim: 0.15,
-  specular: 1,
-  halo: 0.15,
-  spread: 0.2,
-  rimR: 1,
-  rimG: 1,
-  rimB: 1,
-  haloR: 1,
-  haloG: 1,
-  haloB: 1,
-  specR: 1,
-  specG: 1,
-  specB: 1,
-  rainbow: 1,
+// ============================================================================
+// SharedValues + presets
+// ============================================================================
+
+const DEFAULT_FLAT: Record<LensColorName, number[]> = {
+  rim: flatten(LENS_COLOR_DEFAULTS.rim),
+  halo: flatten(LENS_COLOR_DEFAULTS.halo),
+  spec: flatten(LENS_COLOR_DEFAULTS.spec),
 };
 
-export const LENS_SPEC: Record<LensKey, LensSpec> = {
-  einstein: { label: "Einstein ×", min: 0, max: 4, decimals: 2, group: "gravity" },
-  falloff: { label: "Falloff ×", min: 1, max: 20, decimals: 1, group: "gravity" },
-  chroma: { label: "Chroma", min: 0, max: 0.2, decimals: 3, group: "gravity" },
-  bubble: { label: "Bubble ×", min: 0, max: 8, decimals: 2, group: "glass" },
-  refraction: { label: "Refraction", min: -2, max: 2, decimals: 2, group: "glass" },
-  shapeN: { label: "Shape n", min: 1, max: 16, decimals: 1, group: "glass" },
-  edge: { label: "Edge", min: 0, max: 0.5, decimals: 2, group: "glass" },
-  dispersion: { label: "Dispersion", min: 0, max: 2, decimals: 2, group: "glass" },
-  rim: { label: "Rim", min: 0, max: 1, decimals: 2, group: "glass" },
-  specular: { label: "Specular", min: 0, max: 2, decimals: 2, group: "glass" },
-  halo: { label: "Halo", min: 0, max: 1, decimals: 2, group: "glass" },
-  spread: { label: "Spread", min: 0, max: 1, decimals: 2, group: "glass" },
-  rimR: { label: "Rim R", min: 0, max: 1, decimals: 2, group: "color" },
-  rimG: { label: "Rim G", min: 0, max: 1, decimals: 2, group: "color" },
-  rimB: { label: "Rim B", min: 0, max: 1, decimals: 2, group: "color" },
-  haloR: { label: "Halo R", min: 0, max: 1, decimals: 2, group: "color" },
-  haloG: { label: "Halo G", min: 0, max: 1, decimals: 2, group: "color" },
-  haloB: { label: "Halo B", min: 0, max: 1, decimals: 2, group: "color" },
-  specR: { label: "Spec R", min: 0, max: 1, decimals: 2, group: "color" },
-  specG: { label: "Spec G", min: 0, max: 1, decimals: 2, group: "color" },
-  specB: { label: "Spec B", min: 0, max: 1, decimals: 2, group: "color" },
-  rainbow: { label: "Rainbow", min: 0, max: 1, decimals: 2, group: "glass" },
-};
-
-export const LENS_PRESETS: Record<LensPresetName, LensTuneData> = {
-  Both: LENS_DEFAULTS,
-  Gravity: { ...LENS_DEFAULTS, bubble: 0 },
-  Gargantua: { ...LENS_DEFAULTS, einstein: 0, chroma: 0 },
-};
-
-/** One SharedValue per knob, seeded with the defaults. */
+/** One SharedValue per knob and per color list, seeded with the defaults. */
 export const useLensTune = (): LensTuneValues => ({
   einstein: useSharedValue(LENS_DEFAULTS.einstein),
   falloff: useSharedValue(LENS_DEFAULTS.falloff),
@@ -189,20 +223,18 @@ export const useLensTune = (): LensTuneValues => ({
   specular: useSharedValue(LENS_DEFAULTS.specular),
   halo: useSharedValue(LENS_DEFAULTS.halo),
   spread: useSharedValue(LENS_DEFAULTS.spread),
-  rimR: useSharedValue(LENS_DEFAULTS.rimR),
-  rimG: useSharedValue(LENS_DEFAULTS.rimG),
-  rimB: useSharedValue(LENS_DEFAULTS.rimB),
-  haloR: useSharedValue(LENS_DEFAULTS.haloR),
-  haloG: useSharedValue(LENS_DEFAULTS.haloG),
-  haloB: useSharedValue(LENS_DEFAULTS.haloB),
-  specR: useSharedValue(LENS_DEFAULTS.specR),
-  specG: useSharedValue(LENS_DEFAULTS.specG),
-  specB: useSharedValue(LENS_DEFAULTS.specB),
   rainbow: useSharedValue(LENS_DEFAULTS.rainbow),
+  glow: useSharedValue(LENS_DEFAULTS.glow),
+  colors: {
+    rim: useSharedValue(DEFAULT_FLAT.rim),
+    halo: useSharedValue(DEFAULT_FLAT.halo),
+    spec: useSharedValue(DEFAULT_FLAT.spec),
+  },
 });
 
-/** Set every knob to a preset (plain set, JS side). */
+/** Set every knob to a preset and every color list to its default (plain set, JS side). */
 export const applyLensPreset = (values: LensTuneValues, preset: LensPresetName) => {
   const next = LENS_PRESETS[preset];
   for (const key of LENS_KEYS) values[key].value = next[key];
+  for (const name of LENS_COLOR_NAMES) values.colors[name].value = DEFAULT_FLAT[name].slice();
 };

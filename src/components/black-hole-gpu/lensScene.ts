@@ -4,7 +4,7 @@ import type {
   LayerSceneResult,
   SceneProps,
 } from "../gargantua-type-gpu/composeLayered";
-import { LensTune, type Params } from "./gpuTypes";
+import { LENS_MAX_COLORS, LensTune, type Params } from "./gpuTypes";
 import { lensLayout } from "./layouts";
 import { lensFs } from "./lensShaders";
 import type { LensTuneValues } from "./lensTune";
@@ -26,6 +26,9 @@ export type LensShared = {
   params?: TgpuBuffer<typeof Params> & UniformFlag;
 };
 
+/** One color slot as written to the uniform: rgb 0..1, w unused. */
+type Vec4Tuple = [number, number, number, number];
+
 // ============================================================================
 // Scene
 // ============================================================================
@@ -37,15 +40,17 @@ export type LensShared = {
  *   setup ─► take `root` + `params` from the vortex layer (via `shared`)
  *         ─► LensTune uniform buffer (seeded from the `tune` SharedValues)
  *         ─► linear sampler, one fullscreen render pipeline (no blend)
- *   per frame (composer, readsBackdrop) ─► write the 21 tune values
+ *   per frame (composer, readsBackdrop) ─► write the tune knobs + the three
+ *         color lists (packed to 6 vec4 each, plus counts)
  *         ─► bind group (params, tune, backdrop, sampler)
  *         ─► one fullscreen pass into the composer's target ─► submit
  *
  * KEY FEATURES:
  * - Reads the tile pass as its backdrop and reconstructs the whole frame:
  *   point-mass lens (flipped second image inside the Einstein radius), small
- *   chromatic split, glass bubble (gargantua look) with tunable rim, halo and
- *   specular colors; every knob is a live SharedValue (no rebuild)
+ *   chromatic split, glass bubble (gargantua look) with rim, halo and
+ *   specular color lists (1..6 colors, gradients, optional glow); every knob
+ *   and list is a live SharedValue (no rebuild)
  * - Exact passthrough of the backdrop (alpha included) until the hole exists,
  *   so the idle transparent frame stays transparent
  * - Shares the vortex layer's root and Params buffer: no copies, no extra
@@ -83,10 +88,37 @@ export const createLensScene =
      */
     const layout = lensLayout;
 
-    // Seeded from the SharedValues (not the defaults) so a scene rebuild
-    // resumes at the user's current tuning.
-    const tuneBuffer = root
-      .createBuffer(LensTune, {
+    // Local copy: the worklets below capture a number, not the gpuTypes import
+    // (which importForwarding would re-evaluate, typegpu included, on the UI runtime).
+    const maxColors = LENS_MAX_COLORS;
+
+    /**
+     * A flat rgb list (1..maxColors colors) as maxColors vec4 tuples, padded
+     * with the last color (unused slots are never read: the count clamps).
+     */
+    const packColors = (flat: number[]): Vec4Tuple[] => {
+      "worklet";
+      const count = Math.max(1, Math.min(maxColors, Math.floor(flat.length / 3)));
+      const out: Vec4Tuple[] = [];
+      for (let i = 0; i < maxColors; i++) {
+        const j = Math.min(i, count - 1) * 3;
+        out.push([flat[j] ?? 1, flat[j + 1] ?? 1, flat[j + 2] ?? 1, 0]);
+      }
+      return out;
+    };
+
+    const countOf = (flat: number[]) => {
+      "worklet";
+      return Math.max(1, Math.min(maxColors, Math.floor(flat.length / 3)));
+    };
+
+    /** Every LensTune field from the SharedValues (JS for the seed, UI per frame). */
+    const readTune = () => {
+      "worklet";
+      const rimFlat = tune.colors.rim.value;
+      const haloFlat = tune.colors.halo.value;
+      const specFlat = tune.colors.spec.value;
+      return {
         einstein: tune.einstein.value,
         falloff: tune.falloff.value,
         chroma: tune.chroma.value,
@@ -99,18 +131,20 @@ export const createLensScene =
         specular: tune.specular.value,
         halo: tune.halo.value,
         spread: tune.spread.value,
-        rimR: tune.rimR.value,
-        rimG: tune.rimG.value,
-        rimB: tune.rimB.value,
-        haloR: tune.haloR.value,
-        haloG: tune.haloG.value,
-        haloB: tune.haloB.value,
-        specR: tune.specR.value,
-        specG: tune.specG.value,
-        specB: tune.specB.value,
         rainbow: tune.rainbow.value,
-      })
-      .$usage("uniform");
+        glow: tune.glow.value,
+        rimCount: countOf(rimFlat),
+        haloCount: countOf(haloFlat),
+        specCount: countOf(specFlat),
+        rimColors: packColors(rimFlat),
+        haloColors: packColors(haloFlat),
+        specColors: packColors(specFlat),
+      };
+    };
+
+    // Seeded from the SharedValues (not the defaults) so a scene rebuild
+    // resumes at the user's current tuning.
+    const tuneBuffer = root.createBuffer(LensTune, readTune()).$usage("uniform");
 
     const pipeline = root.createRenderPipeline({
       vertex: fullscreenVs,
@@ -125,30 +159,7 @@ export const createLensScene =
         "worklet";
         // Defensive: the layer must be declared with readsBackdrop: true.
         if (!backdrop) return;
-        tuneBuffer.write({
-          einstein: tune.einstein.value,
-          falloff: tune.falloff.value,
-          chroma: tune.chroma.value,
-          bubble: tune.bubble.value,
-          refraction: tune.refraction.value,
-          shapeN: tune.shapeN.value,
-          edge: tune.edge.value,
-          dispersion: tune.dispersion.value,
-          rim: tune.rim.value,
-          specular: tune.specular.value,
-          halo: tune.halo.value,
-          spread: tune.spread.value,
-          rimR: tune.rimR.value,
-          rimG: tune.rimG.value,
-          rimB: tune.rimB.value,
-          haloR: tune.haloR.value,
-          haloG: tune.haloG.value,
-          haloB: tune.haloB.value,
-          specR: tune.specR.value,
-          specG: tune.specG.value,
-          specB: tune.specB.value,
-          rainbow: tune.rainbow.value,
-        });
+        tuneBuffer.write(readTune());
         const bindGroup = root.createBindGroup(layout, {
           u: params,
           t: tuneBuffer,

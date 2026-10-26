@@ -33,7 +33,8 @@
  *   fixed height in every state (the stage size drives a GPU rebuild)
  * - Gear button in the navigation header toggles SettingsPanel (portal, floats over
  *   the HUD, never resizes the stage): Sim tab (status, Speed 0.25×–4×, tile chips
- *   8/4/2 px, Sticky chip) and Lens tab (14 live knobs + three presets)
+ *   8/4/2 px, Sticky chip) and Lens tab (14 live knobs, rim/halo/specular color
+ *   lists with palette picks, three presets)
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
  * - Sticky patches (value noise + per-tile jitter) release late, new pattern per run
  * - Snapshot and scene share one device (useDevice makes a new one per call)

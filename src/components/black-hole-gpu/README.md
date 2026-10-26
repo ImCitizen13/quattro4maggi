@@ -84,14 +84,16 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 - `BlackHoleGpu.tsx` — state only: transition gate, snapshot texture, scene memo (deps: snapshot texture, tile), run state machine, phase/seed/sticky/speed/progress/paused/seekTarget SharedValues, HUD
 - `ProgressBar.tsx` — progress bar + percent readout + scrubber (pan, minDistance 0); writes `seekTarget`, all on the UI thread
 - `SettingsPanel.tsx` — bottom-docked panel via Portal, Sim | Lens tabs; Sim: status line, Speed slider, tile chips, Sticky chip
-- `LensPanel.tsx` — `LensTab`: Gravity / Glass groups, presets, slider grid (the Lens tab body)
+- `LensPanel.tsx` — `LensTab`: Gravity / Glass / Colors groups, presets, slider grid, and per effect (rim / halo / specular) a color list: palette dropdown (`BLACK_HOLE_PALETTES`: super-nova / event-horizon / accretion-disk, fills only that list), − / + (1..6 colors), one text cell per color (the Lens tab body)
+- `lensTune.ts` — knob defaults / ranges / presets, `parseColor` (`#rrggbb`, `#rgb`, `(r,g,b)` 0..255), color list setters (`setLensColors`, `setLensColorAt`: invalid text keeps the previous color), `useLensTune` (one SharedValue per knob, one `SharedValue<number[]>` of flat rgb per list)
+- `lensDials.ts` — DevTools Dials (dev only): Sim / Gravity / Glass sliders, a Color folder per effect (palette select, count 1..6, six color dials; a palette pick fills that list and is pushed back with `setDialValues`), preset actions
 - `DemoContent.tsx` — the RN view that gets swallowed (`collapsable={false}`, reports image load)
 - `snapshot.ts` — `createSnapshotTexture`, `captureInto` (`queue.drawElementImageToTexture`)
 - `vortexScene.ts` — base layer of `composeLayered`: setup, `frame` / `clearFrame` / `render` worklets, step clock, histogram readback, keyframes + seek, `VortexConfig` defaults; draws into the composer attachment and fills `LensShared`
 - `vortexShaders.ts` — raw WGSL bodies in TypeGPU shells (`initFn`, `stepFn`, `fullscreenVs`, `tileVs`), `tileFs` in TGSL; helpers `hash`, `holeAt`, `horizonOf`, `cellHash`, `stickOf`
 - `lensScene.ts` — lens layer (`readsBackdrop`); `LensShared` hands over the vortex `root` + `Params`
-- `lensShaders.ts` — `lensFs`: point-mass lens `src = r - RE²/r`, `RE = 1.8 × horizon × hole`, far-field falloff (6 RE), chromatic split `0.03 × deflection`, glass bubble with tunable rim / halo / specular colors and a `rainbow` rim blend (no disc or glow). Colors are set in the Lens panel (Glass tab) as text, `#rrggbb`, `#rgb` or `(r,g,b)` 0..255; `lensTune.ts` `parseColor` writes the `rimR/G/B`, `haloR/G/B`, `specR/G/B` channel SharedValues (invalid text keeps the previous color). A palette dropdown (`LIVE_BORDER_PALETTES`, "Palette 1..7") fills the three colors from its first three entries, and each field has a swatch picker for the chosen palette
-- `gpuTypes.ts` — `Particle` (pos, vel, home, release, state) and `Params` schemas
+- `lensShaders.ts` — `lensFs`: point-mass lens `src = r - RE²/r`, `RE = 1.8 × horizon × hole`, far-field falloff (6 RE), chromatic split `0.03 × deflection`, glass bubble. Rim, halo and specular each take a list of 1..6 colors: rim and halo are a cyclic gradient around the bubble angle (the rim still blends to the 6-stop rainbow by `rainbow`), specular goes from the highlight center (first color) to its falloff (last). `glow` (0 = off) adds a static additive bloom of the rim gradient (Gaussian on the outline, width `edge`) and the halo gradient (exponential fade outward, width `spread`). One white color per list with `glow` 0 is the original look (defaults and presets)
+- `gpuTypes.ts` — `Particle` (pos, vel, home, release, state), `Params` and `LensTune` schemas. `LensTune` = 17 f32 knobs + three `arrayOf(vec4f, 6)` color lists (368 B; vec4 because uniform array elements are 16 B-strided anyway); `lensScene` packs each flat rgb list to 6 vec4 + a count per frame
 - `layouts.ts` — compute (uniform, particles, deaths), render and lens bind group layouts (all group 0)
 - `../gargantua-type-gpu/composeLayered.ts` — layer composer; a layer returning `false` skips the rest + blit and returns `false`
 - `../gargantua-type-gpu/hooks/useWebGPU.tsx` — shared hook; `useWebGPUOnDevice` shares the snapshot's device; `render` returning `false` skips `present()`
@@ -128,7 +130,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 | Sim tab: Speed × | 0.25×–4×, live, sim time per real second | no |
 | Sim tab: 8 / 4 / 2 px | particle count | yes (mid-run: restarts at once on the same texture) |
 | Sim tab: Sticky | patches on/off (mid-run or done: restart) | no |
-| Lens tab | Gravity / Glass sub-tabs, presets, 21 live knobs | no |
+| Lens tab | Gravity / Glass / Colors sub-tabs, presets, 14 live knobs, rim / halo / specular color lists (palette pick per list) | no |
 
 ## Measurements (iPhone 17 Pro Simulator, 60 Hz cap)
 

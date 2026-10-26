@@ -80,7 +80,17 @@ export const Params = d
   .$name("Params");
 
 /**
- * Lens tuning uniform, 21 × f32 (TypeGPU pads it to the struct alignment).
+ * Max colors per lens color list (rim, halo, specular). Covers the largest
+ * palette in src/lib/palettes.ts (5). lensShaders.ts hardcodes the same 6
+ * when it clamps the counts: change both together.
+ */
+export const LENS_MAX_COLORS = 6;
+
+/**
+ * Lens tuning uniform: 17 × f32 knobs, then three color lists of
+ * LENS_MAX_COLORS × vec4f (rgb 0..1, w unused). A uniform array element is
+ * 16 B-strided anyway, so vec4f makes the layout explicit; TypeGPU pads the
+ * scalar block (68 B) up to the 16 B array alignment (80 B). Total 368 B.
  * Written every frame from SharedValues; defaults live in lensTune.ts.
  */
 export const LensTune = d
@@ -109,20 +119,20 @@ export const LensTune = d
     halo: d.f32,
     /** Outer halo width, fraction of the bubble radius. */
     spread: d.f32,
-    /** Rim color, 0..1 per channel. */
-    rimR: d.f32,
-    rimG: d.f32,
-    rimB: d.f32,
-    /** Halo color, 0..1 per channel. */
-    haloR: d.f32,
-    haloG: d.f32,
-    haloB: d.f32,
-    /** Specular color, 0..1 per channel. */
-    specR: d.f32,
-    specG: d.f32,
-    specB: d.f32,
-    /** Rim blend from the rim color (0) to the 6-stop rainbow (1). */
+    /** Rim blend from the rim gradient (0) to the 6-stop rainbow (1). */
     rainbow: d.f32,
+    /** Emissive bloom on the rim and halo gradients (0 = off). */
+    glow: d.f32,
+    /** Colors used from each list, 1..LENS_MAX_COLORS. */
+    rimCount: d.f32,
+    haloCount: d.f32,
+    specCount: d.f32,
+    /** Rim gradient stops around the bubble angle (cyclic). */
+    rimColors: d.arrayOf(d.vec4f, LENS_MAX_COLORS),
+    /** Halo gradient stops around the bubble angle (cyclic). */
+    haloColors: d.arrayOf(d.vec4f, LENS_MAX_COLORS),
+    /** Specular stops from the highlight center (first) to its falloff (last). */
+    specColors: d.arrayOf(d.vec4f, LENS_MAX_COLORS),
   })
   .$name("LensTune");
 

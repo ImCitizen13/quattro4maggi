@@ -3,33 +3,39 @@
  *
  * FLOW:
  *   SettingsPanel (Lens tab selected) ─► renders this body inside its own shell
- *   group tab ─► shows that group's sliders only (local state)
- *   preset chip ─► applyLensPreset writes every SharedValue, color texts reset
- *   color text / swatch / palette ─► parseColor ─► writes the rim/halo/spec
- *     channel SharedValues (invalid text is ignored, previous color stays)
+ *   group tab ─► Gravity / Glass sliders, or the Colors lists (local state)
+ *   preset chip ─► applyLensPreset writes every SharedValue, color lists reset
+ *   Colors, per effect (rim / halo / specular):
+ *     palette dropdown ─► paletteColors ─► setLensColors fills only that list
+ *     color text ─► parseColor ─► setLensColorAt (invalid text is ignored,
+ *       previous color stays)
+ *     − / + ─► drop the last color / repeat it (1..LENS_MAX_COLORS)
  *   TuningSlider drag ─► writes one SharedValue ─► lensScene reads it per frame
  *
  * KEY FEATURES:
  * - Body only: no Portal, no panel chrome, no close button (SettingsPanel owns them)
- * - Segmented Gravity | Glass group tabs and preset chips
- * - Active group only, three-column slider grid from LENS_SPEC
- * - No re-render per drag tick: sliders are UI-thread SharedValues
+ * - Segmented Gravity | Glass | Colors group tabs and preset chips
+ * - Active group only, three-column grid (sliders from LENS_SPEC, color cells)
+ * - No re-render per drag tick: sliders and color lists are UI-thread SharedValues
  */
 import { PressableScale } from "pressto";
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
-import { LIVE_BORDER_PALETTES } from "@/lib/palettes";
+import { BLACK_HOLE_PALETTES } from "@/lib/palettes";
 import {
   applyLensPreset,
-  getLensColorHex,
+  getLensColors,
   LENS_COLOR_DEFAULTS,
   LENS_COLOR_NAMES,
   LENS_KEYS,
+  LENS_MAX_COLORS,
   LENS_SPEC,
+  paletteColors,
   parseColor,
   rgbToHex,
-  setLensColor,
+  setLensColorAt,
+  setLensColors,
   type LensColorName,
   type LensKey,
   type LensPresetName,
@@ -41,13 +47,18 @@ import {
 // ============================================================================
 
 export type LensTabProps = {
-  /** The lens knobs (SharedValues) the sliders read and write. */
+  /** The lens knobs (SharedValues) the sliders and color lists read and write. */
   values: LensTuneValues;
   /** Width available to the body (panel width minus its padding), px. */
   width: number;
 };
 
-type LensGroup = "gravity" | "glass";
+type LensGroup = "gravity" | "glass" | "colors";
+
+type ColorTexts = Record<LensColorName, string[]>;
+
+/** Chosen palette per effect; null = custom (edited or default). */
+type PalettePicks = Record<LensColorName, number | null>;
 
 // ============================================================================
 // Constants
@@ -57,9 +68,10 @@ const PRESETS: readonly LensPresetName[] = ["Gravity", "Gargantua", "Both"];
 const GROUPS: readonly { id: LensGroup; title: string }[] = [
   { id: "gravity", title: "Gravity" },
   { id: "glass", title: "Glass" },
+  { id: "colors", title: "Colors" },
 ];
 
-// Three slider columns, two gaps of 12.
+// Three columns, two gaps of 12.
 const COLUMN_GAP = 12;
 const COLUMNS = 3;
 
@@ -69,8 +81,16 @@ const COLOR_LABELS: Record<LensColorName, string> = {
   spec: "Specular",
 };
 
-const keysOf = (group: LensGroup): LensKey[] =>
+const NO_PICKS: PalettePicks = { rim: null, halo: null, spec: null };
+
+const keysOf = (group: "gravity" | "glass"): LensKey[] =>
   LENS_KEYS.filter((key) => LENS_SPEC[key].group === group);
+
+const defaultTexts = (): ColorTexts => ({
+  rim: [...LENS_COLOR_DEFAULTS.rim],
+  halo: [...LENS_COLOR_DEFAULTS.halo],
+  spec: [...LENS_COLOR_DEFAULTS.spec],
+});
 
 // ============================================================================
 // Components
@@ -78,84 +98,168 @@ const keysOf = (group: LensGroup): LensKey[] =>
 
 type SwatchRowProps = {
   colors: readonly string[];
-  onPick?: (color: string) => void;
 };
 
-/** A row of color dots; tappable when onPick is given. */
-const SwatchRow = ({ colors, onPick }: SwatchRowProps) => (
+/** A row of color dots (invalid strings show black). */
+const SwatchRow = ({ colors }: SwatchRowProps) => (
   <View style={styles.swatchRow}>
-    {colors.map((color, i) => (
-      <PressableScale
-        key={`${color}-${i}`}
-        enabled={!!onPick}
-        style={[styles.swatch, { backgroundColor: color }]}
-        onPress={() => onPick?.(color)}
-      />
-    ))}
+    {colors.map((color, i) => {
+      const rgb = parseColor(color);
+      return (
+        <View
+          key={`${color}-${i}`}
+          style={[styles.dot, { backgroundColor: rgb ? rgbToHex(rgb) : "#000" }]}
+        />
+      );
+    })}
   </View>
 );
 
-type ColorFieldProps = {
-  label: string;
+type ColorCellProps = {
   text: string;
-  /** Colors of the chosen palette, offered as swatches. */
-  palette: readonly string[];
+  width: number;
   onChangeText: (text: string) => void;
 };
 
-/** Color text input with a live swatch and the palette's swatch picker. */
-const ColorField = ({ label, text, palette, onChangeText }: ColorFieldProps) => {
+/** One color of a list: live swatch + hex / "(r,g,b)" text input. */
+const ColorCell = ({ text, width, onChangeText }: ColorCellProps) => {
   const rgb = parseColor(text);
-  const valid = rgb !== null;
   return (
-    <View style={styles.field}>
-      <Text style={styles.caption}>{label}</Text>
-      <View style={styles.fieldRow}>
-        <View style={[styles.swatch, { backgroundColor: rgb ? rgbToHex(rgb) : "#000" }]} />
-        <TextInput
-          style={[styles.input, !valid && styles.inputInvalid]}
-          value={text}
-          onChangeText={onChangeText}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="#rrggbb or (r,g,b)"
-          placeholderTextColor="#666"
-        />
-        <SwatchRow colors={palette} onPick={onChangeText} />
-      </View>
+    <View style={[styles.cell, { width }]}>
+      <View style={[styles.dot, { backgroundColor: rgb ? rgbToHex(rgb) : "#000" }]} />
+      <TextInput
+        style={[styles.input, !rgb && styles.inputInvalid]}
+        value={text}
+        onChangeText={onChangeText}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="#rrggbb"
+        placeholderTextColor="#666"
+      />
     </View>
   );
 };
 
+type ColorListProps = {
+  label: string;
+  texts: string[];
+  pick: number | null;
+  open: boolean;
+  columnWidth: number;
+  onToggleMenu: () => void;
+  onPickPalette: (index: number) => void;
+  onChangeAt: (index: number, text: string) => void;
+  onAdd: () => void;
+  onRemove: () => void;
+};
+
+/** One effect's color list: palette dropdown, − / + and the color cells. */
+const ColorList = ({
+  label,
+  texts,
+  pick,
+  open,
+  columnWidth,
+  onToggleMenu,
+  onPickPalette,
+  onChangeAt,
+  onAdd,
+  onRemove,
+}: ColorListProps) => (
+  <View style={styles.list}>
+    <View style={styles.header}>
+      <Text style={[styles.caption, styles.listLabel]}>{label}</Text>
+      <PressableScale style={[styles.chip, styles.dropdown]} onPress={onToggleMenu}>
+        <Text style={styles.label}>{pick === null ? "Custom" : (BLACK_HOLE_PALETTES[pick]?.name ?? "Custom")}</Text>
+        <Text style={styles.label}>{open ? "▴" : "▾"}</Text>
+      </PressableScale>
+      <PressableScale
+        style={[styles.chip, texts.length <= 1 && styles.chipDisabled]}
+        enabled={texts.length > 1}
+        onPress={onRemove}
+      >
+        <Text style={styles.label}>−</Text>
+      </PressableScale>
+      <PressableScale
+        style={[styles.chip, texts.length >= LENS_MAX_COLORS && styles.chipDisabled]}
+        enabled={texts.length < LENS_MAX_COLORS}
+        onPress={onAdd}
+      >
+        <Text style={styles.label}>+</Text>
+      </PressableScale>
+    </View>
+    {open && (
+      <View style={styles.menu}>
+        {BLACK_HOLE_PALETTES.map(({ name, colors }, i) => (
+          <PressableScale
+            key={name}
+            style={[styles.menuItem, i === pick && styles.tabActive]}
+            onPress={() => onPickPalette(i)}
+          >
+            <Text style={styles.label}>{name}</Text>
+            <SwatchRow colors={colors} />
+          </PressableScale>
+        ))}
+      </View>
+    )}
+    <View style={styles.grid}>
+      {texts.map((text, i) => (
+        <ColorCell
+          key={i}
+          text={text}
+          width={columnWidth}
+          onChangeText={(next) => onChangeAt(i, next)}
+        />
+      ))}
+    </View>
+  </View>
+);
+
 export const LensTab = ({ values, width }: LensTabProps) => {
   const [group, setGroup] = useState<LensGroup>("glass");
-  const [paletteIndex, setPaletteIndex] = useState(0);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  // The text is the source of truth; seeded from the current channels.
-  const [texts, setTexts] = useState<Record<LensColorName, string>>(() => ({
-    rim: getLensColorHex(values, "rim"),
-    halo: getLensColorHex(values, "halo"),
-    spec: getLensColorHex(values, "spec"),
+  const [menu, setMenu] = useState<LensColorName | null>(null);
+  const [picks, setPicks] = useState<PalettePicks>(NO_PICKS);
+  // The texts are the source of truth for the inputs; seeded from the lists.
+  const [texts, setTexts] = useState<ColorTexts>(() => ({
+    rim: getLensColors(values, "rim"),
+    halo: getLensColors(values, "halo"),
+    spec: getLensColors(values, "spec"),
   }));
   const columnWidth = (width - (COLUMNS - 1) * COLUMN_GAP) / COLUMNS;
-  const palette = LIVE_BORDER_PALETTES[paletteIndex];
 
-  // Invalid text is shown but never applied: the previous color stays.
-  const changeColor = (name: LensColorName, text: string) => {
-    setTexts((prev) => ({ ...prev, [name]: text }));
-    setLensColor(values, name, text);
+  const setList = (name: LensColorName, list: string[], pick: number | null) => {
+    setTexts((prev) => ({ ...prev, [name]: list }));
+    setPicks((prev) => ({ ...prev, [name]: pick }));
   };
 
-  const pickPalette = (index: number) => {
-    const colors = LIVE_BORDER_PALETTES[index];
-    setPaletteIndex(index);
-    setPaletteOpen(false);
-    LENS_COLOR_NAMES.forEach((name, i) => changeColor(name, colors[i % colors.length]));
+  // Invalid text is shown but never applied: the previous color stays.
+  const changeAt = (name: LensColorName, index: number, text: string) => {
+    setList(name, texts[name].map((t, i) => (i === index ? text : t)), null);
+    setLensColorAt(values, name, index, text);
+  };
+
+  // − / + work on the applied list, so an invalid text never reaches the shader.
+  const addColor = (name: LensColorName) => {
+    const applied = getLensColors(values, name);
+    const next = [...applied, applied[applied.length - 1]];
+    if (setLensColors(values, name, next)) setList(name, next, null);
+  };
+
+  const removeColor = (name: LensColorName) => {
+    const next = getLensColors(values, name).slice(0, -1);
+    if (setLensColors(values, name, next)) setList(name, next, null);
+  };
+
+  const pickPalette = (name: LensColorName, index: number) => {
+    const colors = paletteColors(index);
+    setMenu(null);
+    if (setLensColors(values, name, colors)) setList(name, colors, index);
   };
 
   const pickPreset = (name: LensPresetName) => {
     applyLensPreset(values, name);
-    setTexts({ ...LENS_COLOR_DEFAULTS });
+    setTexts(defaultTexts());
+    setPicks(NO_PICKS);
   };
 
   return (
@@ -178,68 +282,46 @@ export const LensTab = ({ values, width }: LensTabProps) => {
       <View style={styles.header}>
         <Text style={styles.caption}>Preset</Text>
         {PRESETS.map((name) => (
-          <PressableScale
-            key={name}
-            style={styles.chip}
-            onPress={() => pickPreset(name)}
-          >
+          <PressableScale key={name} style={styles.chip} onPress={() => pickPreset(name)}>
             <Text style={styles.label}>{name}</Text>
           </PressableScale>
         ))}
       </View>
-      <View style={styles.grid}>
-        {keysOf(group).map((key) => {
-          const spec = LENS_SPEC[key];
-          return (
-            <View key={key} style={{ width: columnWidth }}>
-              <TuningSlider
-                label={spec.label}
-                value={values[key]}
-                min={spec.min}
-                max={spec.max}
-                decimals={spec.decimals}
-                width={columnWidth}
-              />
-            </View>
-          );
-        })}
-      </View>
-      {group === "glass" && (
+      {group === "colors" ? (
         <View style={styles.colors}>
-          <View style={styles.header}>
-            <Text style={styles.caption}>Palette</Text>
-            <PressableScale
-              style={[styles.chip, styles.dropdown]}
-              onPress={() => setPaletteOpen((open) => !open)}
-            >
-              <Text style={styles.label}>Palette {paletteIndex + 1}</Text>
-              <SwatchRow colors={palette} />
-              <Text style={styles.label}>{paletteOpen ? "▴" : "▾"}</Text>
-            </PressableScale>
-          </View>
-          {paletteOpen && (
-            <View style={styles.menu}>
-              {LIVE_BORDER_PALETTES.map((colors, i) => (
-                <PressableScale
-                  key={i}
-                  style={[styles.menuItem, i === paletteIndex && styles.tabActive]}
-                  onPress={() => pickPalette(i)}
-                >
-                  <Text style={styles.label}>Palette {i + 1}</Text>
-                  <SwatchRow colors={colors} />
-                </PressableScale>
-              ))}
-            </View>
-          )}
           {LENS_COLOR_NAMES.map((name) => (
-            <ColorField
+            <ColorList
               key={name}
               label={COLOR_LABELS[name]}
-              text={texts[name]}
-              palette={palette}
-              onChangeText={(text) => changeColor(name, text)}
+              texts={texts[name]}
+              pick={picks[name]}
+              open={menu === name}
+              columnWidth={columnWidth}
+              onToggleMenu={() => setMenu((open) => (open === name ? null : name))}
+              onPickPalette={(index) => pickPalette(name, index)}
+              onChangeAt={(index, text) => changeAt(name, index, text)}
+              onAdd={() => addColor(name)}
+              onRemove={() => removeColor(name)}
             />
           ))}
+        </View>
+      ) : (
+        <View style={styles.grid}>
+          {keysOf(group).map((key) => {
+            const spec = LENS_SPEC[key];
+            return (
+              <View key={key} style={{ width: columnWidth }}>
+                <TuningSlider
+                  label={spec.label}
+                  value={values[key]}
+                  min={spec.min}
+                  max={spec.max}
+                  decimals={spec.decimals}
+                  width={columnWidth}
+                />
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -279,13 +361,16 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: COLUMN_GAP },
   chip: {
     paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     borderRadius: 12,
     backgroundColor: "#2a2a2a",
   },
+  chipDisabled: { opacity: 0.35 },
   label: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  colors: { gap: 8 },
-  dropdown: { flexDirection: "row", alignItems: "center", gap: 8 },
+  colors: { gap: 12 },
+  list: { gap: 8 },
+  listLabel: { width: 64 },
+  dropdown: { flex: 1, flexDirection: "row", justifyContent: "space-between", gap: 8 },
   menu: { gap: 4, padding: 4, borderRadius: 12, backgroundColor: "#0d0d0d" },
   menuItem: {
     flexDirection: "row",
@@ -295,21 +380,20 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   swatchRow: { flexDirection: "row", gap: 4 },
-  swatch: {
+  dot: {
     width: 18,
     height: 18,
     borderRadius: 9,
     borderWidth: 1,
     borderColor: "#ffffff40",
   },
-  field: { gap: 4 },
-  fieldRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cell: { flexDirection: "row", alignItems: "center", gap: 6 },
   input: {
     flex: 1,
     color: "#fff",
     fontSize: 12,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#3a3a3a",
