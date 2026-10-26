@@ -38,7 +38,12 @@ bun run dials:build   # once, and after any change under plugins/rozenite-plugin
 bun run start:dials   # = WITH_ROZENITE=true expo start
 ```
 
-Then open React Native DevTools (press `j` in Metro) and open the **Dials** tab.
+Then open React Native DevTools (press `j` in Metro, or use
+`http://127.0.0.1:8081/...`, not `localhost`; see Gotchas) and open the **Dials** tab.
+
+Verified 2026-10-26 on the iOS simulator. Dial drags update the app's SharedValues live:
+the in-app Settings sliders follow the panel and the lens glow visibly changes. Preset
+actions round-trip back into the panel.
 The panel shows "Connecting…" until the app connects, then one DialKit panel per
 mounted `useDials*` call.
 
@@ -197,6 +202,20 @@ Typecheck it with `cd plugins/rozenite-plugin-dialkit && bunx tsc --noEmit`.
 ---
 
 ## Gotchas
+
+- **Open DevTools at `http://127.0.0.1:8081`, never `localhost`.** Expo's debug
+  middleware (`createDebugMiddleware.js`, `isMatchingOrigin`) calls `socket.terminate()`
+  on any debugger websocket whose `Origin` host differs from Metro's `serverBaseUrl`
+  (`127.0.0.1:8081`). A frontend loaded from `localhost:8081` connects, then drops with
+  `1006` and loops on "Reconnect DevTools". The Dials tab spins forever, and Metro logs
+  nothing at the normal log level. Pressing `j` in Metro opens the correct origin. If you
+  build the URL by hand from `/json/list`, swap the host to `127.0.0.1`. Don't use
+  `--localhost`: it binds IPv6 only, so `127.0.0.1` is refused.
+- **Persisted panel values win over code defaults.** DialKit keeps
+  `dialkit:<id>` in the panel's localStorage (per DevTools origin) and pushes it on
+  every connect. To return to code defaults, use the panel's reset or clear that key.
+- **Don't scroll over the panel's sliders.** DialKit's default slider interaction is
+  `scroll`, so the wheel changes values. Collapse folders to move around instead.
 
 - **Only `__DEV__ ? a : b` strips a dev-only require.** A `require` after
   `if (!__DEV__) return;` stays in the release bundle (this happened here first). To
