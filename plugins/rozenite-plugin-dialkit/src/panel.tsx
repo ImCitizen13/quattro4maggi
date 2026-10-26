@@ -127,11 +127,17 @@ export default function DialsPanel() {
 // ============================================================================
 
 const styles = {
+  // Rozenite's iframe body is `overflow: hidden`, so the host itself must be
+  // the scroll container (a min-height host just grows and gets clipped).
   host: {
-    minHeight: "100vh",
+    height: "100vh",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
     background: "#1a1a1a",
     color: "#fff",
-    padding: 16,
+    // No top padding: DialKit's sticky header would pin below it and let
+    // scrolled rows show through the gap.
+    padding: "0 16px 16px",
     boxSizing: "border-box",
     fontFamily: "system-ui, sans-serif",
   },
