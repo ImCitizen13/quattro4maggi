@@ -2,7 +2,8 @@
  * useLensDials — the lens knobs and sim speed in the DevTools Dials panel.
  *
  * FLOW:
- *   LENS_SPEC ─► DialKit config (Sim / Gravity / Glass folders + preset actions)
+ *   LENS_SPEC ─► DialKit config (Sim / Gravity / Glass / Color folders + preset actions)
+ *   Color folder = native DialKit color dials ─► setLensColor (rim / halo / spec)
  *   panel drag ─► useDialsListener ─► writes the existing SharedValues
  *     (same ones SettingsPanel drives; lensScene / vortexScene read them per frame)
  *   preset action ─► applyLensPreset ─► setDialValues pushes it back to the panel
@@ -17,6 +18,8 @@ import type { SharedValue } from "react-native-reanimated";
 import { setDialValues, useDialsListener } from "@/lib/dials";
 import {
   applyLensPreset,
+  LENS_COLOR_DEFAULTS,
+  LENS_COLOR_NAMES,
   LENS_DEFAULTS,
   LENS_KEYS,
   LENS_PRESETS,
@@ -25,6 +28,7 @@ import {
   type LensPresetName,
   type LensSpec,
   type LensTuneValues,
+  setLensColor,
 } from "./lensTune";
 import { SPEED_MAX, SPEED_MIN } from "./vortexScene";
 
@@ -54,6 +58,11 @@ const LENS_DIALS = {
   sim: { speed: [1, SPEED_MIN, SPEED_MAX, 0.05] as Slider },
   gravity: sliders("gravity"),
   glass: sliders("glass"),
+  color: {
+    rim: { type: "color", default: LENS_COLOR_DEFAULTS.rim },
+    halo: { type: "color", default: LENS_COLOR_DEFAULTS.halo },
+    spec: { type: "color", default: LENS_COLOR_DEFAULTS.spec },
+  },
   presets: {
     gravity: { type: "action", label: "Gravity" },
     gargantua: { type: "action", label: "Gargantua" },
@@ -82,6 +91,7 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
         const value = tuned[key];
         if (value !== undefined) lens[key].set(value);
       }
+      for (const name of LENS_COLOR_NAMES) setLensColor(lens, name, values.color[name]);
     },
     {
       id: DIAL_ID,
@@ -92,6 +102,7 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
         setDialValues(DIAL_ID, {
           gravity: valuesFor("gravity", preset),
           glass: valuesFor("glass", preset),
+          color: { ...LENS_COLOR_DEFAULTS },
         });
       },
     },
