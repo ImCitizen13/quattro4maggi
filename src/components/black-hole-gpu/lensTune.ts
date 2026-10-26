@@ -10,8 +10,6 @@ export const LENS_KEYS = [
   "einstein",
   "falloff",
   "chroma",
-  "glow",
-  "disc",
   "bubble",
   "refraction",
   "shapeN",
@@ -21,6 +19,16 @@ export const LENS_KEYS = [
   "specular",
   "halo",
   "spread",
+  "rimR",
+  "rimG",
+  "rimB",
+  "haloR",
+  "haloG",
+  "haloB",
+  "specR",
+  "specG",
+  "specB",
+  "rainbow",
 ] as const;
 
 export type LensKey = (typeof LENS_KEYS)[number];
@@ -37,12 +45,11 @@ export type LensSpec = {
   group: "gravity" | "glass";
 };
 
+
 export const LENS_DEFAULTS: LensTuneData = {
   einstein: 1.8,
   falloff: 6,
   chroma: 0.03,
-  glow: 1,
-  disc: 1,
   bubble: 2.8,
   refraction: 0.5,
   shapeN: 2,
@@ -52,14 +59,22 @@ export const LENS_DEFAULTS: LensTuneData = {
   specular: 1,
   halo: 0.15,
   spread: 0.2,
+  rimR: 1,
+  rimG: 1,
+  rimB: 1,
+  haloR: 1,
+  haloG: 1,
+  haloB: 1,
+  specR: 1,
+  specG: 1,
+  specB: 1,
+  rainbow: 1,
 };
 
 export const LENS_SPEC: Record<LensKey, LensSpec> = {
   einstein: { label: "Einstein ×", min: 0, max: 4, decimals: 2, group: "gravity" },
   falloff: { label: "Falloff ×", min: 1, max: 20, decimals: 1, group: "gravity" },
   chroma: { label: "Chroma", min: 0, max: 0.2, decimals: 3, group: "gravity" },
-  glow: { label: "Glow", min: 0, max: 3, decimals: 2, group: "gravity" },
-  disc: { label: "Disc ×", min: 0, max: 1.5, decimals: 2, group: "gravity" },
   bubble: { label: "Bubble ×", min: 0, max: 8, decimals: 2, group: "glass" },
   refraction: { label: "Refraction", min: -2, max: 2, decimals: 2, group: "glass" },
   shapeN: { label: "Shape n", min: 1, max: 16, decimals: 1, group: "glass" },
@@ -69,12 +84,22 @@ export const LENS_SPEC: Record<LensKey, LensSpec> = {
   specular: { label: "Specular", min: 0, max: 2, decimals: 2, group: "glass" },
   halo: { label: "Halo", min: 0, max: 1, decimals: 2, group: "glass" },
   spread: { label: "Spread", min: 0, max: 1, decimals: 2, group: "glass" },
+  rimR: { label: "Rim R", min: 0, max: 1, decimals: 2, group: "glass" },
+  rimG: { label: "Rim G", min: 0, max: 1, decimals: 2, group: "glass" },
+  rimB: { label: "Rim B", min: 0, max: 1, decimals: 2, group: "glass" },
+  haloR: { label: "Halo R", min: 0, max: 1, decimals: 2, group: "glass" },
+  haloG: { label: "Halo G", min: 0, max: 1, decimals: 2, group: "glass" },
+  haloB: { label: "Halo B", min: 0, max: 1, decimals: 2, group: "glass" },
+  specR: { label: "Spec R", min: 0, max: 1, decimals: 2, group: "glass" },
+  specG: { label: "Spec G", min: 0, max: 1, decimals: 2, group: "glass" },
+  specB: { label: "Spec B", min: 0, max: 1, decimals: 2, group: "glass" },
+  rainbow: { label: "Rainbow", min: 0, max: 1, decimals: 2, group: "glass" },
 };
 
 export const LENS_PRESETS: Record<LensPresetName, LensTuneData> = {
   Both: LENS_DEFAULTS,
   Gravity: { ...LENS_DEFAULTS, bubble: 0 },
-  Gargantua: { ...LENS_DEFAULTS, einstein: 0, chroma: 0, glow: 0, disc: 0 },
+  Gargantua: { ...LENS_DEFAULTS, einstein: 0, chroma: 0 },
 };
 
 /** One SharedValue per knob, seeded with the defaults. */
@@ -82,8 +107,6 @@ export const useLensTune = (): LensTuneValues => ({
   einstein: useSharedValue(LENS_DEFAULTS.einstein),
   falloff: useSharedValue(LENS_DEFAULTS.falloff),
   chroma: useSharedValue(LENS_DEFAULTS.chroma),
-  glow: useSharedValue(LENS_DEFAULTS.glow),
-  disc: useSharedValue(LENS_DEFAULTS.disc),
   bubble: useSharedValue(LENS_DEFAULTS.bubble),
   refraction: useSharedValue(LENS_DEFAULTS.refraction),
   shapeN: useSharedValue(LENS_DEFAULTS.shapeN),
@@ -93,6 +116,16 @@ export const useLensTune = (): LensTuneValues => ({
   specular: useSharedValue(LENS_DEFAULTS.specular),
   halo: useSharedValue(LENS_DEFAULTS.halo),
   spread: useSharedValue(LENS_DEFAULTS.spread),
+  rimR: useSharedValue(LENS_DEFAULTS.rimR),
+  rimG: useSharedValue(LENS_DEFAULTS.rimG),
+  rimB: useSharedValue(LENS_DEFAULTS.rimB),
+  haloR: useSharedValue(LENS_DEFAULTS.haloR),
+  haloG: useSharedValue(LENS_DEFAULTS.haloG),
+  haloB: useSharedValue(LENS_DEFAULTS.haloB),
+  specR: useSharedValue(LENS_DEFAULTS.specR),
+  specG: useSharedValue(LENS_DEFAULTS.specG),
+  specB: useSharedValue(LENS_DEFAULTS.specB),
+  rainbow: useSharedValue(LENS_DEFAULTS.rainbow),
 });
 
 /** Set every knob to a preset (plain set, JS side). */

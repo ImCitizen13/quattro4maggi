@@ -22,11 +22,11 @@ import { horizonOf } from "./vortexShaders";
 //               R = rh * bubble (R <= 0 disables it). Superellipse outline
 //               (shapeN), signed refraction (positive barrel, negative
 //               pincushion), rim band (edge) with chromatic dispersion and a
-//               prismatic rainbow (rim), specular gain, outer halo (halo,
-//               spread). Its sample points start from the gravity source g.
-//   glow        accretion glow, peaking just outside the horizon, fading up
-//               with the hole spring, scaled by glow
-//   disc        black inside rh * disc (smoothstep rim, disc <= 0 disables it)
+//               rim color (rimR/G/B) blended toward a prismatic rainbow by
+//               rainbow, specular gain tinted by specR/G/B, outer halo
+//               (halo, spread) tinted by haloR/G/B. Its sample points start
+//               from the gravity source g.
+//   The hole itself is not drawn here: the lens only bends the backdrop.
 //
 // Raw WGSL body in a TypeGPU shell, same rules as vortexShaders: never a
 // backtick and never the word "in" in a body comment.
@@ -95,23 +95,17 @@ export const lensFs = tgpu.fragmentFn({
 
     let specDot = max(dot(dir, vec2f(-0.4, -0.6)), 0.0);
     let spec = (pow(specDot, 32.0) * 0.6 + pow(specDot, 8.0) * 0.15) * T.specular;
-    let withRim = mix(interior, rainbow, edgeFactor * T.rim) + rainbow * (edgeFactor * T.rim / 3.0);
-    lit = withRim + vec3f(spec);
+    let rimCol = mix(vec3f(T.rimR, T.rimG, T.rimB), rainbow, T.rainbow);
+    let withRim = mix(interior, rimCol, edgeFactor * T.rim) + rimCol * (edgeFactor * T.rim / 3.0);
+    lit = withRim + vec3f(T.specR, T.specG, T.specB) * spec;
   }
 
   let cr = textureSampleLevel(L.$.backdrop, L.$.samp, (g + dir * ca) / dims, 0.0).r;
   let cg = textureSampleLevel(L.$.backdrop, L.$.samp, g / dims, 0.0).g;
   let cb = textureSampleLevel(L.$.backdrop, L.$.samp, (g - dir * ca) / dims, 0.0).b;
-  let outside = mix(vec3f(cr, cg, cb), vec3f(1.0), halo);
+  let outside = mix(vec3f(cr, cg, cb), vec3f(T.haloR, T.haloG, T.haloB), halo);
   let rgb = mix(outside, lit, mask);
-
-  let x = r / rh;
-  let ring = exp(-pow((x - 1.25) * 2.2, 2.0)) * 0.9 + exp(-x * 0.6) * 0.25;
-  let glow = vec3f(1.0, 0.55, 0.2) * ring * clamp(U.hole, 0.0, 1.0) * T.glow;
-  let discR = rh * T.disc;
-  var disc = 1.0;
-  if (discR > 0.0) { disc = smoothstep(discR, discR * 1.06, r); }
-  return vec4f((rgb + glow) * disc, 1.0);
+  return vec4f(rgb, 1.0);
 }`
   .$uses({ L: lensLayout, horizonOf })
   .$name("lensFs");

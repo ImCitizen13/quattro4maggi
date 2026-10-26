@@ -90,7 +90,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 - `vortexScene.ts` — base layer of `composeLayered`: setup, `frame` / `clearFrame` / `render` worklets, step clock, histogram readback, keyframes + seek, `VortexConfig` defaults; draws into the composer attachment and fills `LensShared`
 - `vortexShaders.ts` — raw WGSL bodies in TypeGPU shells (`initFn`, `stepFn`, `fullscreenVs`, `tileVs`), `tileFs` in TGSL; helpers `hash`, `holeAt`, `horizonOf`, `cellHash`, `stickOf`
 - `lensScene.ts` — lens layer (`readsBackdrop`); `LensShared` hands over the vortex `root` + `Params`
-- `lensShaders.ts` — `lensFs`: point-mass lens `src = r - RE²/r`, `RE = 1.8 × horizon × hole`, far-field falloff (6 RE), chromatic split `0.03 × deflection`, black disc at the current horizon, accretion glow (moved from the old `bgFs`)
+- `lensShaders.ts` — `lensFs`: point-mass lens `src = r - RE²/r`, `RE = 1.8 × horizon × hole`, far-field falloff (6 RE), chromatic split `0.03 × deflection`, glass bubble with tunable rim / halo / specular colors and a `rainbow` rim blend (no disc or glow)
 - `gpuTypes.ts` — `Particle` (pos, vel, home, release, state) and `Params` schemas
 - `layouts.ts` — compute (uniform, particles, deaths), render and lens bind group layouts (all group 0)
 - `../gargantua-type-gpu/composeLayered.ts` — layer composer; a layer returning `false` skips the rest + blit and returns `false`
@@ -128,7 +128,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 | Sim tab: Speed × | 0.25×–4×, live, sim time per real second | no |
 | Sim tab: 8 / 4 / 2 px | particle count | yes (mid-run: restarts at once on the same texture) |
 | Sim tab: Sticky | patches on/off (mid-run or done: restart) | no |
-| Lens tab | Gravity / Glass sub-tabs, presets, 14 live knobs | no |
+| Lens tab | Gravity / Glass sub-tabs, presets, 21 live knobs | no |
 
 ## Measurements (iPhone 17 Pro Simulator, 60 Hz cap)
 

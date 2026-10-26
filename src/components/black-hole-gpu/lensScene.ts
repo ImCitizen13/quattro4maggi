@@ -37,15 +37,15 @@ export type LensShared = {
  *   setup ─► take `root` + `params` from the vortex layer (via `shared`)
  *         ─► LensTune uniform buffer (seeded from the `tune` SharedValues)
  *         ─► linear sampler, one fullscreen render pipeline (no blend)
- *   per frame (composer, readsBackdrop) ─► write the 14 tune values
+ *   per frame (composer, readsBackdrop) ─► write the 21 tune values
  *         ─► bind group (params, tune, backdrop, sampler)
  *         ─► one fullscreen pass into the composer's target ─► submit
  *
  * KEY FEATURES:
  * - Reads the tile pass as its backdrop and reconstructs the whole frame:
  *   point-mass lens (flipped second image inside the Einstein radius), small
- *   chromatic split, glass bubble (gargantua look), accretion glow and the
- *   black disc; every knob is a live SharedValue (no rebuild)
+ *   chromatic split, glass bubble (gargantua look) with tunable rim, halo and
+ *   specular colors; every knob is a live SharedValue (no rebuild)
  * - Exact passthrough of the backdrop (alpha included) until the hole exists,
  *   so the idle transparent frame stays transparent
  * - Shares the vortex layer's root and Params buffer: no copies, no extra
@@ -90,8 +90,6 @@ export const createLensScene =
         einstein: tune.einstein.value,
         falloff: tune.falloff.value,
         chroma: tune.chroma.value,
-        glow: tune.glow.value,
-        disc: tune.disc.value,
         bubble: tune.bubble.value,
         refraction: tune.refraction.value,
         shapeN: tune.shapeN.value,
@@ -101,6 +99,16 @@ export const createLensScene =
         specular: tune.specular.value,
         halo: tune.halo.value,
         spread: tune.spread.value,
+        rimR: tune.rimR.value,
+        rimG: tune.rimG.value,
+        rimB: tune.rimB.value,
+        haloR: tune.haloR.value,
+        haloG: tune.haloG.value,
+        haloB: tune.haloB.value,
+        specR: tune.specR.value,
+        specG: tune.specG.value,
+        specB: tune.specB.value,
+        rainbow: tune.rainbow.value,
       })
       .$usage("uniform");
 
@@ -121,8 +129,6 @@ export const createLensScene =
           einstein: tune.einstein.value,
           falloff: tune.falloff.value,
           chroma: tune.chroma.value,
-          glow: tune.glow.value,
-          disc: tune.disc.value,
           bubble: tune.bubble.value,
           refraction: tune.refraction.value,
           shapeN: tune.shapeN.value,
@@ -132,6 +138,16 @@ export const createLensScene =
           specular: tune.specular.value,
           halo: tune.halo.value,
           spread: tune.spread.value,
+          rimR: tune.rimR.value,
+          rimG: tune.rimG.value,
+          rimB: tune.rimB.value,
+          haloR: tune.haloR.value,
+          haloG: tune.haloG.value,
+          haloB: tune.haloB.value,
+          specR: tune.specR.value,
+          specG: tune.specG.value,
+          specB: tune.specB.value,
+          rainbow: tune.rainbow.value,
         });
         const bindGroup = root.createBindGroup(layout, {
           u: params,

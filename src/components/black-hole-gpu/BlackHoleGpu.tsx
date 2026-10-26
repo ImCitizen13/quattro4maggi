@@ -11,7 +11,7 @@
  *          └─ per frame (ui-worklet, composeLayered): vortex layer = compute
  *               `step` (N × h=1/120) ─► 6 × N instanced tiles sampling the
  *               snapshot over space ─► lens layer (reads that as its backdrop):
- *               gravitational lensing + glow + black disc ─► blit to the swapchain
+ *               gravitational lensing + glass bubble ─► blit to the swapchain
  *               ─► writes `progress` (fraction of tiles swallowed)
  *          └─ timeline: hole grows in (0 s) → release wave (0.6 s)
  *     └─ Pause (running) ─► `paused` = true: sim frozen, frames still drawn

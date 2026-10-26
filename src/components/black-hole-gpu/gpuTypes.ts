@@ -80,7 +80,7 @@ export const Params = d
   .$name("Params");
 
 /**
- * Lens tuning uniform, 14 × f32 (TypeGPU pads it to the struct alignment).
+ * Lens tuning uniform, 21 × f32 (TypeGPU pads it to the struct alignment).
  * Written every frame from SharedValues; defaults live in lensTune.ts.
  */
 export const LensTune = d
@@ -91,10 +91,6 @@ export const LensTune = d
     falloff: d.f32,
     /** Gravity chromatic split, fraction of the deflection. */
     chroma: d.f32,
-    /** Accretion glow gain. */
-    glow: d.f32,
-    /** Black disc radius as a multiple of the horizon radius. */
-    disc: d.f32,
     /** Glass bubble radius as a multiple of the horizon radius (0 = off). */
     bubble: d.f32,
     /** Signed refraction: positive = barrel, negative = pincushion. */
@@ -113,6 +109,20 @@ export const LensTune = d
     halo: d.f32,
     /** Outer halo width, fraction of the bubble radius. */
     spread: d.f32,
+    /** Rim color, 0..1 per channel. */
+    rimR: d.f32,
+    rimG: d.f32,
+    rimB: d.f32,
+    /** Halo color, 0..1 per channel. */
+    haloR: d.f32,
+    haloG: d.f32,
+    haloB: d.f32,
+    /** Specular color, 0..1 per channel. */
+    specR: d.f32,
+    specG: d.f32,
+    specB: d.f32,
+    /** Rim blend from the rim color (0) to the 6-stop rainbow (1). */
+    rainbow: d.f32,
   })
   .$name("LensTune");
 
