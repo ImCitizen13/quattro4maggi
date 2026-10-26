@@ -42,7 +42,80 @@ export type LensSpec = {
   min: number;
   max: number;
   decimals: number;
-  group: "gravity" | "glass";
+  /** "color" channels have no slider: they are driven by the color strings. */
+  group: "gravity" | "glass" | "color";
+};
+
+// ============================================================================
+// Color strings (rim / halo / specular)
+// ============================================================================
+
+export type LensColorName = "rim" | "halo" | "spec";
+
+export const LENS_COLOR_NAMES: readonly LensColorName[] = ["rim", "halo", "spec"];
+
+/** Default color strings (all white, matching the original look). */
+export const LENS_COLOR_DEFAULTS: Record<LensColorName, string> = {
+  rim: "#ffffff",
+  halo: "#ffffff",
+  spec: "#ffffff",
+};
+
+const CHANNEL_KEYS: Record<LensColorName, readonly [LensKey, LensKey, LensKey]> = {
+  rim: ["rimR", "rimG", "rimB"],
+  halo: ["haloR", "haloG", "haloB"],
+  spec: ["specR", "specG", "specB"],
+};
+
+export type Rgb = readonly [number, number, number];
+
+/**
+ * Parse "#rrggbb", "#rgb" or "(r,g,b)" (0..255, parens/spaces optional)
+ * into 0..1 channels. Returns null for anything invalid.
+ */
+export const parseColor = (input: string): Rgb | null => {
+  const text = input.trim();
+  const hex = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text);
+  if (hex && (text.startsWith("#") || hex[1].length === 6)) {
+    const h = hex[1].length === 3 ? hex[1].replace(/./g, "$&$&") : hex[1];
+    const n = parseInt(h, 16);
+    return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+  }
+  const rgb = /^\(?\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*\)?$/.exec(text);
+  if (!rgb) return null;
+  const c = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  if (c.some((v) => v > 255)) return null;
+  return [c[0] / 255, c[1] / 255, c[2] / 255];
+};
+
+const toByte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
+
+/** 0..1 channels to "#rrggbb". */
+export const rgbToHex = ([r, g, b]: Rgb): string =>
+  "#" + [r, g, b].map((v) => toByte(v).toString(16).padStart(2, "0")).join("");
+
+/**
+ * Write a color string into the three channel SharedValues.
+ * Returns false (and changes nothing) if the string is invalid.
+ */
+export const setLensColor = (
+  values: LensTuneValues,
+  name: LensColorName,
+  input: string,
+): boolean => {
+  const rgb = parseColor(input);
+  if (!rgb) return false;
+  const keys = CHANNEL_KEYS[name];
+  keys.forEach((key, i) => {
+    values[key].value = rgb[i];
+  });
+  return true;
+};
+
+/** Current channels of a color as "#rrggbb". */
+export const getLensColorHex = (values: LensTuneValues, name: LensColorName): string => {
+  const [r, g, b] = CHANNEL_KEYS[name];
+  return rgbToHex([values[r].value, values[g].value, values[b].value]);
 };
 
 
@@ -84,15 +157,15 @@ export const LENS_SPEC: Record<LensKey, LensSpec> = {
   specular: { label: "Specular", min: 0, max: 2, decimals: 2, group: "glass" },
   halo: { label: "Halo", min: 0, max: 1, decimals: 2, group: "glass" },
   spread: { label: "Spread", min: 0, max: 1, decimals: 2, group: "glass" },
-  rimR: { label: "Rim R", min: 0, max: 1, decimals: 2, group: "glass" },
-  rimG: { label: "Rim G", min: 0, max: 1, decimals: 2, group: "glass" },
-  rimB: { label: "Rim B", min: 0, max: 1, decimals: 2, group: "glass" },
-  haloR: { label: "Halo R", min: 0, max: 1, decimals: 2, group: "glass" },
-  haloG: { label: "Halo G", min: 0, max: 1, decimals: 2, group: "glass" },
-  haloB: { label: "Halo B", min: 0, max: 1, decimals: 2, group: "glass" },
-  specR: { label: "Spec R", min: 0, max: 1, decimals: 2, group: "glass" },
-  specG: { label: "Spec G", min: 0, max: 1, decimals: 2, group: "glass" },
-  specB: { label: "Spec B", min: 0, max: 1, decimals: 2, group: "glass" },
+  rimR: { label: "Rim R", min: 0, max: 1, decimals: 2, group: "color" },
+  rimG: { label: "Rim G", min: 0, max: 1, decimals: 2, group: "color" },
+  rimB: { label: "Rim B", min: 0, max: 1, decimals: 2, group: "color" },
+  haloR: { label: "Halo R", min: 0, max: 1, decimals: 2, group: "color" },
+  haloG: { label: "Halo G", min: 0, max: 1, decimals: 2, group: "color" },
+  haloB: { label: "Halo B", min: 0, max: 1, decimals: 2, group: "color" },
+  specR: { label: "Spec R", min: 0, max: 1, decimals: 2, group: "color" },
+  specG: { label: "Spec G", min: 0, max: 1, decimals: 2, group: "color" },
+  specB: { label: "Spec B", min: 0, max: 1, decimals: 2, group: "color" },
   rainbow: { label: "Rainbow", min: 0, max: 1, decimals: 2, group: "glass" },
 };
 
