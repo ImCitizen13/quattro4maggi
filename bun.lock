@@ -8,7 +8,6 @@
         "@expo/vector-icons": "^15.0.3",
         "@gorhom/portal": "^1.0.14",
         "@react-native-community/blur": "^4.4.1",
-        "@rozenite/plugin-bridge": "2.5.0",
         "@typegpu/react": "^0.12.0",
         "@webgpu/types": "^0.1.72",
         "expo": "^57.0.27",
@@ -51,6 +50,7 @@
       },
       "devDependencies": {
         "@rozenite/metro": "2.5.0",
+        "@rozenite/plugin-bridge": "2.5.0",
         "@types/react": "~19.2.10",
         "dialkit": "2.1.0",
         "eslint": "^9.25.0",

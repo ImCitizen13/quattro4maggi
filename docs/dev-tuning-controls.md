@@ -47,8 +47,10 @@ actions round-trip back into the panel.
 The panel shows "Connecting…" until the app connects, then one DialKit panel per
 mounted `useDials*` call.
 
-- Plain `bun run start` and EAS builds don't load Rozenite (`metro.config.js`
-  gates it on `WITH_ROZENITE=true`). Hooks then return config defaults.
+- Plain `bun run start` and EAS builds don't load Rozenite (`metro.config.js` gates it
+  on `WITH_ROZENITE=true` **and** `APP_ENV=development`, which `.env.local` sets and
+  the EAS preview/production profiles don't). Hooks then return config defaults.
+- `@rozenite/plugin-bridge` is a **devDependency**, like `@rozenite/metro`.
 - `dials:build` deletes and reinstalls `node_modules/rozenite-plugin-dialkit`
   because bun installs `file:` deps as a **copy**, not a symlink. If you rebuild
   without reinstalling, Metro serves the old panel.
@@ -179,7 +181,8 @@ at the code defaults.
 - **Production:** every store entry point returns early when `!__DEV__`. The bridge is
   `require`d behind `const loadBridge = __DEV__ ? () => require(...) : null`, which Metro
   constant-folds out of release bundles. This is verified: a production `expo export`
-  `.hbc` contains no `rozenite` strings.
+  `.hbc` contains no `rozenite` strings. Re-check any time with `bun run dials:check-prod`
+  (exports a production iOS bundle, counts the markers, exits 1 if any are found).
 
 ### Files
 
@@ -242,4 +245,5 @@ Typecheck it with `cd plugins/rozenite-plugin-dialkit && bunx tsc --noEmit`.
 - [ ] `useDialsShared` / `useDialsListener` for anything read per frame
 - [ ] `.set()` for SharedValue writes, and clamp in the worklet as before
 - [ ] Spring dials animated through `withDialCurve`
+- [ ] `bun run dials:check-prod` exits 0 (no Rozenite code in the production bundle)
 - [ ] Bake the final values into the defaults via Copy
