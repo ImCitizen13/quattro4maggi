@@ -1,0 +1,32 @@
+{
+  "name": "rozenite-plugin-dialkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DialKit tuning panel inside React Native DevTools (Rozenite plugin). App side lives in src/lib/dials.",
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "rozenite build",
+    "dev": "rozenite dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rozenite/plugin-bridge": "2.5.0",
+    "dialkit": "2.1.0",
+    "motion": "14.6.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@rozenite/vite-plugin": "2.5.0",
+    "@types/node": "22",
+    "@types/react": "~19.2.10",
+    "@types/react-dom": "~19.2.3",
+    "rozenite": "2.5.0",
+    "typescript": "~5.9.3",
+    "vite": "7.3.1"
+  }
+}

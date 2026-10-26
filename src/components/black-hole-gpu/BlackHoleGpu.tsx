@@ -39,6 +39,7 @@
  * - Snapshot and scene share one device (useDevice makes a new one per call)
  * - Render loop on the UI runtime (120 Hz)
  * - FpsOverlay ui row
+ * - Dev: lens knobs + speed also in the DevTools Dials panel (lensDials.ts)
  */
 import { Stack, useNavigation } from "expo-router";
 import { PressableScale } from "pressto";
@@ -60,6 +61,7 @@ import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
 import { composeLayered } from "../gargantua-type-gpu/composeLayered";
 import { DemoContent } from "./DemoContent";
 import { createLensScene, type LensShared } from "./lensScene";
+import { useLensDials } from "./lensDials";
 import { useLensTune } from "./lensTune";
 import { ProgressBar } from "./ProgressBar";
 import { SettingsPanel } from "./SettingsPanel";
@@ -140,6 +142,7 @@ export const BlackHoleGpu = () => {
   const seedSv = useSharedValue(0);
   const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
   const lensTune = useLensTune();
+  useLensDials(lensTune, speed);
   const runId = useRef(0);
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });

@@ -8,6 +8,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "start:dials": "WITH_ROZENITE=true expo start",
+    "dials:check-prod": "bun scripts/check-dials-prod.ts",
+    "dials:build": "cd plugins/rozenite-plugin-dialkit && bun install && bun run build && cd ../.. && rm -rf node_modules/rozenite-plugin-dialkit && bun install",
     "prewarm-worklets": "mkdir -p node_modules/react-native-worklets/.worklets && expo export --platform all --output-dir /tmp/prewarm-worklets --clear || true",
     "eas-build-post-install": "bun run prewarm-worklets"
   },
@@ -57,9 +60,13 @@
     "unplugin-typegpu": "^0.12.3"
   },
   "devDependencies": {
+    "@rozenite/metro": "2.5.0",
+    "@rozenite/plugin-bridge": "2.5.0",
     "@types/react": "~19.2.10",
+    "dialkit": "2.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~57.0.2",
+    "rozenite-plugin-dialkit": "file:./plugins/rozenite-plugin-dialkit",
     "typescript": "~6.0.3"
   },
   "overrides": {
