@@ -20,7 +20,10 @@ export const Particle = d
   })
   .$name("Particle");
 
-/** Per-frame uniform, 3 × vec2f + 18 × f32 = 96 B. */
+/**
+ * Per-frame uniform, 3 × vec2f + 23 × f32 = 116 B (padded to 120 B by the
+ * struct alignment). New fields are appended, so older offsets don't move.
+ */
 export const Params = d
   .struct({
     /** Canvas size, px. */
@@ -32,11 +35,11 @@ export const Params = d
     /** Tile edge, px. */
     tile: d.f32,
     cols: d.f32,
-    /** Sim time at the start of this frame, s. */
+    /** Sim time of the displayed state (step index × h, after this frame's steps), s. */
     time: d.f32,
     /** Fixed step, s. */
     h: d.f32,
-    /** Steps to run this frame. */
+    /** Steps to run this frame (substep s is absolute step step0 + s + 1). */
     substeps: d.f32,
     /** Sink strength c (px²/s): inflow speed = c / r. */
     flow: d.f32,
@@ -51,7 +54,7 @@ export const Params = d
     /** Tangential / inflow speed ratio (spiral pitch). */
     swirl: d.f32,
     count: d.f32,
-    /** 0..1 (spring, may overshoot): scales horizon + mass. */
+    /** 0..1 (spring, may overshoot): scales horizon + mass. This frame's value, for tileVs and the lens. */
     hole: d.f32,
     /** Sticky patch cell size, px. */
     patchPx: d.f32,
@@ -63,6 +66,16 @@ export const Params = d
     seed: d.f32,
     /** Max extra release delay for fully sticky tiles, s. */
     sticky: d.f32,
+    /** Absolute index of the step before this frame's first substep. */
+    step0: d.f32,
+    /** First step index whose deaths are counted (steps below were already recorded). */
+    recordFrom: d.f32,
+    /** Hole spring closed form: start time, s. */
+    holeT0: d.f32,
+    /** Hole spring closed form: envelope decay, 1/s. */
+    holeDecay: d.f32,
+    /** Hole spring closed form: damped angular frequency, rad/s. */
+    holeFreq: d.f32,
   })
   .$name("Params");
 

@@ -9,11 +9,15 @@ import { LensTune, Params, Particle } from "./gpuTypes";
 // Two layouts because a vertex stage may not bind read_write storage: compute
 // writes the particles, render only reads them. Both sit at group 0.
 
-/** Compute (`init`, `step`): uniform + read_write particles. */
+/**
+ * Compute (`init`, `step`): uniform + read_write particles + the death
+ * histogram (one atomic counter per step index: tiles swallowed at that step).
+ */
 export const computeLayout = tgpu
   .bindGroupLayout({
     u: { uniform: Params },
     ps: { storage: (n: number) => d.arrayOf(Particle, n), access: "mutable" },
+    deaths: { storage: (n: number) => d.arrayOf(d.atomic(d.u32), n), access: "mutable" },
   })
   .$name("computeLayout");
 

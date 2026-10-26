@@ -5,34 +5,42 @@
  *   push transition ends ─► snapshot texture + standby scene are built once
  *     (TypeGPU root: one particle per tile, storage buffer); nothing is drawn
  *   DemoContent (RN view, collapsable={false})
- *     └─ Release ─► 120 ms ─► drawElementImageToTexture INTO the scene's texture
+ *     └─ Destroy (idle) ─► 120 ms ─► drawElementImageToTexture INTO the scene's texture
  *          └─ `phase` SharedValue flips ─► the UI loop starts the run (sim reset,
  *             particles seeded at home, frame 0) ─► onStarted hides the RN view
  *          └─ per frame (ui-worklet, composeLayered): vortex layer = compute
  *               `step` (N × h=1/120) ─► 6 × N instanced tiles sampling the
  *               snapshot over space ─► lens layer (reads that as its backdrop):
  *               gravitational lensing + glow + black disc ─► blit to the swapchain
+ *               ─► writes `progress` (fraction of tiles swallowed)
  *          └─ timeline: hole grows in (0 s) → release wave (0.6 s)
- *     └─ Reset ─► phase = 0 (one transparent frame, then no present), show the RN view
+ *     └─ Pause (running) ─► `paused` = true: sim frozen, frames still drawn
+ *     └─ Destroy (paused) ─► `paused` = false: the run continues
+ *     └─ scrub the progress bar ─► `seekTarget` seeks the run; release resumes it
+ *          └─ onDone(true) ─► "done"; scrubbing back before the end ─► "running" again
+ *     └─ Reset (paused / done) ─► phase = 0 (one transparent frame, then no present),
+ *          show the RN view
+ *
+ * STATE: run = idle ─► capturing ─► running ⇄ paused, running/paused ─► done; Reset ─► idle
  *
  * KEY FEATURES:
- * - All GPU: no Skia, no Atlas, no CPU readback; CPU writes a 96 B uniform
- * - Scene pre-built after the push transition; Release = 120 ms + capture + phase flip
- * - No scene rebuild on Release/Reset/Sticky; only tile or layout size change rebuilds
- * - Snapshot captured on Release (after a short delay), nothing on mount — no navigation stall
- * - Sticky toggle (chip)
+ * - All GPU: no Skia, no Atlas; the only CPU readback is a small throttled
+ *   death-histogram map (progress); CPU writes a ~120 B uniform per frame
+ * - Scene pre-built after the push transition; Destroy = 120 ms + capture + phase flip
+ * - No scene rebuild on Destroy/Pause/Reset/Sticky; only tile or layout size change rebuilds
+ * - Snapshot captured on Destroy (after a short delay), nothing on mount — no navigation stall
+ * - Two-button HUD (Destroy, Pause/Reset) under a full-width progress bar / scrubber;
+ *   fixed height in every state (the stage size drives a GPU rebuild)
+ * - Gear button in the navigation header toggles SettingsPanel (portal, floats over
+ *   the HUD, never resizes the stage): Sim tab (status, Speed 0.25×–4×, tile chips
+ *   8/4/2 px, Sticky chip) and Lens tab (14 live knobs + three presets)
  * - Radial wave; per-tile flow field (sink + vortex, relaxed) ramps in from rest
  * - Sticky patches (value noise + per-tile jitter) release late, new pattern per run
- * - Tile chips (8/4/2 px) set the particle count
  * - Snapshot and scene share one device (useDevice makes a new one per call)
  * - Render loop on the UI runtime (120 Hz)
  * - FpsOverlay ui row
- * - Speed slider 0.25×–4× (SharedValue, live, no rebuild)
- * - Lens button toggles LensPanel (portal, floats above the HUD): 14 live SharedValue
- *   knobs for the gravity lens and the gargantua glass bubble, plus three presets;
- *   the stage never resizes when it opens
  */
-import { useNavigation } from "expo-router";
+import { Stack, useNavigation } from "expo-router";
 import { PressableScale } from "pressto";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -49,18 +57,16 @@ import { Canvas, useDevice } from "react-native-webgpu";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
-import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 import { composeLayered } from "../gargantua-type-gpu/composeLayered";
 import { DemoContent } from "./DemoContent";
-import { LensPanel } from "./LensPanel";
 import { createLensScene, type LensShared } from "./lensScene";
 import { useLensTune } from "./lensTune";
+import { ProgressBar } from "./ProgressBar";
+import { SettingsPanel } from "./SettingsPanel";
 import { captureInto, createSnapshotTexture } from "./snapshot";
 import {
   createVortexScene,
   DEFAULT_VORTEX,
-  SPEED_MAX,
-  SPEED_MIN,
   type VortexStats,
 } from "./vortexScene";
 
@@ -69,6 +75,12 @@ import {
 // ============================================================================
 
 export type ShowMode = "rn" | "gpu";
+
+/**
+ * Run lifecycle. idle ─► capturing (Destroy pressed, snapshot in flight) ─►
+ * running ⇄ paused; running / paused ─► done (all tiles swallowed); Reset ─► idle.
+ */
+export type RunState = "idle" | "capturing" | "running" | "paused" | "done";
 
 type TransitionNavigation = {
   addListener: (
@@ -119,6 +131,12 @@ export const BlackHoleGpu = () => {
   const speed = useSharedValue(1);
   // Read by the UI-runtime loop: phase 0 = idle, a new non-zero value = start a run.
   const phase = useSharedValue(0);
+  // Written every frame by the render worklet: fraction of tiles swallowed.
+  const progress = useSharedValue(0);
+  // True freezes the sim (frames still drawn).
+  const paused = useSharedValue(false);
+  // -1 = none; 0..1 = the scene seeks the run to that progress while held.
+  const seekTarget = useSharedValue(-1);
   const seedSv = useSharedValue(0);
   const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
   const lensTune = useLensTune();
@@ -131,13 +149,14 @@ export const BlackHoleGpu = () => {
   const epoch = useRef(0);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [transitioned, setTransitioned] = useState(false);
-  // A run was requested and not reset.
-  const [active, setActive] = useState(false);
+  const [run, setRun] = useState<RunState>("idle");
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
   const [sticky, setSticky] = useState(true);
   const [status, setStatus] = useState("idle");
-  const [lensOpen, setLensOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // A run was requested and not reset (the RN view may be hidden).
+  const active = run !== "idle" && run !== "capturing";
 
   // Wait for the push transition so the pre-build doesn't compete with it.
   useEffect(() => {
@@ -176,6 +195,14 @@ export const BlackHoleGpu = () => {
     busy.current = false;
   };
 
+  // "All tiles swallowed" flipped. Functional setState: the scene memo captures
+  // this callback once, so it must not read `run` from a stale closure.
+  const onDone = (done: boolean) =>
+    setRun((r) => {
+      if (done) return r === "running" || r === "paused" ? "done" : r;
+      return r === "done" ? "running" : r;
+    });
+
   // Two layers: the vortex (tiles over space) then the lens, which reads it as
   // its backdrop. `shared` is the vortex-to-lens handoff, fresh per scene.
   const scene = useMemo(() => {
@@ -188,10 +215,14 @@ export const BlackHoleGpu = () => {
           config: { ...DEFAULT_VORTEX, tile },
           speed,
           phase,
+          progress,
+          paused,
+          seekTarget,
           seed: seedSv,
           sticky: stickySv,
           shared,
           onStarted,
+          onDone,
           onStats: (s: VortexStats) => setStatus(formatStats(s)),
         }),
       },
@@ -229,21 +260,21 @@ export const BlackHoleGpu = () => {
     busy.current = true;
     seedSv.value = Math.floor(Math.random() * 1e6);
     stickySv.value = stickyOn ? DEFAULT_VORTEX.sticky : 0;
+    paused.value = false;
+    seekTarget.value = -1;
     runId.current += 1;
     phase.value = runId.current;
   };
 
-  // Fresh capture on the first press; while a run is active the RN view is
-  // hidden (a recapture would be blank), so it restarts on the same texture.
+  // Destroy from idle: fresh capture of the RN view into the scene's texture,
+  // then the run starts. (Once a run exists the RN view is hidden, so a
+  // recapture would be blank: Destroy is disabled until Reset.)
   const release = async () => {
     if (!device || !scene || !snapTex || !imageLoaded.current || busy.current) {
       return;
     }
-    if (active) {
-      startPhase(sticky);
-      return;
-    }
     busy.current = true;
+    setRun("capturing");
     const myEpoch = epoch.current;
     await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));
     // Reset, relayout or unmount during the delay (reset already cleared busy).
@@ -251,22 +282,47 @@ export const BlackHoleGpu = () => {
     try {
       await captureInto(device, viewRef, snapTex);
     } catch {
-      if (epoch.current === myEpoch) busy.current = false;
+      if (epoch.current === myEpoch) {
+        busy.current = false;
+        setRun("idle");
+      }
       return;
     }
     if (epoch.current !== myEpoch) return;
-    setActive(true);
     startPhase(sticky);
+    setRun("running");
+  };
+
+  // Destroy: capture and start from idle, continue from paused.
+  const destroy = () => {
+    if (run === "idle") {
+      release();
+    } else if (run === "paused") {
+      paused.value = false;
+      setRun("running");
+    }
+  };
+
+  const pause = () => {
+    if (run !== "running") return;
+    paused.value = true;
+    setRun("paused");
   };
 
   const reset = () => {
     epoch.current += 1;
     busy.current = false;
     phase.value = 0;
-    setActive(false);
+    paused.value = false;
+    seekTarget.value = -1;
+    progress.value = 0;
+    setRun("idle");
     setShow("rn");
     setStatus("idle");
   };
+
+  // The scrub already cleared `paused` on the UI thread; follow it in state.
+  const onScrubEnd = () => setRun((r) => (r === "paused" ? "running" : r));
 
   // The tile change rebuilds the scene (setTile → useMemo dep). While a run is
   // active `phase` still holds its non-zero id and the new scene starts with
@@ -274,15 +330,28 @@ export const BlackHoleGpu = () => {
   // itself; busy just covers that frame until onStarted clears it.
   const pickTile = (size: number) => {
     if (size === tile) return;
-    if (active) busy.current = true;
+    if (active) {
+      busy.current = true;
+      paused.value = false;
+      seekTarget.value = -1;
+      setRun("running");
+    }
     setTile(size);
   };
 
   const toggleSticky = () => {
     const next = !sticky;
     setSticky(next);
-    if (active && !busy.current) startPhase(next);
+    if (active && !busy.current) {
+      startPhase(next);
+      setRun("running");
+    }
   };
+
+  const canDestroy = run === "idle" || run === "paused";
+  const canReset = run === "paused" || run === "done";
+  const canPause = run === "running";
+  const pauseResetEnabled = canPause || canReset;
 
   return (
     <View style={styles.container}>
@@ -300,52 +369,56 @@ export const BlackHoleGpu = () => {
         />
         <FpsOverlay dark />
       </View>
-      {lensOpen && (
-        <LensPanel
-          values={lensTune}
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <PressableScale
+              style={[styles.gear, settingsOpen && styles.chipActive]}
+              hitSlop={8}
+              onPress={() => setSettingsOpen((open) => !open)}
+            >
+              <Text style={styles.gearLabel}>⚙</Text>
+            </PressableScale>
+          ),
+        }}
+      />
+      {settingsOpen && (
+        <SettingsPanel
+          lensValues={lensTune}
+          speed={speed}
+          tileSizes={TILE_SIZES}
+          tile={tile}
+          sticky={sticky}
+          status={status}
           width={winW}
-          onClose={() => setLensOpen(false)}
+          onPickTile={pickTile}
+          onToggleSticky={toggleSticky}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
       <View style={[styles.hud, { paddingBottom: 16 + insets.bottom }]}>
-        <Text style={styles.status}>{status}</Text>
-        <TuningSlider
-          label="Speed ×"
-          value={speed}
-          min={SPEED_MIN}
-          max={SPEED_MAX}
-          decimals={2}
+        <ProgressBar
+          progress={progress}
+          seekTarget={seekTarget}
+          paused={paused}
+          enabled={active}
           width={winW - 32}
+          onScrubEnd={onScrubEnd}
         />
         <View style={styles.row}>
-          {TILE_SIZES.map((size) => (
-            <PressableScale
-              key={size}
-              style={[styles.chip, tile === size && styles.chipActive]}
-              onPress={() => pickTile(size)}
-            >
-              <Text style={styles.label}>{size} px</Text>
-            </PressableScale>
-          ))}
           <PressableScale
-            style={[styles.chip, sticky && styles.chipActive]}
-            onPress={toggleSticky}
+            style={[styles.button, !canDestroy && styles.dim]}
+            enabled={canDestroy}
+            onPress={destroy}
           >
-            <Text style={styles.label}>Sticky</Text>
-          </PressableScale>
-        </View>
-        <View style={styles.row}>
-          <PressableScale style={styles.button} onPress={release}>
-            <Text style={styles.label}>Release</Text>
-          </PressableScale>
-          <PressableScale style={styles.button} onPress={reset}>
-            <Text style={styles.label}>Reset</Text>
+            <Text style={styles.label}>Destroy</Text>
           </PressableScale>
           <PressableScale
-            style={[styles.button, lensOpen && styles.chipActive]}
-            onPress={() => setLensOpen((open) => !open)}
+            style={[styles.button, !pauseResetEnabled && styles.dim]}
+            enabled={pauseResetEnabled}
+            onPress={canReset ? reset : pause}
           >
-            <Text style={styles.label}>Lens</Text>
+            <Text style={styles.label}>{canReset ? "Reset" : "Pause"}</Text>
           </PressableScale>
         </View>
       </View>
@@ -370,21 +443,15 @@ const styles = StyleSheet.create({
   // nextDrawable timeout.
   starting: { opacity: 0.01 },
   hud: { padding: 16, gap: 12 },
-  status: {
-    color: "#fff",
-    opacity: 0.7,
-    fontSize: 12,
-    fontVariant: ["tabular-nums"],
-  },
   row: { flexDirection: "row", gap: 12 },
-  chip: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#2a2a2a",
-  },
   chipActive: { backgroundColor: "#4a3a8a" },
+  dim: { opacity: 0.4 },
+  gear: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  gearLabel: { color: "#fff", fontSize: 20 },
   button: {
     flex: 1,
     alignItems: "center",

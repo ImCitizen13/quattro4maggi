@@ -11,7 +11,15 @@ import { computeLayout as C, renderLayout as R } from "./layouts";
 // Units: physical pixels (origin top-left) and seconds.
 // Particle.state: 0 = consumed, 1 = at home (waiting for the wave), 2 = free.
 //
-// Timeline (CPU drives `hole` with a spring, see vortexScene):
+// Step clock: the sim is a pure function of an integer step index. Substep s of
+// a frame is absolute step step0 + s + 1 at time idx * h (no float accumulation,
+// so any chunking of the same steps is bit-identical). The hole spring is a
+// closed form of that time (holeAt), evaluated per substep; vortexScene has
+// the matching CPU copy. A tile that crosses the horizon at step idx bumps
+// deaths[idx] (a histogram on the GPU) when idx >= recordFrom, so the CPU can
+// read back how many tiles were swallowed by any step.
+//
+// Timeline (hole = holeAt, an underdamped step response):
 //   hole    0→1   horizon + mass grow in at the center from Release
 //   vortexT0 +    radial wave: each tile's forces ramp 0→1 over `ramp` s
 //   sticky patches (value noise on home) release up to `sticky` s late and
@@ -39,8 +47,19 @@ const hash = tgpu.fn([d.u32], d.f32)`(n: u32) -> f32 {
   return f32(x) / 4294967295.0;
 }`.$name("hash");
 
+/**
+ * Hole spring at sim time t: exact step response of an underdamped spring
+ * (decay = d / 2, freq = sqrt(k - decay^2)), 0 until t0, may overshoot 1.
+ * Keep in sync with holeAtCpu in vortexScene.
+ */
+export const holeAt = tgpu.fn([d.f32, d.f32, d.f32, d.f32], d.f32)`(t: f32, t0: f32, decay: f32, freq: f32) -> f32 {
+  let tau = t - t0;
+  if (tau <= 0.0) { return 0.0; }
+  return 1.0 - exp(-decay * tau) * (cos(freq * tau) + (decay / freq) * sin(freq * tau));
+}`.$name("holeAt");
+
 /** Current horizon radius: full size scaled by the hole spring. */
-export const horizonOf =tgpu.fn([d.f32, d.f32], d.f32)`(horizon: f32, hole: f32) -> f32 {
+export const horizonOf = tgpu.fn([d.f32, d.f32], d.f32)`(horizon: f32, hole: f32) -> f32 {
   return horizon * max(hole, 0.0);
 }`.$name("horizonOf");
 
@@ -107,15 +126,18 @@ export const stepFn = tgpu.computeFn({
   var p = C.$.ps[i];
   if (p.state == 0.0) { return; }
 
-  let flow = C.$.u.flow * max(C.$.u.hole, 0.0);
-  let horizon = horizonOf(C.$.u.horizon, C.$.u.hole);
-  var t = C.$.u.time;
   let n = u32(C.$.u.substeps);
+  let step0 = u32(C.$.u.step0);
   // Sticky tiles ramp up slower: they lag, resist, then let go.
   let k = stickOf(p.home, i, C.$.u.seed, C.$.u.patchPx, C.$.u.sticky);
   let rampK = C.$.u.ramp * (1.0 + 2.0 * k);
   for (var s = 0u; s < n; s++) {
-    t += C.$.u.h;
+    // Absolute step index and its time: no accumulation across frames.
+    let idx = step0 + s + 1u;
+    let t = f32(idx) * C.$.u.h;
+    let hole = holeAt(t, C.$.u.holeT0, C.$.u.holeDecay, C.$.u.holeFreq);
+    let flow = C.$.u.flow * max(hole, 0.0);
+    let horizon = horizonOf(C.$.u.horizon, hole);
     if (p.state == 1.0) {
       if (t < p.release) { continue; }
       p.state = 2.0; // leaves home at rest; forces ramp up below
@@ -138,12 +160,17 @@ export const stepFn = tgpu.computeFn({
     p.pos += p.vel * C.$.u.h;
     if (horizon > 0.0 && length(C.$.u.center - p.pos) < horizon) {
       p.state = 0.0;
+      // Histogram of swallowed tiles per step (steps below recordFrom are
+      // already counted from an earlier pass). Late steps share the last bin.
+      if (f32(idx) >= C.$.u.recordFrom) {
+        atomicAdd(&C.$.deaths[min(idx, arrayLength(&C.$.deaths) - 1u)], 1u);
+      }
       break;
     }
   }
   C.$.ps[i] = p;
 }`
-  .$uses({ C, horizonOf, stickOf })
+  .$uses({ C, holeAt, horizonOf, stickOf })
   .$name("step");
 
 // ---- Fullscreen vertex ------------------------------------------------------

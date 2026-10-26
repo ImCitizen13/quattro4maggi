@@ -64,15 +64,63 @@ export type VortexSceneOptions = {
   seed: SharedValue<number>;
   /** Max sticky delay (s) for the next run, 0 = off; read when a run starts. */
   sticky: SharedValue<number>;
+  /**
+   * 0..1 fraction of tiles swallowed at the displayed step. Written by the
+   * render worklet every frame (0 when idle).
+   */
+  progress: SharedValue<number>;
+  /** True freezes the sim (no steps); frames are still drawn. */
+  paused: SharedValue<boolean>;
+  /**
+   * -1 = none, else 0..1 progress to seek to. While >= 0 the run does not
+   * advance by time (paused is ignored): it restores a keyframe and replays
+   * toward the step that had that fraction swallowed. A release before the
+   * seek has landed (a tap) lets it finish, then live stepping resumes.
+   * Omitted = no seeking.
+   */
+  seekTarget?: SharedValue<number>;
   /** Handoff to the lens layer: setup stores the root and Params buffer here. */
   shared: LensShared;
   /** A run's first frame has been presented (tiles at home). JS thread. */
   onStarted?: () => void;
+  /**
+   * The run's done flag flipped (every tile swallowed / no longer). JS thread,
+   * via scheduleOnRN. Fires after the GPU histogram readback learns the end
+   * step, a few frames late.
+   */
+  onDone?: (done: boolean) => void;
   /** Called every `STATS_EVERY` frames on the JS thread (via scheduleOnRN). */
   onStats?: (stats: VortexStats) => void;
 };
 
-type Spring = { x: number; v: number };
+/**
+ * All mutable run state, owned by the `frame` worklet (the one UI-runtime copy
+ * that reads and writes it). Steps are absolute indices on the h = 1/120 clock.
+ */
+type RunState = {
+  /** Fixed-step accumulator remainder, s of sim time. */
+  acc: number;
+  /** Displayed step. */
+  step: number;
+  /** Highest step simulated this run. */
+  frontier: number;
+  /** `cum` is valid for steps 0..known (read back from the GPU histogram). */
+  known: number;
+  /** First step where every tile is swallowed, -1 until read back. */
+  doneStep: number;
+  /** Bumped at each run start; a readback from an older run is dropped. */
+  runGen: number;
+  /** A staging-buffer map is in flight. */
+  mapPending: boolean;
+  /** Last done flag reported through onDone. */
+  lastDone: boolean;
+  /** Cumulative tiles swallowed per step, [0] = 0. Allocated on the UI runtime. */
+  cum: Uint32Array | null;
+  /** Keyframe slot j holds the particle state at step kfStep[j]; -1 = empty. */
+  kfStep: number[];
+  /** Seek fraction not reached yet when the seek was released, else -1. */
+  pending: number;
+};
 
 // ============================================================================
 // Constants
@@ -96,13 +144,37 @@ export const DEFAULT_VORTEX: VortexConfig = {
 const H = 1 / 120;
 /** Cap at 1x speed; scaled up with the speed multiplier in `frame`. */
 const MAX_SUBSTEPS = 8;
+/** Death histogram length: step indices 0..MAX_STEPS-1 (68 s of sim at h = 1/120). */
+const MAX_STEPS = 8192;
+/** Highest step the sim advances to; later deaths would share the last bin. */
+const LAST_STEP = MAX_STEPS - 1;
 export const SPEED_MIN = 0.25;
 export const SPEED_MAX = 4;
 const WORKGROUP = 64;
 const STATS_EVERY = 30;
+/** Keyframe storage cap (bytes) and slot count bounds. */
+const KEYFRAME_BYTES = 64 * 1024 * 1024;
+const MIN_SLOTS = 2;
+const MAX_SLOTS = 32;
+/** Never space keyframes closer than this many steps (0.25 s of sim). */
+const MIN_KEY_INTERVAL = 30;
+/**
+ * Replay budget of a seek frame in particle-steps (count x steps in one step
+ * dispatch). Tuned on the Simulator so a scrub frame stays inside ~16 ms.
+ */
+const SEEK_BUDGET = 40e6;
+/** Max steps a forward chase runs ahead of the last read-back step. */
+const CHASE_AHEAD = 120;
+const MIN_SEEK_STEPS = 16;
+const MAX_SEEK_STEPS = 2048;
 
-// The hole grows in from Release and overshoots once.
+// The hole grows in from Release and overshoots once: the exact step response
+// of an underdamped spring {k, d}, evaluated in closed form on both sides
+// (holeAt in vortexShaders, holeAtCpu below), so the hole is a pure function
+// of sim time.
 const HOLE_SPRING = { k: 70, d: 9 };
+const HOLE_DECAY = HOLE_SPRING.d / 2;
+const HOLE_FREQ = Math.sqrt(HOLE_SPRING.k - HOLE_DECAY * HOLE_DECAY);
 
 // Space color the tile pass clears to (the lens layer samples it as backdrop).
 const SPACE_COLOR = [0.035, 0.035, 0.045, 1] as const;
@@ -117,11 +189,16 @@ const PREMULTIPLIED_OVER: GPUBlendState = {
 // Helpers
 // ============================================================================
 
-/** Semi-implicit damped spring toward `target`, stepped by `h`. */
-const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) => {
+/** CPU copy of the shader's holeAt: spring step response at sim time `t`. */
+const holeAtCpu = (t: number, t0: number, decay: number, freq: number) => {
   "worklet";
-  s.v += (k * (target - s.x) - d * s.v) * h;
-  s.x += s.v * h;
+  const tau = t - t0;
+  if (tau <= 0) return 0;
+  return (
+    1 -
+    Math.exp(-decay * tau) *
+      (Math.cos(freq * tau) + (decay / freq) * Math.sin(freq * tau))
+  );
 };
 
 // ============================================================================
@@ -142,15 +219,32 @@ const stepSpring = (s: Spring, target: number, k: number, d: number, h: number) 
  * a new non-zero value starts a run (sim reset, particles seeded at home, first
  * frame drawn, `onStarted`), 0 goes idle (one transparent frame, then `render`
  * returns false, which the composer turns into a skipped lens + present). The caller fills the snapshot
- * texture before flipping `phase`; `render` steps the timeline springs, writes
+ * texture before flipping `phase`; `render` advances the step clock, writes
  * the uniform and encodes compute + render in one submit.
+ *
+ * The sim is a deterministic function of an integer step index (h = 1/120 s):
+ * the accumulator only decides how many steps a frame runs, and the shader
+ * derives time and the hole spring from the absolute index. A GPU histogram
+ * counts the tiles swallowed at each step; a throttled readback (one staging
+ * map in flight) turns it into a cumulative table, which gives the `progress`
+ * SharedValue and the step where the run is done. `paused` adds no steps (the
+ * frames are still drawn); a finished run stops stepping too.
+ *
+ * Seeking: the particle buffer is copied GPU-side into one of S keyframe slots
+ * about every K steps (slot j = first frame at or past (j + 1) * K; step 0 is
+ * `init` again). While `seekTarget` >= 0 the frame picks the target step from
+ * the cumulative table (still unread = chase forward to the end), restores the
+ * nearest keyframe (before the target when going back, or a later one that
+ * skips ahead) and replays up to a per-frame budget in ONE step dispatch.
+ * Steps behind the frontier don't touch the histogram (recordFrom), so replays
+ * never double count.
  *
  * The render loop may run on the UI runtime (ui-worklet mode), so `render` is a
  * worklet and everything it captures is TypeGPU resources, native GPU objects,
  * SharedValues and plain numbers/objects.
  *
- * `speed` is a SharedValue read once per frame; `seed` and `sticky` are read
- * when a run starts. None of them rebuilds the scene.
+ * `speed` and `paused` are SharedValues read once per frame; `seed` and
+ * `sticky` are read when a run starts. None of them rebuilds the scene.
  */
 export const createVortexScene =
   ({
@@ -160,8 +254,12 @@ export const createVortexScene =
     phase,
     seed,
     sticky,
+    progress,
+    paused,
+    seekTarget,
     shared,
     onStarted,
+    onDone,
     onStats,
   }: VortexSceneOptions) =>
   ({ device, presentationFormat }: SceneProps): LayerSceneResult => {
@@ -202,12 +300,57 @@ export const createVortexScene =
       // Written per run (see `frame` with start).
       seed: 0,
       sticky: 0,
+      step0: 0,
+      recordFrom: 0,
+      holeT0: config.holeT0,
+      holeDecay: HOLE_DECAY,
+      holeFreq: HOLE_FREQ,
     };
 
     const paramBuffer = root.createBuffer(Params, initial).$usage("uniform");
     const particleBuffer = root
       .createBuffer(d.arrayOf(Particle, count))
       .$usage("storage");
+    // Tiles swallowed per step index (atomic counters), cleared at run start.
+    const deathsBuffer = root
+      .createBuffer(d.arrayOf(d.atomic(d.u32), MAX_STEPS))
+      .$usage("storage");
+    const rawDeaths = root.unwrap(deathsBuffer);
+    const rawParticles = root.unwrap(particleBuffer);
+
+    // Keyframes: S slots of one particle-buffer copy each (GPU-side copies).
+    // K spaces them so S of them cover an upper estimate of the run length:
+    // the latest release (start + wave to the far corner + jitter + sticky +
+    // slowest ramp), plus the fall from the far corner, plus drag lag.
+    const bytes = count * d.sizeOf(Particle);
+    const slots = Math.min(
+      MAX_SLOTS,
+      Math.max(MIN_SLOTS, Math.floor(KEYFRAME_BYTES / bytes)),
+    );
+    const rMax = Math.hypot(W, Hpx) / 2;
+    const estSeconds =
+      config.vortexT0 +
+      rMax / (short * config.wave) +
+      0.35 +
+      config.sticky +
+      3 * config.ramp +
+      (rMax * rMax) / (2 * initial.flow) +
+      2 / config.drag;
+    const estSteps = Math.min(LAST_STEP, Math.ceil(estSeconds / H));
+    const keyEvery = Math.max(MIN_KEY_INTERVAL, Math.ceil(estSteps / slots));
+    const maxSeek = Math.min(
+      MAX_SEEK_STEPS,
+      Math.max(MIN_SEEK_STEPS, Math.floor(SEEK_BUDGET / count)),
+    );
+    const keys = device.createBuffer({
+      size: slots * bytes,
+      usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+    // Readback target: GPUBufferUsage.MAP_READ (1) | COPY_DST (8).
+    const staging = device.createBuffer({
+      size: MAX_STEPS * 4,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
 
     const initPipeline = root.createComputePipeline({ compute: initFn });
     const stepPipeline = root.createComputePipeline({ compute: stepFn });
@@ -226,6 +369,7 @@ export const createVortexScene =
     const computeGroup = root.createBindGroup(computeLayout, {
       u: paramBuffer,
       ps: particleBuffer,
+      deaths: deathsBuffer,
     });
     const renderGroup = root.createBindGroup(renderLayout, {
       u: paramBuffer,
@@ -233,11 +377,23 @@ export const createVortexScene =
       snap: snapshot.createView(),
     });
 
-    // ---- Timeline + stats state (read and written only by render) ----------
-    let simTime = 0;
-    let acc = 0;
+    // ---- Run state: read and written only by `frame` ------------------------
+    const run: RunState = {
+      acc: 0,
+      step: 0,
+      frontier: 0,
+      known: 0,
+      doneStep: -1,
+      runGen: 0,
+      mapPending: false,
+      lastDone: false,
+      cum: null,
+      kfStep: Array.from({ length: slots }, () => -1),
+      pending: -1,
+    };
+
+    // ---- Stats state (read and written only by render) ----------------------
     let last = 0;
-    const hole: Spring = { x: 0, v: 0 };
     let frames = 0;
     let encodeMs = 0;
     let statsStart = 0;
@@ -245,9 +401,18 @@ export const createVortexScene =
     let lastPhase = -1;
 
     /**
-     * Advance the sim by `dt` seconds and encode one frame. Returns encode ms.
-     * `start` begins a run: resets the clock and springs, writes the run's
-     * seed/sticky and seeds every tile at home before drawing (no sim steps).
+     * Advance the sim by `dt` seconds (or seek, see below) and encode one
+     * frame. Returns encode ms. `start` begins a run: resets the step state,
+     * keyframes and the death histogram, writes the run's seed/sticky and seeds
+     * every tile at home before drawing (no sim steps). Also publishes
+     * `progress` and the done flag.
+     *
+     * While `seekTarget` >= 0 the frame ignores dt/paused: it picks the target
+     * step, restores a keyframe (or re-inits) when that is nearer than stepping
+     * on from here, and replays at most `maxSeek` steps in one dispatch; later
+     * frames keep going until the target is reached. Encoder order: [start
+     * clear + init] [restore copy or init] [step pass] [keyframe copy]
+     * [readback copy] [render].
      */
     const frame = (
       view: GPUTextureView,
@@ -259,55 +424,172 @@ export const createVortexScene =
     ) => {
       "worklet";
       const t0 = performance.now();
+      // Allocated here, not in setup: a typed array may not cross runtimes.
+      const cum = run.cum ?? (run.cum = new Uint32Array(MAX_STEPS + 1));
       if (start) {
-        simTime = 0;
-        acc = 0;
-        hole.x = 0;
-        hole.v = 0;
+        run.acc = 0;
+        run.step = 0;
+        run.frontier = 0;
+        run.known = 0;
+        run.doneStep = -1;
+        run.pending = -1;
+        for (let j = 0; j < run.kfStep.length; j++) run.kfStep[j] = -1;
+        // A map from the previous run may still be in flight (mapPending stays
+        // set until it settles); its result is dropped by the runGen check.
+        run.runGen += 1;
+        cum[0] = 0;
+        if (run.lastDone) {
+          run.lastDone = false;
+          if (onDone) scheduleOnRN(onDone, false);
+        }
         paramBuffer.writePartial({
           time: 0,
           substeps: 0,
           hole: 0,
+          step0: 0,
+          recordFrom: 1,
           seed: startSeed,
           sticky: startSticky,
         });
       }
       // Fixed-step accumulator: equal work per simulated second, clamped so a
       // stall never spirals. Speed scales sim time per real second; the
-      // substep cap scales with it so 4x doesn't fall behind. Springs run on
-      // sim time, so the whole timeline speeds up together.
+      // substep cap scales with it so 4x doesn't fall behind. Paused or done
+      // adds nothing (0 substeps), so resume has no catch-up burst. The hole
+      // is a closed form of step time, so it speeds up with the rest.
       let substeps = 0;
+      // Seek plan: -1 = keep the buffer, else the keyframe slot to restore;
+      // `reinit` re-seeds the tiles at home (step 0) instead.
+      let restoreSlot = -1;
+      let reinit = false;
       if (!start) {
-        acc += Math.min(dt, 0.25) * timeScale;
-        const maxSub = Math.ceil(MAX_SUBSTEPS * Math.max(1, timeScale));
-        substeps = Math.min(Math.floor(acc / H), maxSub);
-        acc = substeps === maxSub ? 0 : acc - substeps * H;
-        const time = simTime;
-
-        // Timeline springs, stepped with the physics so they share its clock.
-        for (let i = 0; i < substeps; i++) {
-          const t = simTime + (i + 1) * H;
-          stepSpring(hole, t >= config.holeT0 ? 1 : 0, HOLE_SPRING.k, HOLE_SPRING.d, H);
+        // A released seek that has not landed yet (a tap is shorter than the
+        // chase) keeps going from `pending` until it does.
+        const held = seekTarget ? seekTarget.value : -1;
+        const seekF = held >= 0 ? held : run.pending;
+        if (seekF >= 0) {
+          // Seek: pick the target step n*. A readable fraction maps to the
+          // first step whose cumulative count reaches it; beyond what is read
+          // back we chase toward the end (or the known done step) and the
+          // overshoot is corrected once the exact step is read back.
+          run.acc = 0;
+          let target = 0;
+          let resolved = true;
+          if (seekF > 0) {
+            const need = seekF * count;
+            if (cum[run.known] >= need) {
+              let lo = 0;
+              let hi = run.known;
+              while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (cum[mid] >= need) hi = mid;
+                else lo = mid + 1;
+              }
+              target = lo;
+            } else {
+              target = run.doneStep >= 0 ? Math.min(run.doneStep, LAST_STEP) : LAST_STEP;
+              // Don't outrun the readback by more than CHASE_AHEAD steps: the
+              // fraction is only learned a few frames late, and a short tap
+              // would otherwise overshoot into the tail.
+              target = Math.max(run.step, Math.min(target, run.known + CHASE_AHEAD));
+              resolved = false;
+            }
+          }
+          // Nearest start: going back needs the latest keyframe at or before
+          // the target; going on may jump to a later keyframe (no replay).
+          let best = -1;
+          let bestStep = 0;
+          for (let j = 0; j < run.kfStep.length; j++) {
+            const ks = run.kfStep[j];
+            if (ks < 0 || ks > target) continue;
+            if (target < run.step || ks > run.step) {
+              if (ks > bestStep) {
+                bestStep = ks;
+                best = j;
+              }
+            }
+          }
+          if (best >= 0) {
+            restoreSlot = best;
+            run.step = bestStep;
+          } else if (target < run.step) {
+            reinit = true;
+            run.step = 0;
+          }
+          substeps = Math.max(
+            0,
+            Math.min(target - run.step, maxSeek, LAST_STEP - run.step),
+          );
+          run.pending = resolved && run.step + substeps >= target ? -1 : seekF;
+        } else {
+          const finished = run.doneStep >= 0 && run.step >= run.doneStep;
+          if (!paused.value && !finished) {
+            run.acc += Math.min(dt, 0.25) * timeScale;
+            const maxSub = Math.ceil(MAX_SUBSTEPS * Math.max(1, timeScale));
+            substeps = Math.min(Math.floor(run.acc / H), maxSub);
+            run.acc = substeps === maxSub ? 0 : run.acc - substeps * H;
+            // Stay inside the histogram.
+            substeps = Math.max(0, Math.min(substeps, LAST_STEP - run.step));
+          }
         }
-        simTime += substeps * H;
+        const step0 = run.step;
+        const newStep = step0 + substeps;
+        // Steps up to the frontier were already recorded; only newer ones count.
         paramBuffer.writePartial({
-          time,
+          step0,
           substeps,
-          hole: hole.x,
+          recordFrom: run.frontier + 1,
+          time: newStep * H,
+          hole: holeAtCpu(newStep * H, config.holeT0, HOLE_DECAY, HOLE_FREQ),
         });
+        run.step = newStep;
+        run.frontier = Math.max(run.frontier, newStep);
       }
 
       const encoder = device.createCommandEncoder();
       if (start) {
         // Queue writes land before this submit, so init sees the new uniform.
+        encoder.clearBuffer(rawDeaths);
         const ipass = encoder.beginComputePass();
         initPipeline.with(ipass).with(computeGroup).dispatchWorkgroups(groups);
         ipass.end();
+      }
+      if (reinit) {
+        // Seek back to step 0: the run's seed/sticky are still in the uniform.
+        const ipass = encoder.beginComputePass();
+        initPipeline.with(ipass).with(computeGroup).dispatchWorkgroups(groups);
+        ipass.end();
+      } else if (restoreSlot >= 0) {
+        encoder.copyBufferToBuffer(keys, restoreSlot * bytes, rawParticles, 0, bytes);
       }
       if (substeps > 0) {
         const cpass = encoder.beginComputePass();
         stepPipeline.with(cpass).with(computeGroup).dispatchWorkgroups(groups);
         cpass.end();
+      }
+      // Keyframe: slot j stores the first step at or past (j + 1) * keyEvery
+      // (strictly after the previous slot's step, so no duplicates).
+      if (!start) {
+        let j = 0;
+        while (j < run.kfStep.length && run.kfStep[j] >= 0) j++;
+        if (
+          j < run.kfStep.length &&
+          (j + 1) * keyEvery <= run.step &&
+          (j === 0 || run.step > run.kfStep[j - 1])
+        ) {
+          encoder.copyBufferToBuffer(rawParticles, 0, keys, j * bytes, bytes);
+          run.kfStep[j] = run.step;
+        }
+      }
+      // Readback: copy the histogram bins not yet known into the staging
+      // buffer (same encoder, after the step pass). At most one map in flight.
+      const from = run.known;
+      const to = run.frontier;
+      const copyBytes = (to - from) * 4;
+      const readback = !run.mapPending && to > from;
+      if (readback) {
+        run.mapPending = true;
+        encoder.copyBufferToBuffer(rawDeaths, (from + 1) * 4, staging, 0, copyBytes);
       }
       const rpass = encoder.beginRenderPass({
         colorAttachments: [
@@ -322,6 +604,43 @@ export const createVortexScene =
       tilePipeline.with(rpass).with(renderGroup).draw(6, count);
       rpass.end();
       device.queue.submit([encoder.finish()]);
+
+      if (readback) {
+        const gen = run.runGen;
+        // 1 = GPUMapMode.READ (the global may not exist on the UI runtime).
+        staging
+          .mapAsync(1, 0, copyBytes)
+          .then(() => {
+            try {
+              if (gen === run.runGen) {
+                const bins = new Uint32Array(staging.getMappedRange(0, copyBytes));
+                let total = cum[from];
+                for (let j = 0; j < bins.length; j++) {
+                  total += bins[j];
+                  cum[from + 1 + j] = total;
+                  if (run.doneStep < 0 && total >= count) run.doneStep = from + 1 + j;
+                }
+                run.known = to;
+              }
+            } finally {
+              staging.unmap();
+              run.mapPending = false;
+            }
+          })
+          .catch(() => {
+            run.mapPending = false;
+          });
+      }
+
+      // Publish progress at the displayed step (clamped to what is read back)
+      // and report the done flag when it flips.
+      const shown = Math.min(run.step, run.known);
+      progress.value = cum[shown] / count;
+      const done = run.doneStep >= 0 && run.step >= run.doneStep;
+      if (done !== run.lastDone) {
+        run.lastDone = done;
+        if (onDone) scheduleOnRN(onDone, done);
+      }
       return performance.now() - t0;
     };
 
@@ -361,8 +680,7 @@ export const createVortexScene =
           if (p === 0) {
             // Idle: zero the hole so the lens passes the transparent frame
             // through, draw it once, then stop presenting.
-            hole.x = 0;
-            hole.v = 0;
+            progress.value = 0;
             paramBuffer.writePartial({ hole: 0 });
             clearFrame(attachment.view);
             return true;
@@ -395,6 +713,9 @@ export const createVortexScene =
       cleanup: () => {
         paramBuffer.destroy();
         particleBuffer.destroy();
+        deathsBuffer.destroy();
+        staging.destroy();
+        keys.destroy();
         root.destroy();
       },
     };
