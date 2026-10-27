@@ -85,7 +85,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 - `VortexSnapshot.tsx` — wrapper: `swallow()` pulls its children into the GPU black hole (over `useVortexRun`)
 - `VortexSnapshotDemo.tsx` — test screen: three wrapped cards over colored blobs, tap to swallow, Reset
 - `BlackHoleGpu.tsx` — HUD + settings over `<VortexSnapshot prewarm touchOrigin={false} background={SPACE_COLOR}>` (14e): transition gate, run state mirrored via `onStateChange`, tile / Sticky as wrapper props, owns speed / progress / paused / seekTarget SharedValues, status text, lens tune / dials
-- `../pull-to-refresh/threads-example/SwallowableThreadItem.tsx` — list-delete usage (14h): a lazy wrapper per Threads post; the post's overflow dots call `swallow()`, the row leaves the list on resolve
+- `../pull-to-refresh/threads-example/SwallowableThreadItem.tsx` — list-delete usage (14h): a lazy wrapper per Threads post; the post's delete (trash) button calls `swallow()`, the row leaves the list on resolve
 - `useVortexRun.ts` — the run state machine hook: shared device, snapshot texture, scene memo (deps: snapshot texture, tile), phase/seed/sticky/progress/paused/seekTarget SharedValues, `actions` (release / pause / resume / reset / pickTile / toggleSticky / onScrubEnd); exports `RunState`, `ShowMode`
 - `ProgressBar.tsx` — progress bar + percent readout + scrubber (pan, minDistance 0); writes `seekTarget`, all on the UI thread
 - `SettingsPanel.tsx` — bottom-docked panel via Portal, Sim | Lens tabs; Sim: status line, Speed slider, tile chips, Sticky chip
@@ -163,7 +163,7 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
   (the inner view the children size; `{ flex: 1 }` for a full-screen stage).
 - Usages: the Black Hole GPU screen (14e: prewarm, space background, center origin,
   HUD drives the handle) and the pull-to-refresh Threads feed (14h: one lazy wrapper
-  per post, tap the overflow dots to delete; the hole opens at the dots, also in a
+  per post, tap its delete (trash) button; the hole opens at the button, also in a
   scrolled list; the row's horizontal media rail still scrolls; the rows below spring
   up via `itemLayoutAnimation`; a pull-to-refresh brings deleted posts back).
 - Capture audit (14f, `expo export --platform ios`): the wrapper and the row add no

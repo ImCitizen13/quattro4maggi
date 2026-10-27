@@ -3,7 +3,7 @@
  * black hole (`VortexSnapshot`).
  *
  * FLOW:
- *   tap the post's overflow dots ─► handle.swallow() (hole opens at the tap)
+ *   tap the post's delete (trash) button ─► handle.swallow() (hole opens at the tap)
  *     ─► every tile swallowed ─► onRemoved(id): the list drops the row and the
  *        rows below spring up (the FlatList's itemLayoutAnimation)
  *   a second tap while swallowing ─► same pending promise (no double run)

@@ -376,7 +376,7 @@ export function PullToRefresh({}: PullToRefreshProps) {
               renderItem={({ item, index }) => {
                 const borderColor = NEON_COLORS[index % NEON_COLORS.length];
                 if (stickyMode === "threads") {
-                  // Tap the post's overflow dots: swallowed by the black hole.
+                  // Tap the post's delete button: swallowed by the black hole.
                   return (
                     <SwallowableThreadItem
                       id={item}
