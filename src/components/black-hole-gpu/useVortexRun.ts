@@ -24,6 +24,9 @@
  * - Owns the shared GPU device, snapshot texture, scene memo (deps: snapshot
  *   texture, tile) and the phase/seed/sticky/progress/paused/seekTarget SharedValues
  * - No scene rebuild on release/pause/reset/sticky; only tile or layout size change rebuilds
+ * - `prewarm` (default) builds the standby scene up front; `prewarm: false` builds
+ *   texture + scene inside release (overlapping the press delay) and frees them
+ *   on reset / unmount, so idle wrappers hold no GPU memory
  * - Epoch guard: reset, relayout and unmount cancel an in-flight release
  * - Snapshot and scene share one device (useDevice makes a new one per call)
  * - Render loop on the UI runtime
@@ -55,6 +58,12 @@ export type RunState = "idle" | "capturing" | "running" | "paused" | "done";
 export type UseVortexRunOptions = {
   /** Gate: no snapshot texture / scene until true (the demo's push-transition gate). */
   enabled: boolean;
+  /**
+   * True (default): texture + standby scene are built as soon as `enabled` and
+   * laid out, so release only captures. False (lazy): nothing is allocated
+   * until release; reset (or unmount) frees it again.
+   */
+  prewarm?: boolean;
   /** The wrapped view can be captured (e.g. its image loaded). Release is a no-op while false. */
   ready: boolean;
   /** Initial tile size in px. Default DEFAULT_VORTEX.tile. */
@@ -144,6 +153,7 @@ const NO_ORIGIN = { x: -1, y: -1 };
 
 export const useVortexRun = ({
   enabled,
+  prewarm = true,
   ready,
   initialTile = DEFAULT_VORTEX.tile,
   initialSticky = true,
@@ -189,6 +199,11 @@ export const useVortexRun = ({
   const [show, setShow] = useState<ShowMode>("rn");
   const [tile, setTile] = useState<number>(initialTile);
   const [sticky, setSticky] = useState(initialSticky);
+  // Lazy mode: a release asked for the texture + scene (cleared by reset).
+  const [wanted, setWanted] = useState(false);
+  // Lazy release waiting for the texture: resolved with it once built, or with
+  // null by reset so the release bails instead of hanging.
+  const texWaiters = useRef<((tex: GPUTexture | null) => void)[]>([]);
   // A run was requested and not reset (the RN view may be hidden).
   const active = run !== "idle" && run !== "capturing";
 
@@ -204,13 +219,23 @@ export const useVortexRun = ({
   const pxH = size ? Math.round(size.height * dpr) : 0;
 
   // The scene's snapshot texture, owned here and refilled by every release.
+  // Lazy mode allocates it only once a release wants it.
+  const build = enabled && (prewarm || wanted);
   const snapTex = useMemo(
     () =>
-      device && enabled && pxW > 0 && pxH > 0
+      device && build && pxW > 0 && pxH > 0
         ? createSnapshotTexture(device, pxW, pxH)
         : null,
-    [device, enabled, pxW, pxH],
+    [device, build, pxW, pxH],
   );
+
+  // Hand a freshly built texture to a lazy release waiting for it.
+  useEffect(() => {
+    if (!snapTex) return;
+    const waiters = texWaiters.current;
+    texWaiters.current = [];
+    for (const w of waiters) w(snapTex);
+  }, [snapTex]);
 
   const onStarted = () => {
     setShow("gpu");
@@ -274,6 +299,11 @@ export const useVortexRun = ({
     progress.value = 0;
     setRun("idle");
     setShow("rn");
+    // Lazy: free the texture + scene; a release still waiting bails.
+    setWanted(false);
+    const waiters = texWaiters.current;
+    texWaiters.current = [];
+    for (const w of waiters) w(null);
   };
 
   const onLayout = (e: LayoutChangeEvent) => {
@@ -302,20 +332,33 @@ export const useVortexRun = ({
   // Release from idle: fresh capture of the RN view into the scene's texture,
   // then the run starts. (Once a run exists the RN view is hidden, so a
   // recapture would be blank: release is disabled until reset.)
+  //
+  // Lazy (no texture yet): ask for the build and wait for the texture in
+  // parallel with the press delay. The phase flip may land before the new
+  // scene's setup finishes; its first frame (lastPhase = -1) starts the run
+  // by itself, as on a tile change.
   const release = async (origin?: { x: number; y: number }): Promise<boolean> => {
-    if (!device || !scene || !snapTex || !ready || busy.current) {
+    if (!device || !enabled || !ready || busy.current || !size) {
       return false;
     }
+    if (prewarm && (!scene || !snapTex)) return false;
     busy.current = true;
     // Kept for the whole run: a tile / Sticky restart reopens at the same spot.
     originSv.value = origin ?? NO_ORIGIN;
     setRun("capturing");
     const myEpoch = epoch.current;
+    let tex = snapTex;
+    const texReady = tex
+      ? null
+      : new Promise<GPUTexture | null>((r) => texWaiters.current.push(r));
+    if (!tex) setWanted(true);
     await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));
     // Reset, relayout or unmount during the delay (reset already cleared busy).
     if (epoch.current !== myEpoch) return false;
+    if (texReady) tex = await texReady;
+    if (epoch.current !== myEpoch || !tex) return false;
     try {
-      await captureInto(device, viewRef, snapTex);
+      await captureInto(device, viewRef, tex);
     } catch {
       if (epoch.current === myEpoch) {
         busy.current = false;

@@ -2,9 +2,10 @@
  * VortexSnapshot — wraps any view; `swallow()` pulls it into the GPU black hole.
  *
  * FLOW:
- *   mount ─► children laid out ─► `useVortexRun` builds the snapshot texture +
- *     standby scene at the children's layout size (always built once laid out;
- *     lazy build is a later subtask)
+ *   mount ─► children laid out ─► nothing on the GPU (lazy, default); with
+ *     `prewarm` the snapshot texture + standby scene are built now at the
+ *     children's layout size
+ *   swallow ─► (lazy) texture + scene built during the 120 ms press delay
  *   handle.swallow(at?) (idle) ─► origin: `at` (points) | the last touch inside
  *     the wrapper (< 1 s ago, `touchOrigin`) | `center` ─► actions.release(origin):
  *     capture children into the texture ─► run starts, hole opens at the origin ─► first GPU frame hides the children (onStart)
@@ -78,6 +79,12 @@ export type VortexSnapshotProps = {
   background?: readonly [number, number, number, number];
   /** Children can be captured (e.g. images loaded). Default true. */
   ready?: boolean;
+  /**
+   * Build the GPU scene on mount for the fastest swallow. Default false: the
+   * scene is built inside swallow() and freed on reset / unmount, so idle
+   * wrappers (e.g. list rows) hold no GPU memory.
+   */
+  prewarm?: boolean;
   speed?: SharedValue<number>;
   /** Written every frame: fraction of tiles swallowed. */
   progress?: SharedValue<number>;
@@ -123,6 +130,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       touchOrigin = true,
       background,
       ready = true,
+      prewarm = false,
       speed,
       progress,
       seekTarget,
@@ -149,6 +157,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
 
     const vortex = useVortexRun({
       enabled: true,
+      prewarm,
       ready,
       initialTile: tile,
       initialSticky: sticky,

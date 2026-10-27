@@ -157,7 +157,11 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
 - Props: `tile`, `sticky` (live), `center`, `touchOrigin`, `background` (read at scene build),
   `ready`, `speed` / `progress` / `seekTarget` SharedValues, `lensTune`,
   `onStateChange` / `onStart` / `onSwallowed` / `onStats`, `style`.
-- The scene is built once the children are laid out (lazy build is a later subtask).
+- Lazy by default (14d): no GPU texture or scene until `swallow()`, which builds
+  them during the 120 ms press delay; `reset()` / unmount frees them. A done run
+  keeps its scene until reset or unmount (tearing down at done would pop the lens
+  off before the caller removes the view). `prewarm` builds on mount instead
+  (the Black Hole GPU screen uses the hook's prewarm default).
 
 ## Measurements (iPhone 17 Pro Simulator, 60 Hz cap)
 

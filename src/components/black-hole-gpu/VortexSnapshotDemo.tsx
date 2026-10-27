@@ -49,7 +49,11 @@ export const VortexSnapshotDemo = () => {
   const log = (i: number, text: string) =>
     setStatus((s) => ({ ...s, [i]: `card ${i + 1}: ${text}` }));
 
+  // swallow() call time per card, for the "start N ms" latency readout.
+  const swallowAt = useRef<Record<number, number>>({});
+
   const swallow = (i: number) => {
+    swallowAt.current[i] = performance.now();
     refs.current[i]
       ?.swallow()
       .then(() => setRemoved((r) => ({ ...r, [i]: true })))
@@ -76,7 +80,12 @@ export const VortexSnapshotDemo = () => {
                 refs.current[i] = h;
               }}
               tile={4}
-              onStart={() => log(i, "start")}
+              onStart={() =>
+                log(
+                  i,
+                  `start ${Math.round(performance.now() - (swallowAt.current[i] ?? 0))} ms`,
+                )
+              }
               onSwallowed={() => log(i, "swallowed")}
               onStateChange={(s) => log(i, s)}
             >
