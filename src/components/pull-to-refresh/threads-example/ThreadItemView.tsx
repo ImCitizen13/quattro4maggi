@@ -6,6 +6,7 @@
  *
  * FLOW (top → bottom):
  * 1. Header      → avatar, author handle, "· 1d" timestamp, overflow dots
+ *                  (pressable when `onDelete` is set)
  * 2. Body text   → the post copy
  * 3. Media       → 0..n images in a horizontal, edge-bleeding rail (optional)
  * 4. Action bar  → like / comment / reshare / share, each with a count
@@ -57,6 +58,8 @@ export type ThreadPost = {
 
 export type ThreadItemViewProps = {
   post: ThreadPost;
+  /** Overflow dots pressed; omitted = the dots are decorative. */
+  onDelete?: () => void;
 };
 
 // ============================================================================
@@ -74,7 +77,7 @@ function formatCount(n: number): string {
 // Component
 // ============================================================================
 
-export default function ThreadItemView({ post }: ThreadItemViewProps) {
+export default function ThreadItemView({ post, onDelete }: ThreadItemViewProps) {
   const hasImages = !!post.images?.length;
   const singleImage = post.images?.length === 1;
 
@@ -92,7 +95,14 @@ export default function ThreadItemView({ post }: ThreadItemViewProps) {
           <Text style={styles.author}>{post.author}</Text>
           <Text style={styles.timeAgo}>{post.timeAgo}</Text>
           <View style={styles.headerSpacer} />
-          <Ionicons name="ellipsis-horizontal" size={16} color="#777" />
+          <PressableScale
+            hitSlop={12}
+            enabled={!!onDelete}
+            onPress={onDelete}
+            accessibilityLabel="Delete post"
+          >
+            <Ionicons name="ellipsis-horizontal" size={16} color="#777" />
+          </PressableScale>
         </View>
 
         {post.text ? <Text style={styles.bodyText}>{post.text}</Text> : null}

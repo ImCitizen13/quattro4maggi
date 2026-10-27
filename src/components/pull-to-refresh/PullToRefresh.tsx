@@ -29,6 +29,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
+  LinearTransition,
   SharedValue,
   useAnimatedStyle,
 } from "react-native-reanimated";
@@ -46,8 +47,8 @@ import {
   useRefreshLifecycle,
 } from "./RefreshLifecycleContext";
 import { StickyStatusHeader } from "./StickyHeader";
-import ThreadItemView from "./threads-example/ThreadItemView";
 import { postForIndex, reshuffle } from "./threads-example/posts";
+import SwallowableThreadItem from "./threads-example/SwallowableThreadItem";
 import ThreadsView from "./threads-example/ThreadsView";
 import { NEON_COLORS } from "./constants";
 import NeonView from "./neon-example/NeonView";
@@ -319,7 +320,13 @@ export function PullToRefresh({}: PullToRefreshProps) {
     // a failed pull leaves the existing order untouched. Reshuffling now (while
     // the indicator is still held open) means the settle reveals the new feed.
     // setFeedOrder(reshuffle);
+    // Bring back posts deleted into the black hole (no-op when none were).
+    setFeedOrder((order) => (order.length === ITEMS.length ? order : ITEMS));
   };
+
+  /** A Threads post finished its swallow: drop it, the rows below spring up. */
+  const removePost = (id: number) =>
+    setFeedOrder((order) => order.filter((i) => i !== id));
 
   const { progress, phase, spin, outcome, gesture, onScrollHandler } =
     useCustomRefreshControl({ onRefresh });
@@ -362,12 +369,21 @@ export function PullToRefresh({}: PullToRefreshProps) {
             <Animated.FlatList
               data={feedOrder}
               keyExtractor={(item) => `${item}`}
+              // Rows below a deleted (swallowed) post spring up into its slot.
+              itemLayoutAnimation={LinearTransition.springify()}
               // In Threads mode each row is a real post card; otherwise the
               // demo's placeholder box, so the pull mechanics stay the focus.
               renderItem={({ item, index }) => {
                 const borderColor = NEON_COLORS[index % NEON_COLORS.length];
                 if (stickyMode === "threads") {
-                  return <ThreadItemView post={postForIndex(item)} />;
+                  // Tap the post's overflow dots: swallowed by the black hole.
+                  return (
+                    <SwallowableThreadItem
+                      id={item}
+                      post={postForIndex(item)}
+                      onRemoved={removePost}
+                    />
+                  );
                 } else if (stickyMode === "neon") {
                   return <NeonItemView index={index} />;
                 } else
