@@ -1,0 +1,358 @@
+/**
+ * useVortexRun — the GPU vortex run state machine behind a wrapped RN view.
+ *
+ * FLOW:
+ *   `enabled` flips ─► snapshot texture + standby scene are built once
+ *     (TypeGPU root: one particle per tile, storage buffer); nothing is drawn
+ *   actions.release (idle) ─► 120 ms ─► drawElementImageToTexture INTO the scene's texture
+ *        └─ `phase` SharedValue flips ─► the UI loop starts the run (sim reset,
+ *           particles seeded at home, frame 0) ─► onStarted hides the RN view (show = "gpu")
+ *        └─ per frame (ui-worklet, composeLayered): vortex layer = compute
+ *             `step` (N × h=1/120) ─► 6 × N instanced tiles sampling the
+ *             snapshot over space ─► lens layer (reads that as its backdrop):
+ *             gravitational lensing + glass bubble ─► blit to the swapchain
+ *             ─► writes `progress` (fraction of tiles swallowed)
+ *   actions.pause (running) ─► `paused` = true: sim frozen, frames still drawn
+ *   actions.resume (paused) ─► `paused` = false: the run continues
+ *   scrub (seekTarget) ─► the run seeks; actions.onScrubEnd follows the resume in state
+ *        └─ onDone(true) ─► "done"; scrubbing back before the end ─► "running" again
+ *   actions.reset ─► phase = 0 (one transparent frame, then no present), show the RN view
+ *
+ * STATE: run = idle ─► capturing ─► running ⇄ paused, running/paused ─► done; reset ─► idle
+ *
+ * KEY FEATURES:
+ * - Owns the shared GPU device, snapshot texture, scene memo (deps: snapshot
+ *   texture, tile) and the phase/seed/sticky/progress/paused/seekTarget SharedValues
+ * - No scene rebuild on release/pause/reset/sticky; only tile or layout size change rebuilds
+ * - Epoch guard: reset, relayout and unmount cancel an in-flight release
+ * - Snapshot and scene share one device (useDevice makes a new one per call)
+ * - Render loop on the UI runtime
+ * - Stats go out through `onStats`; the hook holds no demo status text
+ */
+import { type RefObject, useMemo, useRef, useState, useEffect } from "react";
+import { type LayoutChangeEvent, PixelRatio, type View } from "react-native";
+import { type SharedValue, useSharedValue } from "react-native-reanimated";
+import { useSharedDevice } from "@/hooks/useSharedDevice";
+import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
+import { composeLayered } from "../gargantua-type-gpu/composeLayered";
+import { createLensScene, type LensShared } from "./lensScene";
+import type { LensTuneValues } from "./lensTune";
+import { captureInto, createSnapshotTexture } from "./snapshot";
+import { createVortexScene, DEFAULT_VORTEX, type VortexStats } from "./vortexScene";
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export type ShowMode = "rn" | "gpu";
+
+/**
+ * Run lifecycle. idle ─► capturing (release pressed, snapshot in flight) ─►
+ * running ⇄ paused; running / paused ─► done (all tiles swallowed); reset ─► idle.
+ */
+export type RunState = "idle" | "capturing" | "running" | "paused" | "done";
+
+export type UseVortexRunOptions = {
+  /** Gate: no snapshot texture / scene until true (the demo's push-transition gate). */
+  enabled: boolean;
+  /** The wrapped view can be captured (e.g. its image loaded). Release is a no-op while false. */
+  ready: boolean;
+  /** Initial tile size in px. Default DEFAULT_VORTEX.tile. */
+  initialTile?: number;
+  /** Initial sticky patches flag. Default true. */
+  initialSticky?: boolean;
+  /** Space color the vortex layer clears to. Default transparent. */
+  clearColor?: readonly [number, number, number, number];
+  /** Hole center as a 0..1 fraction of the snapshot. */
+  center?: { x: number; y: number };
+  /** Live lens knobs from `useLensTune`. */
+  lensTune: LensTuneValues;
+  /** External speed SharedValue; the hook creates one (1) if omitted. */
+  speed?: SharedValue<number>;
+  /** Called with the throttled per-frame stats from the vortex scene. */
+  onStats?: (stats: VortexStats) => void;
+};
+
+export type VortexRunActions = {
+  /** From idle: capture the view into the scene's texture, then start the run. */
+  release: () => void;
+  /** From running: freeze the sim (frames still drawn). */
+  pause: () => void;
+  /** From paused: continue the run. */
+  resume: () => void;
+  /** Stop any run / capture and show the RN view again. */
+  reset: () => void;
+  /** Change the tile size (rebuilds the scene). */
+  pickTile: (size: number) => void;
+  /** Toggle sticky patches (restarts an active run). */
+  toggleSticky: () => void;
+  /** The scrub already cleared `paused` on the UI thread; follow it in state. */
+  onScrubEnd: () => void;
+};
+
+export type UseVortexRun = {
+  run: RunState;
+  show: ShowMode;
+  /** The standby scene exists (canvas can be composited). */
+  hasScene: boolean;
+  canvasRef: ReturnType<typeof useWebGPUOnDevice>;
+  /** Attach to the wrapped view (collapsable={false}). */
+  viewRef: RefObject<View | null>;
+  /** Attach to the wrapped view; a size change resets and rebuilds. */
+  onLayout: (e: LayoutChangeEvent) => void;
+  speed: SharedValue<number>;
+  /** Written every frame by the render worklet: fraction of tiles swallowed. */
+  progress: SharedValue<number>;
+  /** True freezes the sim (frames still drawn). */
+  paused: SharedValue<boolean>;
+  /** -1 = none; 0..1 = the scene seeks the run to that progress while held. */
+  seekTarget: SharedValue<number>;
+  tile: number;
+  sticky: boolean;
+  actions: VortexRunActions;
+};
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+// Pause between the release press and the capture: drawElementImageToTexture
+// blocks the platform UI thread ~0.4 s, so let the press animation settle first.
+const RELEASE_DELAY_MS = 120;
+
+// UI-thread loop only for now (user decision 2026-10-23). The hook still
+// supports "js-raf" (gargantua uses it); restore a toggle here if needed.
+const RENDER_MODE = "ui-worklet" as const;
+
+// ============================================================================
+// Hook
+// ============================================================================
+
+export const useVortexRun = ({
+  enabled,
+  ready,
+  initialTile = DEFAULT_VORTEX.tile,
+  initialSticky = true,
+  clearColor,
+  center,
+  lensTune,
+  speed: speedProp,
+  onStats,
+}: UseVortexRunOptions): UseVortexRun => {
+  const device = useSharedDevice();
+  const ownSpeed = useSharedValue(1);
+  const speed = speedProp ?? ownSpeed;
+  // Read by the UI-runtime loop: phase 0 = idle, a new non-zero value = start a run.
+  const phase = useSharedValue(0);
+  // Written every frame by the render worklet: fraction of tiles swallowed.
+  const progress = useSharedValue(0);
+  // True freezes the sim (frames still drawn).
+  const paused = useSharedValue(false);
+  // -1 = none; 0..1 = the scene seeks the run to that progress while held.
+  const seekTarget = useSharedValue(-1);
+  const seedSv = useSharedValue(0);
+  const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
+  const runId = useRef(0);
+  const viewRef = useRef<View>(null);
+  const layout = useRef({ width: 0, height: 0 });
+  const busy = useRef(false);
+  // Bumped by reset, layout change and unmount: an in-flight release bails.
+  const epoch = useRef(0);
+  // The scene memo captures its callbacks once; read the latest through a ref.
+  const onStatsRef = useRef(onStats);
+  onStatsRef.current = onStats;
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const [run, setRun] = useState<RunState>("idle");
+  const [show, setShow] = useState<ShowMode>("rn");
+  const [tile, setTile] = useState<number>(initialTile);
+  const [sticky, setSticky] = useState(initialSticky);
+  // A run was requested and not reset (the RN view may be hidden).
+  const active = run !== "idle" && run !== "capturing";
+
+  useEffect(
+    () => () => {
+      epoch.current += 1;
+    },
+    [],
+  );
+
+  const dpr = PixelRatio.get();
+  const pxW = size ? Math.round(size.width * dpr) : 0;
+  const pxH = size ? Math.round(size.height * dpr) : 0;
+
+  // The scene's snapshot texture, owned here and refilled by every release.
+  const snapTex = useMemo(
+    () =>
+      device && enabled && pxW > 0 && pxH > 0
+        ? createSnapshotTexture(device, pxW, pxH)
+        : null,
+    [device, enabled, pxW, pxH],
+  );
+
+  const onStarted = () => {
+    setShow("gpu");
+    busy.current = false;
+  };
+
+  // "All tiles swallowed" flipped. Functional setState: the scene memo captures
+  // this callback once, so it must not read `run` from a stale closure.
+  const onDone = (done: boolean) =>
+    setRun((r) => {
+      if (done) return r === "running" || r === "paused" ? "done" : r;
+      return r === "done" ? "running" : r;
+    });
+
+  // Two layers: the vortex (tiles over space) then the lens, which reads it as
+  // its backdrop. `shared` is the vortex-to-lens handoff, fresh per scene.
+  const scene = useMemo(() => {
+    if (!snapTex) return null;
+    const shared: LensShared = {};
+    return composeLayered([
+      {
+        scene: createVortexScene({
+          snapshot: snapTex,
+          config: { ...DEFAULT_VORTEX, tile },
+          clearColor,
+          center,
+          speed,
+          phase,
+          progress,
+          paused,
+          seekTarget,
+          seed: seedSv,
+          sticky: stickySv,
+          shared,
+          onStarted,
+          onDone,
+          onStats: (s: VortexStats) => onStatsRef.current?.(s),
+        }),
+      },
+      { scene: createLensScene(shared, lensTune), readsBackdrop: true },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapTex, tile]);
+  const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, {
+    mode: RENDER_MODE,
+  });
+
+  // Declared after the hook's effect: on a texture change React runs the hook's
+  // cleanup first (it cancels the UI loop and tears the scene down), so the
+  // texture is destroyed only once nothing samples it.
+  useEffect(() => () => snapTex?.destroy(), [snapTex]);
+
+  const reset = () => {
+    epoch.current += 1;
+    busy.current = false;
+    phase.value = 0;
+    paused.value = false;
+    seekTarget.value = -1;
+    progress.value = 0;
+    setRun("idle");
+    setShow("rn");
+  };
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    const changed = width !== layout.current.width || height !== layout.current.height;
+    layout.current = { width, height };
+    if (changed) {
+      // Texture and scene rebuild from the new size; stop any run / capture on
+      // the old one.
+      reset();
+      setSize({ width, height });
+    }
+  };
+
+  // Begin a run on the current texture: busy until the loop reports onStarted.
+  const startPhase = (stickyOn: boolean) => {
+    busy.current = true;
+    seedSv.value = Math.floor(Math.random() * 1e6);
+    stickySv.value = stickyOn ? DEFAULT_VORTEX.sticky : 0;
+    paused.value = false;
+    seekTarget.value = -1;
+    runId.current += 1;
+    phase.value = runId.current;
+  };
+
+  // Release from idle: fresh capture of the RN view into the scene's texture,
+  // then the run starts. (Once a run exists the RN view is hidden, so a
+  // recapture would be blank: release is disabled until reset.)
+  const release = async () => {
+    if (!device || !scene || !snapTex || !ready || busy.current) {
+      return;
+    }
+    busy.current = true;
+    setRun("capturing");
+    const myEpoch = epoch.current;
+    await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));
+    // Reset, relayout or unmount during the delay (reset already cleared busy).
+    if (epoch.current !== myEpoch) return;
+    try {
+      await captureInto(device, viewRef, snapTex);
+    } catch {
+      if (epoch.current === myEpoch) {
+        busy.current = false;
+        setRun("idle");
+      }
+      return;
+    }
+    if (epoch.current !== myEpoch) return;
+    startPhase(sticky);
+    setRun("running");
+  };
+
+  const resume = () => {
+    if (run !== "paused") return;
+    paused.value = false;
+    setRun("running");
+  };
+
+  const pause = () => {
+    if (run !== "running") return;
+    paused.value = true;
+    setRun("paused");
+  };
+
+  // The scrub already cleared `paused` on the UI thread; follow it in state.
+  const onScrubEnd = () => setRun((r) => (r === "paused" ? "running" : r));
+
+  // The tile change rebuilds the scene (setTile → useMemo dep). While a run is
+  // active `phase` still holds its non-zero id and the new scene starts with
+  // lastPhase = -1, so its first frame starts a run on the same texture by
+  // itself; busy just covers that frame until onStarted clears it.
+  const pickTile = (next: number) => {
+    if (next === tile) return;
+    if (active) {
+      busy.current = true;
+      paused.value = false;
+      seekTarget.value = -1;
+      setRun("running");
+    }
+    setTile(next);
+  };
+
+  const toggleSticky = () => {
+    const next = !sticky;
+    setSticky(next);
+    if (active && !busy.current) {
+      startPhase(next);
+      setRun("running");
+    }
+  };
+
+  return {
+    run,
+    show,
+    hasScene: scene !== null,
+    canvasRef,
+    viewRef,
+    onLayout,
+    speed,
+    progress,
+    paused,
+    seekTarget,
+    tile,
+    sticky,
+    actions: { release, pause, resume, reset, pickTile, toggleSticky, onScrubEnd },
+  };
+};

@@ -81,7 +81,8 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 ## Files
 
 - `src/app/black-hole-gpu/index.tsx` — route (plain `View`, not `ThemeView`)
-- `BlackHoleGpu.tsx` — state only: transition gate, snapshot texture, scene memo (deps: snapshot texture, tile), run state machine, phase/seed/sticky/speed/progress/paused/seekTarget SharedValues, HUD
+- `BlackHoleGpu.tsx` — HUD + settings over `useVortexRun`: transition gate, status text, lens tune / dials, speed SharedValue, JSX
+- `useVortexRun.ts` — the run state machine hook: shared device, snapshot texture, scene memo (deps: snapshot texture, tile), phase/seed/sticky/progress/paused/seekTarget SharedValues, `actions` (release / pause / resume / reset / pickTile / toggleSticky / onScrubEnd); exports `RunState`, `ShowMode`
 - `ProgressBar.tsx` — progress bar + percent readout + scrubber (pan, minDistance 0); writes `seekTarget`, all on the UI thread
 - `SettingsPanel.tsx` — bottom-docked panel via Portal, Sim | Lens tabs; Sim: status line, Speed slider, tile chips, Sticky chip
 - `LensPanel.tsx` — `LensTab`: Gravity / Glass / Colors groups, presets, slider grid, and per effect (rim / halo / specular) a color list: palette dropdown (`BLACK_HOLE_PALETTES`: super-nova / event-horizon / accretion-disk, fills only that list), − / + (1..6 colors), one text cell per color (the Lens tab body)
