@@ -162,6 +162,13 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
   keeps its scene until reset or unmount (tearing down at done would pop the lens
   off before the caller removes the view). `prewarm` builds on mount instead
   (the Black Hole GPU screen uses the hook's prewarm default).
+- Measured (14d, iPhone 17 Pro Simulator, `/vortex-snapshot` cards ~360×120 pt,
+  4 px tiles, lazy): `swallow()` → first GPU frame 367–450 ms (5 runs: 385, 450,
+  367, 401; three cards at once included). Reset mid-run rejects every pending
+  swallow ("unmounted") and the remounted cards run again. A wide card takes
+  ~35–40 s to finish: the flow speed scales with the short side, so the far
+  corners of a 3:1 view trail for a long time (tune `inflow` / `refRadius` for
+  wide views; not a lazy-build cost).
 
 ## Measurements (iPhone 17 Pro Simulator, 60 Hz cap)
 
