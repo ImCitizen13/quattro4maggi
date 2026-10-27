@@ -3,7 +3,7 @@
  * black hole (`VortexSnapshot`).
  *
  * FLOW:
- *   tap the post's delete (trash) button ─► handle.swallow() (hole opens at the tap)
+ *   tap the post's delete (trash) button ─► handle.swallow() (hole opens at the post's center)
  *     ─► every tile swallowed ─► onRemoved(id): the list drops the row and the
  *        rows below spring up (the FlatList's itemLayoutAnimation)
  *   a second tap while swallowing ─► same pending promise (no double run)
@@ -54,7 +54,8 @@ export default function SwallowableThreadItem({
   };
 
   return (
-    <VortexSnapshot ref={vortex}>
+    // touchOrigin off: the hole opens at the post's center, not at the button.
+    <VortexSnapshot ref={vortex} touchOrigin={false}>
       <ThreadItemView post={post} onDelete={onDelete} />
     </VortexSnapshot>
   );

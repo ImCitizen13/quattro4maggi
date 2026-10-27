@@ -163,8 +163,8 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
   (the inner view the children size; `{ flex: 1 }` for a full-screen stage).
 - Usages: the Black Hole GPU screen (14e: prewarm, space background, center origin,
   HUD drives the handle) and the pull-to-refresh Threads feed (14h: one lazy wrapper
-  per post, tap its delete (trash) button; the hole opens at the button, also in a
-  scrolled list; the row's horizontal media rail still scrolls; the rows below spring
+  per post, tap its delete (trash) button; `touchOrigin={false}`, so the hole opens at
+  the post's center; the row's horizontal media rail still scrolls; the rows below spring
   up via `itemLayoutAnimation`; a pull-to-refresh brings deleted posts back).
 - Capture audit (14f, `expo export --platform ios`): the wrapper and the row add no
   worklets; the scene worklets capture only SharedValues, numbers, GPU objects and
