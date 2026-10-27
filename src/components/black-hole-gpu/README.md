@@ -84,7 +84,8 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 - `src/app/vortex-snapshot/index.tsx` — route for the VortexSnapshot test screen
 - `VortexSnapshot.tsx` — wrapper: `swallow()` pulls its children into the GPU black hole (over `useVortexRun`)
 - `VortexSnapshotDemo.tsx` — test screen: three wrapped cards over colored blobs, tap to swallow, Reset
-- `BlackHoleGpu.tsx` — HUD + settings over `useVortexRun`: transition gate, status text, lens tune / dials, speed SharedValue, JSX
+- `BlackHoleGpu.tsx` — HUD + settings over `<VortexSnapshot prewarm touchOrigin={false} background={SPACE_COLOR}>` (14e): transition gate, run state mirrored via `onStateChange`, tile / Sticky as wrapper props, owns speed / progress / paused / seekTarget SharedValues, status text, lens tune / dials
+- `../pull-to-refresh/threads-example/SwallowableThreadItem.tsx` — list-delete usage (14h): a lazy wrapper per Threads post; the post's overflow dots call `swallow()`, the row leaves the list on resolve
 - `useVortexRun.ts` — the run state machine hook: shared device, snapshot texture, scene memo (deps: snapshot texture, tile), phase/seed/sticky/progress/paused/seekTarget SharedValues, `actions` (release / pause / resume / reset / pickTile / toggleSticky / onScrubEnd); exports `RunState`, `ShowMode`
 - `ProgressBar.tsx` — progress bar + percent readout + scrubber (pan, minDistance 0); writes `seekTarget`, all on the UI thread
 - `SettingsPanel.tsx` — bottom-docked panel via Portal, Sim | Lens tabs; Sim: status line, Speed slider, tile chips, Sticky chip
@@ -147,7 +148,8 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
 ```
 
 - Handle: `swallow(at?)` (promise: resolves when all tiles are swallowed; rejects on
-  failure to start, reset, relayout or unmount), `pause()`, `resume()`, `reset()`.
+  failure to start, reset, relayout or unmount), `pause()`, `resume()`, `reset()`,
+  `scrubEnd()` (a progress-bar scrub released; follow its resume in state).
 - Origin (14g): the hole opens at `at` (points in the wrapper), else at the last
   touch inside the wrapper under 1 s old (`touchOrigin`, default on; so the tap
   that calls `swallow()` is where the destruction starts), else at `center`
@@ -155,8 +157,20 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
   start), so the release wave and the lens start there; a tile / Sticky restart
   keeps it.
 - Props: `tile`, `sticky` (live), `center`, `touchOrigin`, `background` (read at scene build),
-  `ready`, `speed` / `progress` / `seekTarget` SharedValues, `lensTune`,
-  `onStateChange` / `onStart` / `onSwallowed` / `onStats`, `style`.
+  `enabled` (gate, e.g. a push transition), `ready`, `prewarm`, `speed` / `progress` /
+  `seekTarget` / `paused` SharedValues, `lensTune`,
+  `onStateChange` / `onStart` / `onSwallowed` / `onStats`, `style`, `contentStyle`
+  (the inner view the children size; `{ flex: 1 }` for a full-screen stage).
+- Usages: the Black Hole GPU screen (14e: prewarm, space background, center origin,
+  HUD drives the handle) and the pull-to-refresh Threads feed (14h: one lazy wrapper
+  per post, tap the overflow dots to delete; the hole opens at the dots, also in a
+  scrolled list; the row's horizontal media rail still scrolls; the rows below spring
+  up via `itemLayoutAnimation`; a pull-to-refresh brings deleted posts back).
+- Capture audit (14f, `expo export --platform ios`): the wrapper and the row add no
+  worklets; the scene worklets capture only SharedValues, numbers, GPU objects and
+  callbacks. ProgressBar mappers must read `progress` / `seekTarget` inline: through
+  a shared `'worklet'` helper the mapper captured the helper, not the SharedValues,
+  so Reanimated never re-ran it and the readout sat at 0 % (fixed in 14e).
 - Lazy by default (14d): no GPU texture or scene until `swallow()`, which builds
   them during the 120 ms press delay; `reset()` / unmount frees them. A done run
   keeps its scene until reset or unmount (tearing down at done would pop the lens
