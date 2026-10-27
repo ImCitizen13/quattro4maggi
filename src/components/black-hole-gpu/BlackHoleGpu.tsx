@@ -1,19 +1,21 @@
 /**
- * BlackHoleGpu — HUD + settings over `useVortexRun`: a React Native view
+ * BlackHoleGpu — HUD + settings over `VortexSnapshot`: a React Native view
  * swallowed by a GPU particle vortex.
  *
  * FLOW:
- *   push transition ends ─► `enabled` ─► useVortexRun builds the snapshot texture
- *     + standby scene once (see useVortexRun for the run state machine)
- *   DemoContent (RN view, collapsable={false}) ─► `viewRef` / `onLayout` from the hook
- *     └─ Destroy (idle) ─► actions.release; Destroy (paused) ─► actions.resume
- *     └─ Pause (running) ─► actions.pause
- *     └─ scrub the progress bar ─► `seekTarget`; release ─► actions.onScrubEnd
- *     └─ Reset (paused / done) ─► actions.reset + status "idle"
+ *   push transition ends ─► `enabled` ─► the wrapper (prewarm) builds the snapshot
+ *     texture + standby scene once (see useVortexRun for the run state machine)
+ *   <VortexSnapshot> around DemoContent; run state mirrored via onStateChange
+ *     └─ Destroy (idle) ─► handle.swallow() (hole at the center); Destroy (paused) ─► handle.resume
+ *     └─ Pause (running) ─► handle.pause
+ *     └─ scrub the progress bar ─► `seekTarget`; release ─► handle.scrubEnd
+ *     └─ Reset (paused / done) ─► handle.reset + status "idle"
+ *     └─ tile / Sticky chips ─► wrapper props (live)
  *   onStats ─► `status` text shown in the settings panel
  *
  * KEY FEATURES:
- * - Thin UI layer: all run / GPU state lives in useVortexRun
+ * - Thin UI layer: all run / GPU state lives in the wrapper (useVortexRun);
+ *   `touchOrigin` off so the hole always opens in the middle
  * - Two-button HUD (Destroy, Pause/Reset) under a full-width progress bar / scrubber;
  *   fixed height in every state (the stage size drives a GPU rebuild)
  * - Gear button in the navigation header toggles SettingsPanel (portal, floats over
@@ -26,10 +28,9 @@
  */
 import { Stack, useNavigation } from "expo-router";
 import { PressableScale } from "pressto";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LogBox, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
-import { Canvas } from "react-native-webgpu";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
 import { DemoContent } from "./DemoContent";
@@ -37,8 +38,9 @@ import { useLensDials } from "./lensDials";
 import { useLensTune } from "./lensTune";
 import { ProgressBar } from "./ProgressBar";
 import { SettingsPanel } from "./SettingsPanel";
-import { useVortexRun } from "./useVortexRun";
-import { SPACE_COLOR, type VortexStats } from "./vortexScene";
+import type { RunState } from "./useVortexRun";
+import { VortexSnapshot, type VortexSnapshotHandle } from "./VortexSnapshot";
+import { DEFAULT_VORTEX, SPACE_COLOR, type VortexStats } from "./vortexScene";
 
 // ============================================================================
 // Types
@@ -84,36 +86,20 @@ export const BlackHoleGpu = () => {
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const speed = useSharedValue(1);
-  const lensTune = useLensTune();
+  const progress = useSharedValue(0);
+  const paused = useSharedValue(false);
+  const seekTarget = useSharedValue(-1);
+  const vortex = useRef<VortexSnapshotHandle>(null);  const lensTune = useLensTune();
   useLensDials(lensTune, speed);
   const [transitioned, setTransitioned] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [status, setStatus] = useState("idle");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const {
-    run,
-    show,
-    hasScene,
-    canvasRef,
-    viewRef,
-    onLayout,
-    progress,
-    paused,
-    seekTarget,
-    tile,
-    sticky,
-    actions,
-  } = useVortexRun({
-    enabled: transitioned,
-    ready: imageLoaded,
-    clearColor: SPACE_COLOR,
-    lensTune,
-    speed,
-    onStats: (s) => setStatus(formatStats(s)),
-  });
+  const [run, setRun] = useState<RunState>("idle");
+  const [tile, setTile] = useState<number>(DEFAULT_VORTEX.tile);
+  const [sticky, setSticky] = useState(true);
   // A run was requested and not reset (the RN view may be hidden).
   const active = run !== "idle" && run !== "capturing";
-
   // Wait for the push transition so the pre-build doesn't compete with it.
   useEffect(() => {
     const unsubscribe = navigation.addListener("transitionEnd", (e) => {
@@ -129,14 +115,15 @@ export const BlackHoleGpu = () => {
   // Destroy: capture and start from idle, continue from paused.
   const destroy = () => {
     if (run === "idle") {
-      actions.release();
+      // Rejects on Reset / relayout; the HUD already follows `run`.
+      vortex.current?.swallow().catch(() => {});
     } else if (run === "paused") {
-      actions.resume();
+      vortex.current?.resume();
     }
   };
 
   const onReset = () => {
-    actions.reset();
+    vortex.current?.reset();
     setStatus("idle");
   };
 
@@ -148,21 +135,27 @@ export const BlackHoleGpu = () => {
   return (
     <View style={styles.container}>
       <View style={styles.stage}>
-        <View style={[styles.fill, show === "gpu" && styles.hidden]}>
-          <DemoContent
-            ref={viewRef}
-            onLayout={onLayout}
-            onImageLoad={() => setImageLoaded(true)}
-          />
-        </View>
-        <Canvas
-          ref={canvasRef}
-          style={[
-            styles.overlay,
-            show === "rn" && (hasScene ? styles.starting : styles.hidden),
-          ]}
-          pointerEvents="none"
-        />
+        <VortexSnapshot
+          ref={vortex}
+          prewarm
+          touchOrigin={false}
+          background={SPACE_COLOR}
+          enabled={transitioned}
+          ready={imageLoaded}
+          tile={tile}
+          sticky={sticky}
+          speed={speed}
+          progress={progress}
+          paused={paused}
+          seekTarget={seekTarget}
+          lensTune={lensTune}
+          onStateChange={setRun}
+          onStats={(s) => setStatus(formatStats(s))}
+          style={styles.fill}
+          contentStyle={styles.fill}
+        >
+          <DemoContent onImageLoad={() => setImageLoaded(true)} />
+        </VortexSnapshot>
         <FpsOverlay dark />
       </View>
       <Stack.Screen
@@ -187,8 +180,8 @@ export const BlackHoleGpu = () => {
           sticky={sticky}
           status={status}
           width={winW}
-          onPickTile={actions.pickTile}
-          onToggleSticky={actions.toggleSticky}
+          onPickTile={setTile}
+          onToggleSticky={() => setSticky((s) => !s)}
           onClose={() => setSettingsOpen(false)}
         />
       )}
@@ -199,7 +192,7 @@ export const BlackHoleGpu = () => {
           paused={paused}
           enabled={active}
           width={winW - 32}
-          onScrubEnd={actions.onScrubEnd}
+          onScrubEnd={() => vortex.current?.scrubEnd()}
         />
         <View style={styles.row}>
           <PressableScale
@@ -212,7 +205,7 @@ export const BlackHoleGpu = () => {
           <PressableScale
             style={[styles.button, !pauseResetEnabled && styles.dim]}
             enabled={pauseResetEnabled}
-            onPress={canReset ? onReset : actions.pause}
+            onPress={canReset ? onReset : () => vortex.current?.pause()}
           >
             <Text style={styles.label}>{canReset ? "Reset" : "Pause"}</Text>
           </PressableScale>
@@ -230,14 +223,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#1a1a1a" },
   stage: { flex: 1 },
   fill: { flex: 1 },
-  overlay: StyleSheet.absoluteFill,
-  hidden: { opacity: 0 },
-  // Canvas while the standby scene exists and the RN view shows (idle, or a
-  // run starting until onStarted): the scene keeps the layer composited at 0.01
-  // and its idle frame is transparent. At opacity 0 Core Animation never
-  // recycles drawables → the third getCurrentTexture() waits out Metal's 1 s
-  // nextDrawable timeout.
-  starting: { opacity: 0.01 },
   hud: { padding: 16, gap: 12 },
   row: { flexDirection: "row", gap: 12 },
   chipActive: { backgroundColor: "#4a3a8a" },

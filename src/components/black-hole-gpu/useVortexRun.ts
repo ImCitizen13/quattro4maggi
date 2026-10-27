@@ -82,6 +82,8 @@ export type UseVortexRunOptions = {
   progress?: SharedValue<number>;
   /** External seek SharedValue (-1 = none); the hook creates one if omitted. */
   seekTarget?: SharedValue<number>;
+  /** External paused SharedValue; the hook creates one (false) if omitted. */
+  paused?: SharedValue<boolean>;
   /** Called right after the first GPU frame is shown (show = "gpu"). */
   onStarted?: () => void;
   /** Called with the throttled per-frame stats from the vortex scene. */
@@ -163,6 +165,7 @@ export const useVortexRun = ({
   speed: speedProp,
   progress: progressProp,
   seekTarget: seekTargetProp,
+  paused: pausedProp,
   onStarted: onStartedProp,
   onStats,
 }: UseVortexRunOptions): UseVortexRun => {
@@ -175,7 +178,8 @@ export const useVortexRun = ({
   const ownProgress = useSharedValue(0);
   const progress = progressProp ?? ownProgress;
   // True freezes the sim (frames still drawn).
-  const paused = useSharedValue(false);
+  const ownPaused = useSharedValue(false);
+  const paused = pausedProp ?? ownPaused;
   // -1 = none; 0..1 = the scene seeks the run to that progress while held.
   const ownSeekTarget = useSharedValue(-1);
   const seekTarget = seekTargetProp ?? ownSeekTarget;

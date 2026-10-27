@@ -65,12 +65,8 @@ export const ProgressBar = ({
   onScrubEnd,
 }: ProgressBarProps) => {
   // What the bar shows: the scrub target while held, else the live progress.
-  const shown = () => {
-    "worklet";
-    const t = seekTarget.value >= 0 ? seekTarget.value : progress.value;
-    return Math.min(Math.max(t, 0), 1);
-  };
-
+  // Read inline in each worklet (not through a shared helper): Reanimated finds
+  // a mapper's SharedValue inputs in the worklet's own closure.
   const seekFromX = (x: number) => {
     "worklet";
     seekTarget.value = Math.min(Math.max(x / width, 0), 1);
@@ -87,10 +83,14 @@ export const ProgressBar = ({
       if (onScrubEnd) scheduleOnRN(onScrubEnd);
     });
 
-  const fillStyle = useAnimatedStyle(() => ({ width: shown() * width }));
+  const fillStyle = useAnimatedStyle(() => {
+    const t = seekTarget.value >= 0 ? seekTarget.value : progress.value;
+    return { width: Math.min(Math.max(t, 0), 1) * width };
+  });
 
   const readoutProps = useAnimatedProps(() => {
-    const text = `${Math.round(shown() * 100)}%`;
+    const t = seekTarget.value >= 0 ? seekTarget.value : progress.value;
+    const text = `${Math.round(Math.min(Math.max(t, 0), 1) * 100)}%`;
     // `text` drives the native input; typing is disabled so it acts as a label
     return { text, defaultValue: text } as { text: string; defaultValue: string };
   });

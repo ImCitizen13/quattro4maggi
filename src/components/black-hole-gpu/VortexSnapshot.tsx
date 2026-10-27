@@ -59,6 +59,8 @@ export type VortexSnapshotHandle = {
   resume: () => void;
   /** Stop and show the children again (rejects a pending swallow). */
   reset: () => void;
+  /** A progress-bar scrub ended (it already resumed on the UI thread); follow it in state. */
+  scrubEnd: () => void;
 };
 
 export type VortexSnapshotProps = {
@@ -77,6 +79,8 @@ export type VortexSnapshotProps = {
   touchOrigin?: boolean;
   /** Premultiplied clear color, default transparent. Read at scene build. */
   background?: readonly [number, number, number, number];
+  /** Gate: nothing is built and swallow() rejects until true (e.g. a push transition). Default true. */
+  enabled?: boolean;
   /** Children can be captured (e.g. images loaded). Default true. */
   ready?: boolean;
   /**
@@ -90,6 +94,8 @@ export type VortexSnapshotProps = {
   progress?: SharedValue<number>;
   /** -1 = none; 0..1 seeks the run to that progress while held. */
   seekTarget?: SharedValue<number>;
+  /** True freezes the sim; a scrub release clears it. */
+  paused?: SharedValue<boolean>;
   /** Default: the wrapper calls `useLensTune()` itself. */
   lensTune?: LensTuneValues;
   onStateChange?: (s: RunState) => void;
@@ -99,6 +105,8 @@ export type VortexSnapshotProps = {
   onSwallowed?: () => void;
   onStats?: (s: VortexStats) => void;
   style?: StyleProp<ViewStyle>;
+  /** Style of the inner view that holds (and sizes to) the children, e.g. `{ flex: 1 }`. */
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 type Pending = {
@@ -129,17 +137,20 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       center,
       touchOrigin = true,
       background,
+      enabled = true,
       ready = true,
       prewarm = false,
       speed,
       progress,
       seekTarget,
+      paused,
       lensTune,
       onStateChange,
       onStart,
       onSwallowed,
       onStats,
       style,
+      contentStyle,
     },
     ref,
   ) => {
@@ -156,7 +167,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
     const prevRun = useRef<RunState>("idle");
 
     const vortex = useVortexRun({
-      enabled: true,
+      enabled,
       prewarm,
       ready,
       initialTile: tile,
@@ -167,6 +178,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       speed,
       progress,
       seekTarget,
+      paused,
       onStats,
       onStarted: () => onStartRef.current?.(),
     });
@@ -265,6 +277,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       pause: actions.pause,
       resume: actions.resume,
       reset: actions.reset,
+      scrubEnd: actions.onScrubEnd,
     }));
 
     return (
@@ -277,7 +290,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
             const { pageX, pageY } = e.nativeEvent;
             lastTouch.current = { pageX, pageY, t: Date.now() };
           }}
-          style={show === "gpu" && styles.hidden}
+          style={[contentStyle, show === "gpu" && styles.hidden]}
         >
           {children}
         </View>
