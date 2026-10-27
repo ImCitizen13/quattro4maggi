@@ -44,6 +44,11 @@ import { horizonOf } from "./vortexShaders";
 //   The color arrays are indexed through the binding (L.$.t.rimColors[i]),
 //   not the T copy: dynamic indexing needs a memory view.
 //   The hole itself is not drawn here: the lens only bends the backdrop.
+//   alpha       premultiplied, so a transparent backdrop (VortexSnapshot over
+//               the app) stays transparent: the bent backdrop keeps its own
+//               alpha, halo and rim paint toward opaque, bloom and specular
+//               are additive light (rgb may exceed alpha). Over an opaque
+//               backdrop alpha is 1 everywhere: the old look exactly.
 //
 // Raw WGSL body in a TypeGPU shell, same rules as vortexShaders: never a
 // backtick and never the word "in" in a body comment.
@@ -84,6 +89,7 @@ export const lensFs = tgpu.fragmentFn({
   var mask = 0.0;
   var halo = 0.0;
   var lit = vec3f(0.0);
+  var litA = 0.0;
   var bloom = vec3f(0.0);
   let R = T.bubble * rh;
   if (R > 0.0) {
@@ -99,7 +105,8 @@ export const lensFs = tgpu.fragmentFn({
     let gi = g - dir * distortPx;
     let edgeFactor = smoothstep(1.0 - max(T.edge, 0.001), 1.0, normDist);
     let chromaPx = T.dispersion * edgeFactor * R;
-    let sMid = textureSampleLevel(L.$.backdrop, L.$.samp, gi / dims, 0.0).rgb;
+    let sMid4 = textureSampleLevel(L.$.backdrop, L.$.samp, gi / dims, 0.0);
+    let sMid = sMid4.rgb;
     let sR = textureSampleLevel(L.$.backdrop, L.$.samp, (gi + dir * (ca + chromaPx)) / dims, 0.0).r;
     let sB = textureSampleLevel(L.$.backdrop, L.$.samp, (gi - dir * (ca + chromaPx)) / dims, 0.0).b;
     let interior = mix(sMid, vec3f(sR, sMid.g, sB), edgeFactor);
@@ -142,6 +149,7 @@ export const lensFs = tgpu.fragmentFn({
     let rimCol = mix(rimGrad, rainbow, T.rainbow);
     let withRim = mix(interior, rimCol, edgeFactor * T.rim) + rimCol * (edgeFactor * T.rim / 3.0);
     lit = withRim + specCol * spec;
+    litA = mix(sMid4.a, 1.0, clamp(edgeFactor * T.rim, 0.0, 1.0));
 
     if (T.glow > 0.0) {
       let e = (dist - R) / R;
@@ -154,11 +162,12 @@ export const lensFs = tgpu.fragmentFn({
   }
 
   let cr = textureSampleLevel(L.$.backdrop, L.$.samp, (g + dir * ca) / dims, 0.0).r;
-  let cg = textureSampleLevel(L.$.backdrop, L.$.samp, g / dims, 0.0).g;
+  let cg4 = textureSampleLevel(L.$.backdrop, L.$.samp, g / dims, 0.0);
   let cb = textureSampleLevel(L.$.backdrop, L.$.samp, (g - dir * ca) / dims, 0.0).b;
-  let outside = mix(vec3f(cr, cg, cb), haloCol, halo);
+  let outside = mix(vec3f(cr, cg4.g, cb), haloCol, halo);
+  let outsideA = mix(cg4.a, 1.0, clamp(halo, 0.0, 1.0));
   let rgb = mix(outside, lit, mask) + bloom;
-  return vec4f(rgb, 1.0);
+  return vec4f(rgb, clamp(mix(outsideA, litA, mask), 0.0, 1.0));
 }`
   .$uses({ L: lensLayout, horizonOf })
   .$name("lensFs");

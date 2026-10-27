@@ -56,6 +56,13 @@ export type VortexSceneOptions = {
   /** Snapshot texture (owned by the caller, filled by captureInto on Release). Same device. */
   snapshot: GPUTexture;
   config?: VortexConfig;
+  /** Hole center as a 0..1 fraction of the snapshot. Default { x: 0.5, y: 0.5 }. */
+  center?: { x: number; y: number };
+  /**
+   * Premultiplied RGBA the tile pass clears to (behind the tiles; the lens
+   * reads it as backdrop). Default transparent; the demo passes SPACE_COLOR.
+   */
+  clearColor?: readonly [number, number, number, number];
   /** Sim speed multiplier, read every frame (clamped to SPEED_MIN..SPEED_MAX). */
   speed: SharedValue<number>;
   /** 0 = idle (no draw); a new non-zero value starts a run (sim reset + particle init). */
@@ -176,8 +183,10 @@ const HOLE_SPRING = { k: 70, d: 9 };
 const HOLE_DECAY = HOLE_SPRING.d / 2;
 const HOLE_FREQ = Math.sqrt(HOLE_SPRING.k - HOLE_DECAY * HOLE_DECAY);
 
-// Space color the tile pass clears to (the lens layer samples it as backdrop).
-const SPACE_COLOR = [0.035, 0.035, 0.045, 1] as const;
+/** Opaque space color for a full-stage run (the demo's `clearColor`). */
+export const SPACE_COLOR = [0.035, 0.035, 0.045, 1] as const;
+const TRANSPARENT = [0, 0, 0, 0] as const;
+const DEFAULT_CENTER = { x: 0.5, y: 0.5 };
 
 // Alpha-over for the premultiplied snapshot texels.
 const PREMULTIPLIED_OVER: GPUBlendState = {
@@ -250,6 +259,8 @@ export const createVortexScene =
   ({
     snapshot,
     config = DEFAULT_VORTEX,
+    center = DEFAULT_CENTER,
+    clearColor = TRANSPARENT,
     speed,
     phase,
     seed,
@@ -279,7 +290,7 @@ export const createVortexScene =
     const horizon = short * config.horizon;
     const initial: ParamsData = {
       res: d.vec2f(W, Hpx),
-      center: d.vec2f(W / 2, Hpx / 2),
+      center: d.vec2f(W * center.x, Hpx * center.y),
       texSize: d.vec2f(W, Hpx),
       tile: config.tile,
       cols,
@@ -595,7 +606,7 @@ export const createVortexScene =
         colorAttachments: [
           {
             view,
-            clearValue: [...SPACE_COLOR],
+            clearValue: [...clearColor],
             loadOp: "clear",
             storeOp: "store",
           },

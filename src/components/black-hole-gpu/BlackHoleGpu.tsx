@@ -55,9 +55,10 @@ import {
   View,
 } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
-import { Canvas, useDevice } from "react-native-webgpu";
+import { Canvas } from "react-native-webgpu";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FpsOverlay } from "@/components/common/FpsOverlay";
+import { useSharedDevice } from "@/hooks/useSharedDevice";
 import { useWebGPUOnDevice } from "../gargantua-type-gpu/hooks/useWebGPU";
 import { composeLayered } from "../gargantua-type-gpu/composeLayered";
 import { DemoContent } from "./DemoContent";
@@ -70,6 +71,7 @@ import { captureInto, createSnapshotTexture } from "./snapshot";
 import {
   createVortexScene,
   DEFAULT_VORTEX,
+  SPACE_COLOR,
   type VortexStats,
 } from "./vortexScene";
 
@@ -126,7 +128,7 @@ const formatStats = ({ count, encodeMs }: VortexStats) =>
 // ============================================================================
 
 export const BlackHoleGpu = () => {
-  const { device } = useDevice();
+  const device = useSharedDevice();
   // The stack's `transitionEnd` event isn't in the generic navigation typing.
   const navigation = useNavigation() as unknown as TransitionNavigation;
   const insets = useSafeAreaInsets();
@@ -217,6 +219,7 @@ export const BlackHoleGpu = () => {
         scene: createVortexScene({
           snapshot: snapTex,
           config: { ...DEFAULT_VORTEX, tile },
+          clearColor: SPACE_COLOR,
           speed,
           phase,
           progress,
