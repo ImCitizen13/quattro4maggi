@@ -26,10 +26,12 @@ import {
   MIN_KEY_INTERVAL,
   MIN_SEEK_STEPS,
   MIN_SLOTS,
+  RELEASE_JITTER,
   SEEK_BUDGET,
   SPEED_MAX,
   SPEED_MIN,
   STATS_EVERY,
+  STICKY_RAMP,
   TRANSPARENT,
   WORKGROUP,
 } from "./vortexConstants";
@@ -327,9 +329,9 @@ export const createVortexScene =
     const estSeconds =
       config.vortexT0 +
       rMax / (short * config.wave) +
-      0.35 +
+      RELEASE_JITTER +
       config.sticky +
-      3 * config.ramp +
+      (1 + STICKY_RAMP) * config.ramp +
       (rMax * rMax) / (2 * initial.flow) +
       2 / config.drag;
     const estSteps = Math.min(LAST_STEP, Math.ceil(estSeconds / H));
