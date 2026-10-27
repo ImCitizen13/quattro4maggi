@@ -69,13 +69,23 @@ export type UseVortexRunOptions = {
   lensTune: LensTuneValues;
   /** External speed SharedValue; the hook creates one (1) if omitted. */
   speed?: SharedValue<number>;
+  /** External progress SharedValue; the hook creates one (0) if omitted. */
+  progress?: SharedValue<number>;
+  /** External seek SharedValue (-1 = none); the hook creates one if omitted. */
+  seekTarget?: SharedValue<number>;
+  /** Called right after the first GPU frame is shown (show = "gpu"). */
+  onStarted?: () => void;
   /** Called with the throttled per-frame stats from the vortex scene. */
   onStats?: (stats: VortexStats) => void;
 };
 
 export type VortexRunActions = {
-  /** From idle: capture the view into the scene's texture, then start the run. */
-  release: () => void;
+  /**
+   * From idle: capture the view into the scene's texture, then start the run.
+   * Resolves true once the run phase started, false on any early return,
+   * capture failure or epoch bail.
+   */
+  release: () => Promise<boolean>;
   /** From running: freeze the sim (frames still drawn). */
   pause: () => void;
   /** From paused: continue the run. */
@@ -137,6 +147,9 @@ export const useVortexRun = ({
   center,
   lensTune,
   speed: speedProp,
+  progress: progressProp,
+  seekTarget: seekTargetProp,
+  onStarted: onStartedProp,
   onStats,
 }: UseVortexRunOptions): UseVortexRun => {
   const device = useSharedDevice();
@@ -145,11 +158,13 @@ export const useVortexRun = ({
   // Read by the UI-runtime loop: phase 0 = idle, a new non-zero value = start a run.
   const phase = useSharedValue(0);
   // Written every frame by the render worklet: fraction of tiles swallowed.
-  const progress = useSharedValue(0);
+  const ownProgress = useSharedValue(0);
+  const progress = progressProp ?? ownProgress;
   // True freezes the sim (frames still drawn).
   const paused = useSharedValue(false);
   // -1 = none; 0..1 = the scene seeks the run to that progress while held.
-  const seekTarget = useSharedValue(-1);
+  const ownSeekTarget = useSharedValue(-1);
+  const seekTarget = seekTargetProp ?? ownSeekTarget;
   const seedSv = useSharedValue(0);
   const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
   const runId = useRef(0);
@@ -161,6 +176,8 @@ export const useVortexRun = ({
   // The scene memo captures its callbacks once; read the latest through a ref.
   const onStatsRef = useRef(onStats);
   onStatsRef.current = onStats;
+  const onStartedRef = useRef(onStartedProp);
+  onStartedRef.current = onStartedProp;
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [run, setRun] = useState<RunState>("idle");
   const [show, setShow] = useState<ShowMode>("rn");
@@ -192,6 +209,7 @@ export const useVortexRun = ({
   const onStarted = () => {
     setShow("gpu");
     busy.current = false;
+    onStartedRef.current?.();
   };
 
   // "All tiles swallowed" flipped. Functional setState: the scene memo captures
@@ -277,16 +295,16 @@ export const useVortexRun = ({
   // Release from idle: fresh capture of the RN view into the scene's texture,
   // then the run starts. (Once a run exists the RN view is hidden, so a
   // recapture would be blank: release is disabled until reset.)
-  const release = async () => {
+  const release = async (): Promise<boolean> => {
     if (!device || !scene || !snapTex || !ready || busy.current) {
-      return;
+      return false;
     }
     busy.current = true;
     setRun("capturing");
     const myEpoch = epoch.current;
     await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));
     // Reset, relayout or unmount during the delay (reset already cleared busy).
-    if (epoch.current !== myEpoch) return;
+    if (epoch.current !== myEpoch) return false;
     try {
       await captureInto(device, viewRef, snapTex);
     } catch {
@@ -294,11 +312,12 @@ export const useVortexRun = ({
         busy.current = false;
         setRun("idle");
       }
-      return;
+      return false;
     }
-    if (epoch.current !== myEpoch) return;
+    if (epoch.current !== myEpoch) return false;
     startPhase(sticky);
     setRun("running");
+    return true;
   };
 
   const resume = () => {

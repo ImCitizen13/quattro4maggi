@@ -81,6 +81,9 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 ## Files
 
 - `src/app/black-hole-gpu/index.tsx` — route (plain `View`, not `ThemeView`)
+- `src/app/vortex-snapshot/index.tsx` — route for the VortexSnapshot test screen
+- `VortexSnapshot.tsx` — wrapper: `swallow()` pulls its children into the GPU black hole (over `useVortexRun`)
+- `VortexSnapshotDemo.tsx` — test screen: three wrapped cards over colored blobs, tap to swallow, Reset
 - `BlackHoleGpu.tsx` — HUD + settings over `useVortexRun`: transition gate, status text, lens tune / dials, speed SharedValue, JSX
 - `useVortexRun.ts` — the run state machine hook: shared device, snapshot texture, scene memo (deps: snapshot texture, tile), phase/seed/sticky/progress/paused/seekTarget SharedValues, `actions` (release / pause / resume / reset / pickTile / toggleSticky / onScrubEnd); exports `RunState`, `ShowMode`
 - `ProgressBar.tsx` — progress bar + percent readout + scrubber (pan, minDistance 0); writes `seekTarget`, all on the UI thread
@@ -132,6 +135,23 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 | Sim tab: 8 / 4 / 2 px | particle count | yes (mid-run: restarts at once on the same texture) |
 | Sim tab: Sticky | patches on/off (mid-run or done: restart) | no |
 | Lens tab | Gravity / Glass / Colors sub-tabs, presets, 14 live knobs, rim / halo / specular color lists (palette pick per list) | no |
+
+## VortexSnapshot
+
+```tsx
+const ref = useRef<VortexSnapshotHandle>(null);
+<VortexSnapshot ref={ref} tile={4}>
+  <Card />
+</VortexSnapshot>;
+ref.current?.swallow().then(() => removeCard()).catch(() => {});
+```
+
+- Handle: `swallow()` (promise: resolves when all tiles are swallowed; rejects on
+  failure to start, reset, relayout or unmount), `pause()`, `resume()`, `reset()`.
+- Props: `tile`, `sticky` (live), `center`, `background` (read at scene build),
+  `ready`, `speed` / `progress` / `seekTarget` SharedValues, `lensTune`,
+  `onStateChange` / `onStart` / `onSwallowed` / `onStats`, `style`.
+- The scene is built once the children are laid out (lazy build is a later subtask).
 
 ## Measurements (iPhone 17 Pro Simulator, 60 Hz cap)
 
