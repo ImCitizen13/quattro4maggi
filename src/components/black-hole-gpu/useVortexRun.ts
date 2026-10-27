@@ -83,9 +83,10 @@ export type VortexRunActions = {
   /**
    * From idle: capture the view into the scene's texture, then start the run.
    * Resolves true once the run phase started, false on any early return,
-   * capture failure or epoch bail.
+   * capture failure or epoch bail. `origin` (0..1 fraction of the view) is
+   * where the hole opens for this run; omitted = the `center` option.
    */
-  release: () => Promise<boolean>;
+  release: (origin?: { x: number; y: number }) => Promise<boolean>;
   /** From running: freeze the sim (frames still drawn). */
   pause: () => void;
   /** From paused: continue the run. */
@@ -134,6 +135,9 @@ const RELEASE_DELAY_MS = 120;
 // supports "js-raf" (gargantua uses it); restore a toggle here if needed.
 const RENDER_MODE = "ui-worklet" as const;
 
+/** `origin` SharedValue "unset": the scene falls back to the `center` option. */
+const NO_ORIGIN = { x: -1, y: -1 };
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -167,6 +171,8 @@ export const useVortexRun = ({
   const seekTarget = seekTargetProp ?? ownSeekTarget;
   const seedSv = useSharedValue(0);
   const stickySv = useSharedValue(DEFAULT_VORTEX.sticky);
+  // Per-run hole center (fraction), read by the scene when a run starts.
+  const originSv = useSharedValue(NO_ORIGIN);
   const runId = useRef(0);
   const viewRef = useRef<View>(null);
   const layout = useRef({ width: 0, height: 0 });
@@ -232,6 +238,7 @@ export const useVortexRun = ({
           config: { ...DEFAULT_VORTEX, tile },
           clearColor,
           center,
+          origin: originSv,
           speed,
           phase,
           progress,
@@ -295,11 +302,13 @@ export const useVortexRun = ({
   // Release from idle: fresh capture of the RN view into the scene's texture,
   // then the run starts. (Once a run exists the RN view is hidden, so a
   // recapture would be blank: release is disabled until reset.)
-  const release = async (): Promise<boolean> => {
+  const release = async (origin?: { x: number; y: number }): Promise<boolean> => {
     if (!device || !scene || !snapTex || !ready || busy.current) {
       return false;
     }
     busy.current = true;
+    // Kept for the whole run: a tile / Sticky restart reopens at the same spot.
+    originSv.value = origin ?? NO_ORIGIN;
     setRun("capturing");
     const myEpoch = epoch.current;
     await new Promise((r) => setTimeout(r, RELEASE_DELAY_MS));

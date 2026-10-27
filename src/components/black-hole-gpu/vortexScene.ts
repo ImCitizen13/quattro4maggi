@@ -1,5 +1,8 @@
 import tgpu from "typegpu";
 import * as d from "typegpu/data";
+// Named import for the `frame` worklet: a namespace (`d.*`) captured by a
+// worklet does not cross runtimes.
+import { vec2f } from "typegpu/data";
 import { scheduleOnRN } from "react-native-worklets";
 import type { SharedValue } from "react-native-reanimated";
 import type {
@@ -58,6 +61,11 @@ export type VortexSceneOptions = {
   config?: VortexConfig;
   /** Hole center as a 0..1 fraction of the snapshot. Default { x: 0.5, y: 0.5 }. */
   center?: { x: number; y: number };
+  /**
+   * Per-run hole center (0..1 fraction), read when a run starts; x < 0 = use
+   * `center`. Lets each run start where the user touched.
+   */
+  origin?: SharedValue<{ x: number; y: number }>;
   /**
    * Premultiplied RGBA the tile pass clears to (behind the tiles; the lens
    * reads it as backdrop). Default transparent; the demo passes SPACE_COLOR.
@@ -260,6 +268,7 @@ export const createVortexScene =
     snapshot,
     config = DEFAULT_VORTEX,
     center = DEFAULT_CENTER,
+    origin,
     clearColor = TRANSPARENT,
     speed,
     phase,
@@ -432,6 +441,8 @@ export const createVortexScene =
       start: boolean,
       startSeed: number,
       startSticky: number,
+      startCx: number,
+      startCy: number,
     ) => {
       "worklet";
       const t0 = performance.now();
@@ -461,6 +472,7 @@ export const createVortexScene =
           recordFrom: 1,
           seed: startSeed,
           sticky: startSticky,
+          center: vec2f(startCx, startCy),
         });
       }
       // Fixed-step accumulator: equal work per simulated second, clamped so a
@@ -698,7 +710,20 @@ export const createVortexScene =
           }
           // Run start: tiles at home, dt = 0.
           const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
-          frame(attachment.view, 0, timeScale, true, seed.value, sticky.value);
+          // Hole center for this run: the origin if set, else `center`.
+          const o = origin ? origin.value : null;
+          const fx = o && o.x >= 0 ? o.x : center.x;
+          const fy = o && o.x >= 0 ? o.y : center.y;
+          frame(
+            attachment.view,
+            0,
+            timeScale,
+            true,
+            seed.value,
+            sticky.value,
+            W * Math.min(Math.max(fx, 0), 1),
+            Hpx * Math.min(Math.max(fy, 0), 1),
+          );
           if (onStarted) scheduleOnRN(onStarted);
           return true;
         }
@@ -707,7 +732,7 @@ export const createVortexScene =
         last = timestamp;
         // Clamp in the worklet, before the sim sees the value.
         const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
-        encodeMs += frame(attachment.view, dt, timeScale, false, 0, 0);
+        encodeMs += frame(attachment.view, dt, timeScale, false, 0, 0, 0, 0);
         frames += 1;
         if (statsStart === 0) statsStart = timestamp;
         if (frames === STATS_EVERY) {

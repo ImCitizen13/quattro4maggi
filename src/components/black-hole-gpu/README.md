@@ -146,9 +146,15 @@ const ref = useRef<VortexSnapshotHandle>(null);
 ref.current?.swallow().then(() => removeCard()).catch(() => {});
 ```
 
-- Handle: `swallow()` (promise: resolves when all tiles are swallowed; rejects on
+- Handle: `swallow(at?)` (promise: resolves when all tiles are swallowed; rejects on
   failure to start, reset, relayout or unmount), `pause()`, `resume()`, `reset()`.
-- Props: `tile`, `sticky` (live), `center`, `background` (read at scene build),
+- Origin (14g): the hole opens at `at` (points in the wrapper), else at the last
+  touch inside the wrapper under 1 s old (`touchOrigin`, default on; so the tap
+  that calls `swallow()` is where the destruction starts), else at `center`
+  (default middle). Stored per run (`origin` SharedValue → `Params.center` at run
+  start), so the release wave and the lens start there; a tile / Sticky restart
+  keeps it.
+- Props: `tile`, `sticky` (live), `center`, `touchOrigin`, `background` (read at scene build),
   `ready`, `speed` / `progress` / `seekTarget` SharedValues, `lensTune`,
   `onStateChange` / `onStart` / `onSwallowed` / `onStats`, `style`.
 - The scene is built once the children are laid out (lazy build is a later subtask).

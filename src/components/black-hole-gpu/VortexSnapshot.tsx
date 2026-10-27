@@ -5,14 +5,17 @@
  *   mount ─► children laid out ─► `useVortexRun` builds the snapshot texture +
  *     standby scene at the children's layout size (always built once laid out;
  *     lazy build is a later subtask)
- *   handle.swallow() (idle) ─► actions.release: capture children into the texture
- *     ─► run starts ─► first GPU frame hides the children (onStart)
+ *   handle.swallow(at?) (idle) ─► origin: `at` (points) | the last touch inside
+ *     the wrapper (< 1 s ago, `touchOrigin`) | `center` ─► actions.release(origin):
+ *     capture children into the texture ─► run starts, hole opens at the origin ─► first GPU frame hides the children (onStart)
  *     ─► every tile swallowed ─► run = "done" ─► the promise resolves (onSwallowed)
  *   handle.reset() / relayout / unmount before done ─► the promise rejects
  *   handle.reset() ─► children are shown again
  *
  * KEY FEATURES:
  * - Imperative handle: swallow / pause / resume / reset
+ * - The destruction starts where the user touched (a tap that triggers
+ *   swallow), or at an explicit point, else at `center` (default middle)
  * - The inner view sizes to its children (the snapshot is taken at that size);
  *   the canvas overlays it exactly, so the root must carry no padding
  * - Canvas stays at opacity 0.01 while a scene exists but the children show
@@ -40,9 +43,17 @@ import { DEFAULT_VORTEX, type VortexStats } from "./vortexScene";
 // Types
 // ============================================================================
 
+export type Point = { x: number; y: number };
+
 export type VortexSnapshotHandle = {
-  /** Capture the children and run. Resolves when every tile is swallowed; rejects if the run can't start, or on reset / relayout / unmount before done. Calling while a swallow is pending returns the same promise. */
-  swallow: () => Promise<void>;
+  /**
+   * Capture the children and run. Resolves when every tile is swallowed;
+   * rejects if the run can't start, or on reset / relayout / unmount before
+   * done. Calling while a swallow is pending returns the same promise.
+   * `at` (points, relative to the wrapper) is where the hole opens; omitted =
+   * the last touch inside the wrapper (see `touchOrigin`), else `center`.
+   */
+  swallow: (at?: Point) => Promise<void>;
   pause: () => void;
   resume: () => void;
   /** Stop and show the children again (rejects a pending swallow). */
@@ -55,8 +66,14 @@ export type VortexSnapshotProps = {
   tile?: number;
   /** Sticky patches. Default true; changes restart an active run. */
   sticky?: boolean;
-  /** Hole center as a 0..1 fraction of the children. Read at scene build. */
-  center?: { x: number; y: number };
+  /** Default hole center as a 0..1 fraction of the children. Read at scene build. */
+  center?: Point;
+  /**
+   * A swallow() without `at` opens the hole at the last touch inside the
+   * wrapper, if it is under 1 s old (e.g. the tap that called swallow).
+   * Default true.
+   */
+  touchOrigin?: boolean;
   /** Premultiplied clear color, default transparent. Read at scene build. */
   background?: readonly [number, number, number, number];
   /** Children can be captured (e.g. images loaded). Default true. */
@@ -83,6 +100,15 @@ type Pending = {
   reject: (e: Error) => void;
 };
 
+type Touch = { pageX: number; pageY: number; t: number };
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** A touch older than this no longer picks the swallow origin. */
+const TOUCH_WINDOW_MS = 1000;
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -94,6 +120,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       tile = DEFAULT_VORTEX.tile,
       sticky = true,
       center,
+      touchOrigin = true,
       background,
       ready = true,
       speed,
@@ -116,6 +143,8 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
     const onSwallowedRef = useRef(onSwallowed);
     onSwallowedRef.current = onSwallowed;
     const pending = useRef<Pending | null>(null);
+    // Last touch inside the wrapper (page coords), for the swallow origin.
+    const lastTouch = useRef<Touch | null>(null);
     const prevRun = useRef<RunState>("idle");
 
     const vortex = useVortexRun({
@@ -174,8 +203,32 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sticky]);
 
+    // Hole origin for a swallow, as a fraction of the captured view: `at`
+    // (points), else a recent touch inside the wrapper, else undefined (the
+    // scene uses `center`). Measured now, so a scroll since layout is fine.
+    const resolveOrigin = (at?: Point) =>
+      new Promise<Point | undefined>((resolve) => {
+        const touch = lastTouch.current;
+        const fromTouch =
+          !at && touchOrigin && touch !== null && Date.now() - touch.t < TOUCH_WINDOW_MS;
+        const view = viewRef.current;
+        if ((!at && !fromTouch) || !view) {
+          resolve(undefined);
+          return;
+        }
+        view.measure((_x, _y, width, height, pageX, pageY) => {
+          if (!width || !height) {
+            resolve(undefined);
+            return;
+          }
+          const px = at ? at.x : touch!.pageX - pageX;
+          const py = at ? at.y : touch!.pageY - pageY;
+          resolve({ x: px / width, y: py / height });
+        });
+      });
+
     useImperativeHandle(ref, () => ({
-      swallow: () => {
+      swallow: (at?: Point) => {
         if (pending.current) return pending.current.promise;
         if (run !== "idle") {
           return Promise.reject(new Error(`VortexSnapshot: cannot swallow while ${run}`));
@@ -190,7 +243,9 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
         promise.catch(() => {});
         const mine: Pending = { promise, resolve, reject };
         pending.current = mine;
-        actions.release().then((started) => {
+        resolveOrigin(at)
+          .then((origin) => actions.release(origin))
+          .then((started) => {
           if (!started && pending.current === mine) {
             pending.current = null;
             reject(new Error("VortexSnapshot: could not start the run"));
@@ -209,6 +264,10 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
           ref={viewRef}
           collapsable={false}
           onLayout={onLayout}
+          onTouchStart={(e) => {
+            const { pageX, pageY } = e.nativeEvent;
+            lastTouch.current = { pageX, pageY, t: Date.now() };
+          }}
           style={show === "gpu" && styles.hidden}
         >
           {children}
