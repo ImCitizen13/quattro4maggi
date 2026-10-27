@@ -12,6 +12,27 @@ import type {
 import { Params, Particle, type ParamsData } from "./gpuTypes";
 import { computeLayout, renderLayout } from "./layouts";
 import type { LensShared } from "./lensScene";
+import {
+  CHASE_AHEAD,
+  DEFAULT_CENTER,
+  DEFAULT_VORTEX,
+  H,
+  HOLE_SPRING,
+  KEYFRAME_BYTES,
+  MAX_SEEK_STEPS,
+  MAX_SLOTS,
+  MAX_STEPS,
+  MAX_SUBSTEPS,
+  MIN_KEY_INTERVAL,
+  MIN_SEEK_STEPS,
+  MIN_SLOTS,
+  SEEK_BUDGET,
+  SPEED_MAX,
+  SPEED_MIN,
+  STATS_EVERY,
+  TRANSPARENT,
+  WORKGROUP,
+} from "./vortexConstants";
 import { initFn, stepFn, tileFs, tileVs } from "./vortexShaders";
 
 // ============================================================================
@@ -141,60 +162,15 @@ type RunState = {
 // Constants
 // ============================================================================
 
-export const DEFAULT_VORTEX: VortexConfig = {
-  tile: 4,
-  holeT0: 0,
-  vortexT0: 0.6,
-  ramp: 0.6,
-  inflow: 0.15,
-  refRadius: 0.5,
-  horizon: 0.06,
-  wave: 0.25,
-  drag: 3,
-  swirl: 1.6,
-  sticky: 1.6,
-  patch: 0.06,
-};
-
-const H = 1 / 120;
-/** Cap at 1x speed; scaled up with the speed multiplier in `frame`. */
-const MAX_SUBSTEPS = 8;
-/** Death histogram length: step indices 0..MAX_STEPS-1 (68 s of sim at h = 1/120). */
-const MAX_STEPS = 8192;
 /** Highest step the sim advances to; later deaths would share the last bin. */
 const LAST_STEP = MAX_STEPS - 1;
-export const SPEED_MIN = 0.25;
-export const SPEED_MAX = 4;
-const WORKGROUP = 64;
-const STATS_EVERY = 30;
-/** Keyframe storage cap (bytes) and slot count bounds. */
-const KEYFRAME_BYTES = 64 * 1024 * 1024;
-const MIN_SLOTS = 2;
-const MAX_SLOTS = 32;
-/** Never space keyframes closer than this many steps (0.25 s of sim). */
-const MIN_KEY_INTERVAL = 30;
-/**
- * Replay budget of a seek frame in particle-steps (count x steps in one step
- * dispatch). Tuned on the Simulator so a scrub frame stays inside ~16 ms.
- */
-const SEEK_BUDGET = 40e6;
-/** Max steps a forward chase runs ahead of the last read-back step. */
-const CHASE_AHEAD = 120;
-const MIN_SEEK_STEPS = 16;
-const MAX_SEEK_STEPS = 2048;
 
 // The hole grows in from Release and overshoots once: the exact step response
 // of an underdamped spring {k, d}, evaluated in closed form on both sides
 // (holeAt in vortexShaders, holeAtCpu below), so the hole is a pure function
 // of sim time.
-const HOLE_SPRING = { k: 70, d: 9 };
 const HOLE_DECAY = HOLE_SPRING.d / 2;
 const HOLE_FREQ = Math.sqrt(HOLE_SPRING.k - HOLE_DECAY * HOLE_DECAY);
-
-/** Opaque space color for a full-stage run (the demo's `clearColor`). */
-export const SPACE_COLOR = [0.035, 0.035, 0.045, 1] as const;
-const TRANSPARENT = [0, 0, 0, 0] as const;
-const DEFAULT_CENTER = { x: 0.5, y: 0.5 };
 
 // Alpha-over for the premultiplied snapshot texels.
 const PREMULTIPLIED_OVER: GPUBlendState = {

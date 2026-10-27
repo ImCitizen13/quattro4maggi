@@ -3,6 +3,15 @@ import * as d from "typegpu/data";
 import * as std from "typegpu/std";
 import { Particle } from "./gpuTypes";
 import { computeLayout as C, renderLayout as R } from "./layouts";
+import {
+  RELAX_FLOOR,
+  RELEASE_JITTER,
+  STICKY_BLOB_HIGH,
+  STICKY_BLOB_LOW,
+  STICKY_JITTER,
+  STICKY_RAMP,
+  TILE_SHRINK_RADIUS,
+} from "./vortexConstants";
 
 // ============================================================================
 // Vortex shaders (11c compute, 11d render) — raw WGSL bodies in TypeGPU shells
@@ -87,11 +96,11 @@ const stickOf = tgpu.fn([d.vec2f, d.u32, d.f32, d.f32, d.f32], d.f32)`(home: vec
   let e = cellHash(c + vec2f(0.0, 1.0), s);
   let h = cellHash(c + vec2f(1.0, 1.0), s);
   let n = mix(mix(a, b, sm.x), mix(e, h, sm.x), sm.y);
-  let blob = smoothstep(0.5, 0.8, n);
-  let jit = (hash(i ^ (s * 2654435761u)) - 0.5) * 0.2;
+  let blob = smoothstep(STICKY_BLOB_LOW, STICKY_BLOB_HIGH, n);
+  let jit = (hash(i ^ (s * 2654435761u)) - 0.5) * STICKY_JITTER;
   return clamp(blob + jit, 0.0, 1.0);
 }`
-  .$uses({ cellHash, hash })
+  .$uses({ cellHash, hash, STICKY_BLOB_LOW, STICKY_BLOB_HIGH, STICKY_JITTER })
   .$name("stickOf");
 
 // ---- Compute ----------------------------------------------------------------
@@ -110,11 +119,11 @@ export const initFn = tgpu.computeFn({
   p.home = home;
   // Radial wave: nearest tiles go first; jitter breaks up the ring edge.
   let k = stickOf(home, i, C.$.u.seed, C.$.u.patchPx, C.$.u.sticky);
-  p.release = C.$.u.vortexT0 + length(home - C.$.u.center) / C.$.u.wave + hash(i) * 0.35 + k * C.$.u.sticky;
+  p.release = C.$.u.vortexT0 + length(home - C.$.u.center) / C.$.u.wave + hash(i) * RELEASE_JITTER + k * C.$.u.sticky;
   p.state = 1.0;
   C.$.ps[i] = p;
 }`
-  .$uses({ C, hash, stickOf, Particle })
+  .$uses({ C, hash, stickOf, Particle, RELEASE_JITTER })
   .$name("init");
 
 export const stepFn = tgpu.computeFn({
@@ -130,7 +139,7 @@ export const stepFn = tgpu.computeFn({
   let step0 = u32(C.$.u.step0);
   // Sticky tiles ramp up slower: they lag, resist, then let go.
   let k = stickOf(p.home, i, C.$.u.seed, C.$.u.patchPx, C.$.u.sticky);
-  let rampK = C.$.u.ramp * (1.0 + 2.0 * k);
+  let rampK = C.$.u.ramp * (1.0 + STICKY_RAMP * k);
   for (var s = 0u; s < n; s++) {
     // Absolute step index and its time: no accumulation across frames.
     let idx = step0 + s + 1u;
@@ -155,7 +164,7 @@ export const stepFn = tgpu.computeFn({
     let field = (dir + tangent * C.$.u.swirl) * (flow / r) * w;
     // Relax at least 3x the local angular rate |v|/r: near the hole the flow
     // turns faster than drag can follow and tiles pile up on a ring.
-    let rate = max(C.$.u.drag, 3.0 * length(field) / r);
+    let rate = max(C.$.u.drag, RELAX_FLOOR * length(field) / r);
     p.vel += (field - p.vel) * min(rate * C.$.u.h, 1.0);
     p.pos += p.vel * C.$.u.h;
     if (horizon > 0.0 && length(C.$.u.center - p.pos) < horizon) {
@@ -170,7 +179,7 @@ export const stepFn = tgpu.computeFn({
   }
   C.$.ps[i] = p;
 }`
-  .$uses({ C, holeAt, horizonOf, stickOf })
+  .$uses({ C, holeAt, horizonOf, stickOf, STICKY_RAMP, RELAX_FLOOR })
   .$name("step");
 
 // ---- Fullscreen vertex ------------------------------------------------------
@@ -213,13 +222,13 @@ export const tileVs = tgpu.vertexFn({
   let center = p.pos;
   if (p.state == 2.0) {
     // Face motion, shrink into the horizon.
-    let rampK = R.$.u.ramp * (1.0 + 2.0 * stickOf(p.home, in.ii, R.$.u.seed, R.$.u.patchPx, R.$.u.sticky));
+    let rampK = R.$.u.ramp * (1.0 + STICKY_RAMP * stickOf(p.home, in.ii, R.$.u.seed, R.$.u.patchPx, R.$.u.sticky));
     let k = smoothstep(p.release, p.release + rampK, R.$.u.time);
     let ang = atan2(p.vel.y, p.vel.x) * k;
     let cs = cos(ang);
     let sn = sin(ang);
     let horizon = horizonOf(R.$.u.horizon, R.$.u.hole);
-    let s = smoothstep(horizon, horizon * 4.0, length(R.$.u.center - p.pos));
+    let s = smoothstep(horizon, horizon * TILE_SHRINK_RADIUS, length(R.$.u.center - p.pos));
     local = vec2f(local.x * cs - local.y * sn, local.x * sn + local.y * cs) * s;
   }
   let px = center + local;
@@ -227,7 +236,7 @@ export const tileVs = tgpu.vertexFn({
   out.texel = p.home + (c - 0.5) * R.$.u.tile;
   return out;
 }`
-  .$uses({ R, horizonOf, stickOf, CORNERS })
+  .$uses({ R, horizonOf, stickOf, CORNERS, STICKY_RAMP, TILE_SHRINK_RADIUS })
   .$name("tileVs");
 
 // TGSL shell form (no "use gpu"): a raw body would have to read the location

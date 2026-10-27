@@ -28,7 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TuningSlider } from "@/components/liquid-metal/TuningSlider";
 import { LensTab } from "./LensPanel";
 import type { LensTuneValues } from "./lensTune";
-import { SPEED_MAX, SPEED_MIN } from "./vortexScene";
+import { SPEED_MAX, SPEED_MIN } from "./vortexConstants";
 
 // ============================================================================
 // Types

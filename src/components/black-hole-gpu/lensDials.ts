@@ -40,7 +40,7 @@ import {
   paletteColors,
   setLensColors,
 } from "./lensTune";
-import { SPEED_MAX, SPEED_MIN } from "./vortexScene";
+import { DEFAULT_SPEED, SPEED_MAX, SPEED_MIN } from "./vortexConstants";
 
 // ============================================================================
 // Config
@@ -96,7 +96,7 @@ const listValues = (colors: readonly string[]) => ({
 });
 
 const LENS_DIALS = {
-  sim: { speed: [1, SPEED_MIN, SPEED_MAX, 0.05] as Slider },
+  sim: { speed: [DEFAULT_SPEED, SPEED_MIN, SPEED_MAX, 0.05] as Slider },
   gravity: sliders("gravity"),
   glass: sliders("glass"),
   color: {

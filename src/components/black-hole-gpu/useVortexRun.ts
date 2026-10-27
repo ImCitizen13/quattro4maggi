@@ -41,7 +41,8 @@ import { composeLayered } from "../gargantua-type-gpu/composeLayered";
 import { createLensScene, type LensShared } from "./lensScene";
 import type { LensTuneValues } from "./lensTune";
 import { captureInto, createSnapshotTexture } from "./snapshot";
-import { createVortexScene, DEFAULT_VORTEX, type VortexStats } from "./vortexScene";
+import { DEFAULT_SPEED, DEFAULT_VORTEX, RELEASE_DELAY_MS } from "./vortexConstants";
+import { createVortexScene, type VortexStats } from "./vortexScene";
 
 // ============================================================================
 // Types
@@ -76,7 +77,7 @@ export type UseVortexRunOptions = {
   center?: { x: number; y: number };
   /** Live lens knobs from `useLensTune`. */
   lensTune: LensTuneValues;
-  /** External speed SharedValue; the hook creates one (1) if omitted. */
+  /** External speed SharedValue; the hook creates one (DEFAULT_SPEED) if omitted. */
   speed?: SharedValue<number>;
   /** External progress SharedValue; the hook creates one (0) if omitted. */
   progress?: SharedValue<number>;
@@ -138,10 +139,6 @@ export type UseVortexRun = {
 // Constants
 // ============================================================================
 
-// Pause between the release press and the capture: drawElementImageToTexture
-// blocks the platform UI thread ~0.4 s, so let the press animation settle first.
-const RELEASE_DELAY_MS = 120;
-
 // UI-thread loop only for now (user decision 2026-10-23). The hook still
 // supports "js-raf" (gargantua uses it); restore a toggle here if needed.
 const RENDER_MODE = "ui-worklet" as const;
@@ -170,7 +167,7 @@ export const useVortexRun = ({
   onStats,
 }: UseVortexRunOptions): UseVortexRun => {
   const device = useSharedDevice();
-  const ownSpeed = useSharedValue(1);
+  const ownSpeed = useSharedValue(DEFAULT_SPEED);
   const speed = speedProp ?? ownSpeed;
   // Read by the UI-runtime loop: phase 0 = idle, a new non-zero value = start a run.
   const phase = useSharedValue(0);

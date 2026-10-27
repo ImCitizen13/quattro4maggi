@@ -94,6 +94,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 - `lensDials.ts` — DevTools Dials (dev only): Sim / Gravity / Glass sliders, a Color folder per effect (palette select, count 1..6, six color dials; a palette pick fills that list and is pushed back with `setDialValues`), preset actions
 - `DemoContent.tsx` — the RN view that gets swallowed (`collapsable={false}`, reports image load)
 - `snapshot.ts` — `createSnapshotTexture`, `captureInto` (`queue.drawElementImageToTexture`)
+- `vortexConstants.ts` — the single source of vortex defaults (physics, `DEFAULT_SPEED` 2.5×, sim limits, hole spring, keyframe / seek budgets, colors, wrapper defaults, shader tuning). Lens knobs stay in `lensTune.ts`
 - `vortexScene.ts` — base layer of `composeLayered`: setup, `frame` / `clearFrame` / `render` worklets, step clock, histogram readback, keyframes + seek, `VortexConfig` defaults; draws into the composer attachment and fills `LensShared`
 - `vortexShaders.ts` — raw WGSL bodies in TypeGPU shells (`initFn`, `stepFn`, `fullscreenVs`, `tileVs`), `tileFs` in TGSL; helpers `hash`, `holeAt`, `horizonOf`, `cellHash`, `stickOf`
 - `lensScene.ts` — lens layer (`readsBackdrop`); `LensShared` hands over the vortex `root` + `Params`
@@ -103,6 +104,10 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 - `../gargantua-type-gpu/composeLayered.ts` — layer composer; a layer returning `false` skips the rest + blit and returns `false`
 - `../gargantua-type-gpu/hooks/useWebGPU.tsx` — shared hook; `useWebGPUOnDevice` shares the snapshot's device; `render` returning `false` skips `present()`
 - `babel.config.js` — `importForwarding` entry for this folder
+
+## Tuning
+
+Change a default in `vortexConstants.ts` and every consumer (scene, shaders, run hook, wrapper, demo, settings panel, dials) follows. The shader tuning literals there are baked into the WGSL at module load, not uniforms.
 
 ## Physics
 
@@ -132,7 +137,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 | Pause / Reset | one button: Pause while running; Reset once paused or done (RN view back, 0 %); disabled idle | no |
 | Progress bar | scrub: drag or tap seeks to that fraction, forward and backward; release resumes | no |
 | ⚙ (header) | toggles the settings panel (floats over the HUD, stage never resizes) | no |
-| Sim tab: Speed × | 0.25×–4×, live, sim time per real second | no |
+| Sim tab: Speed × | 0.25×–4× (default 2.5×), live, sim time per real second | no |
 | Sim tab: 8 / 4 / 2 px | particle count | yes (mid-run: restarts at once on the same texture) |
 | Sim tab: Sticky | patches on/off (mid-run or done: restart) | no |
 | Lens tab | Gravity / Glass / Colors sub-tabs, presets, 14 live knobs, rim / halo / specular color lists (palette pick per list) | no |

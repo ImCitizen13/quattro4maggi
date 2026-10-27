@@ -38,7 +38,15 @@ import type { SharedValue } from "react-native-reanimated";
 import { Canvas } from "react-native-webgpu";
 import { type LensTuneValues, useLensTune } from "./lensTune";
 import { type RunState, useVortexRun } from "./useVortexRun";
-import { DEFAULT_VORTEX, type VortexStats } from "./vortexScene";
+import {
+  DEFAULT_PREWARM,
+  DEFAULT_READY,
+  DEFAULT_STICKY,
+  DEFAULT_TOUCH_ORIGIN,
+  DEFAULT_VORTEX,
+  TOUCH_WINDOW_MS,
+} from "./vortexConstants";
+import type { VortexStats } from "./vortexScene";
 
 // ============================================================================
 // Types
@@ -118,13 +126,6 @@ type Pending = {
 type Touch = { pageX: number; pageY: number; t: number };
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-/** A touch older than this no longer picks the swallow origin. */
-const TOUCH_WINDOW_MS = 1000;
-
-// ============================================================================
 // Component
 // ============================================================================
 
@@ -133,13 +134,13 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
     {
       children,
       tile = DEFAULT_VORTEX.tile,
-      sticky = true,
+      sticky = DEFAULT_STICKY,
       center,
-      touchOrigin = true,
+      touchOrigin = DEFAULT_TOUCH_ORIGIN,
       background,
       enabled = true,
-      ready = true,
-      prewarm = false,
+      ready = DEFAULT_READY,
+      prewarm = DEFAULT_PREWARM,
       speed,
       progress,
       seekTarget,

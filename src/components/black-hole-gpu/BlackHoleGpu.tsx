@@ -40,7 +40,14 @@ import { ProgressBar } from "./ProgressBar";
 import { SettingsPanel } from "./SettingsPanel";
 import type { RunState } from "./useVortexRun";
 import { VortexSnapshot, type VortexSnapshotHandle } from "./VortexSnapshot";
-import { DEFAULT_VORTEX, SPACE_COLOR, type VortexStats } from "./vortexScene";
+import {
+  DEFAULT_SPEED,
+  DEFAULT_VORTEX,
+  SPACE_COLOR,
+  TILE_SIZES,
+  TRANSITION_FALLBACK_MS,
+} from "./vortexConstants";
+import type { VortexStats } from "./vortexScene";
 
 // ============================================================================
 // Types
@@ -58,11 +65,6 @@ type TransitionNavigation = {
 // ============================================================================
 // Constants
 // ============================================================================
-
-const TILE_SIZES = [8, 4, 2] as const;
-
-// Build the scene anyway if the push transition's `transitionEnd` never fires.
-const TRANSITION_FALLBACK_MS = 1000;
 
 // TypeGPU logs this once per process on the first UI-runtime transfer (no
 // WeakRef in worklet runtimes → strong identity cache). Harmless, but its
@@ -85,7 +87,7 @@ export const BlackHoleGpu = () => {
   const navigation = useNavigation() as unknown as TransitionNavigation;
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
-  const speed = useSharedValue(1);
+  const speed = useSharedValue(DEFAULT_SPEED);
   const progress = useSharedValue(0);
   const paused = useSharedValue(false);
   const seekTarget = useSharedValue(-1);
