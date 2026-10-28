@@ -190,3 +190,14 @@ export const SPRING_BOUNCE_ANIMATION = {
   velocity: 0,
   reduceMotion: ReduceMotion.System,
 };
+
+/** Skottie list (skia-webgpu-vortex): spring back from the scroll edges. */
+export const SPRING_SKOTTIE_LIST_EDGE = {
+  duration: 600,
+  dampingRatio: 0.8,
+  mass: 1,
+  overshootClamping: undefined,
+  energyThreshold: 6e-9,
+  velocity: 0,
+  reduceMotion: ReduceMotion.System,
+};
