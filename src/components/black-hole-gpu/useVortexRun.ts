@@ -18,6 +18,9 @@
  *        └─ onDone(true) ─► "done"; scrubbing back before the end ─► "running" again
  *   actions.reset ─► phase = 0 (one transparent frame, then no present), show the RN view
  *
+ * SOURCE: `source: { kind: "texture" }` skips the capture: release ─► running at once,
+ *   the scene samples the caller's texture (never destroyed here); see vortexSource.ts
+ *
  * STATE: run = idle ─► capturing ─► running ⇄ paused, running/paused ─► done; reset ─► idle
  *
  * KEY FEATURES:
@@ -43,6 +46,7 @@ import type { LensTuneValues } from "./lensTune";
 import { captureInto, createSnapshotTexture } from "./snapshot";
 import { DEFAULT_SPEED, DEFAULT_VORTEX, RELEASE_DELAY_MS } from "./vortexConstants";
 import { createVortexScene, type VortexStats } from "./vortexScene";
+import type { VortexSource } from "./vortexSource";
 
 // ============================================================================
 // Types
@@ -65,6 +69,13 @@ export type UseVortexRunOptions = {
    * until release; reset (or unmount) frees it again.
    */
   prewarm?: boolean;
+  /**
+   * Tile source. Default `{ kind: "snapshot" }` (capture the wrapped view).
+   * `{ kind: "texture" }` uses a caller-owned texture: no capture, no
+   * `capturing` state, the stage size comes from the texture, and the hook
+   * runs on `source.device`. See `VortexSource`.
+   */
+  source?: VortexSource;
   /** The wrapped view can be captured (e.g. its image loaded). Release is a no-op while false. */
   ready: boolean;
   /** Initial tile size in px. Default DEFAULT_VORTEX.tile. */
@@ -153,6 +164,7 @@ const NO_ORIGIN = { x: -1, y: -1 };
 export const useVortexRun = ({
   enabled,
   prewarm = true,
+  source,
   ready,
   initialTile = DEFAULT_VORTEX.tile,
   initialSticky = true,
@@ -166,7 +178,10 @@ export const useVortexRun = ({
   onStarted: onStartedProp,
   onStats,
 }: UseVortexRunOptions): UseVortexRun => {
-  const device = useSharedDevice();
+  const sharedDevice = useSharedDevice();
+  // A texture source runs on the device its texture lives on.
+  const callerTex = source?.kind === "texture" ? source.texture : null;
+  const device = source?.kind === "texture" ? source.device : sharedDevice;
   const ownSpeed = useSharedValue(DEFAULT_SPEED);
   const speed = speedProp ?? ownSpeed;
   // Read by the UI-runtime loop: phase 0 = idle, a new non-zero value = start a run.
@@ -222,13 +237,18 @@ export const useVortexRun = ({
   // The scene's snapshot texture, owned here and refilled by every release.
   // Lazy mode allocates it only once a release wants it.
   const build = enabled && (prewarm || wanted);
+  // Null for a texture source: the caller owns that texture.
   const snapTex = useMemo(
     () =>
-      device && build && pxW > 0 && pxH > 0
+      device && !callerTex && build && pxW > 0 && pxH > 0
         ? createSnapshotTexture(device, pxW, pxH)
         : null,
-    [device, build, pxW, pxH],
+    [device, callerTex, build, pxW, pxH],
   );
+  // The texture the scene samples: the caller's (once wanted) or the snapshot.
+  const srcTex = callerTex ? (device && build ? callerTex : null) : snapTex;
+  const srcW = srcTex?.width ?? 0;
+  const srcH = srcTex?.height ?? 0;
 
   // Hand a freshly built texture to a lazy release waiting for it.
   useEffect(() => {
@@ -255,12 +275,12 @@ export const useVortexRun = ({
   // Two layers: the vortex (tiles over space) then the lens, which reads it as
   // its backdrop. `shared` is the vortex-to-lens handoff, fresh per scene.
   const scene = useMemo(() => {
-    if (!snapTex) return null;
+    if (!srcTex) return null;
     const shared: LensShared = {};
     return composeLayered([
       {
         scene: createVortexScene({
-          snapshot: snapTex,
+          snapshot: srcTex,
           config: { ...DEFAULT_VORTEX, tile },
           clearColor,
           center,
@@ -281,14 +301,15 @@ export const useVortexRun = ({
       { scene: createLensScene(shared, lensTune), readsBackdrop: true },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapTex, tile]);
+  }, [srcTex, srcW, srcH, tile]);
   const canvasRef = useWebGPUOnDevice(device, scene, [scene], size, {
     mode: RENDER_MODE,
   });
 
   // Declared after the hook's effect: on a texture change React runs the hook's
   // cleanup first (it cancels the UI loop and tears the scene down), so the
-  // texture is destroyed only once nothing samples it.
+  // texture is destroyed only once nothing samples it. Only the owned snapshot
+  // texture: a caller texture (snapTex is null then) is never destroyed here.
   useEffect(() => () => snapTex?.destroy(), [snapTex]);
 
   const reset = () => {
@@ -342,10 +363,19 @@ export const useVortexRun = ({
     if (!device || !enabled || !ready || busy.current || !size) {
       return false;
     }
-    if (prewarm && (!scene || !snapTex)) return false;
+    if (prewarm && (!scene || !srcTex)) return false;
     busy.current = true;
     // Kept for the whole run: a tile / Sticky restart reopens at the same spot.
     originSv.value = origin ?? NO_ORIGIN;
+    if (callerTex) {
+      // Texture source: nothing to capture, so no `capturing` state and no
+      // press delay. Lazy: ask for the scene; the phase flip may land before
+      // its setup and the new scene's first frame starts the run itself.
+      if (!prewarm) setWanted(true);
+      startPhase(sticky);
+      setRun("running");
+      return true;
+    }
     setRun("capturing");
     const myEpoch = epoch.current;
     let tex = snapTex;

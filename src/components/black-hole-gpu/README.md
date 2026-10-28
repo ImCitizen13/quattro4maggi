@@ -175,6 +175,22 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
   (default middle). Stored per run (`origin` SharedValue → `Params.center` at run
   start), so the release wave and the lens start there; a tile / Sticky restart
   keeps it.
+- Source (task 31): `source` prop / `useVortexRun({ source })`, type `VortexSource`
+  (`vortexSource.ts`). Default `{ kind: "snapshot" }` = capture the children (above).
+  `{ kind: "texture"; texture; device; live }` uses a caller-owned GPUTexture instead:
+  no capture and no `capturing` state, `swallow()` starts the run at once. Rules:
+  - `device` is the device the texture lives on; the vortex runs on it. For Skia:
+    `importDevice(Skia.getNativeDevice())` (react-native-webgpu), texture usage
+    `RENDER_ATTACHMENT | TEXTURE_BINDING`, `Skia.Surface.MakeFromGPUTexture(tex)`, draw,
+    `surface.flush()`. Avoid `asImage()` / `MakeGPUTextureFromImage` / `flush(true)` on the hot path.
+  - Stage size = texture width/height (physical px). Size the wrapper to the same
+    aspect (the canvas follows the wrapper layout). A new or resized texture rebuilds the scene.
+  - The caller owns the texture: fills it, keeps it alive while the vortex uses it, destroys it
+    after the vortex is gone. The scene never destroys it.
+  - Live sources: the scene samples the texture every frame, so a texture redrawn every
+    frame gives live tiles. Scrubbing replays the particle positions, but the tiles show
+    the content as it is now, not as it was at that progress.
+  - Proof of the shared device: `dev/SkiaRedVortexTest.tsx` (Skia clears red, the vortex swallows red tiles).
 - Props: `tile`, `sticky` (live), `center`, `touchOrigin`, `background` (read at scene build),
   `enabled` (gate, e.g. a push transition), `ready`, `prewarm`, `speed` / `progress` /
   `seekTarget` / `paused` SharedValues, `lensTune`,

@@ -47,6 +47,7 @@ import {
   TOUCH_WINDOW_MS,
 } from "./vortexConstants";
 import type { VortexStats } from "./vortexScene";
+import type { VortexSource } from "./vortexSource";
 
 // ============================================================================
 // Types
@@ -97,6 +98,12 @@ export type VortexSnapshotProps = {
    * wrappers (e.g. list rows) hold no GPU memory.
    */
   prewarm?: boolean;
+  /**
+   * Tile source. Default `{ kind: "snapshot" }`: the children are captured.
+   * `{ kind: "texture" }`: a caller-owned GPU texture (no capture, swallow()
+   * starts at once; the children are only hidden). See `VortexSource`.
+   */
+  source?: VortexSource;
   speed?: SharedValue<number>;
   /** Written every frame: fraction of tiles swallowed. */
   progress?: SharedValue<number>;
@@ -141,6 +148,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
       enabled = true,
       ready = DEFAULT_READY,
       prewarm = DEFAULT_PREWARM,
+      source,
       speed,
       progress,
       seekTarget,
@@ -170,6 +178,7 @@ export const VortexSnapshot = forwardRef<VortexSnapshotHandle, VortexSnapshotPro
     const vortex = useVortexRun({
       enabled,
       prewarm,
+      source,
       ready,
       initialTile: tile,
       initialSticky: sticky,

@@ -79,7 +79,11 @@ export type VortexStats = {
 };
 
 export type VortexSceneOptions = {
-  /** Snapshot texture (owned by the caller, filled by captureInto on Release). Same device. */
+  /**
+   * Source texture (owned by the caller, never destroyed here): the captured
+   * snapshot, or a caller texture (see VortexSource). Same device. The stage
+   * size is its width/height.
+   */
   snapshot: GPUTexture;
   config?: VortexConfig;
   /** Hole center as a 0..1 fraction of the snapshot. Default { x: 0.5, y: 0.5 }. */
