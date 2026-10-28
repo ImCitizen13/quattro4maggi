@@ -17,18 +17,21 @@ export const LENS_KEYS = [
   "edge",
   "dispersion",
   "rim",
-  "specular",
   "halo",
   "spread",
   "rainbow",
   "glow",
+  "haloRadial",
+  "doppler",
+  "dopplerAngle",
+  "disk",
 ] as const;
 
 export type LensKey = (typeof LENS_KEYS)[number];
 
-export type LensPresetName = "Gravity" | "Gargantua" | "Both";
+export type LensPresetName = "Gravity" | "Gargantua" | "Both" | "Black hole";
 
-export type LensColorName = "rim" | "halo" | "spec";
+export type LensColorName = "rim" | "halo";
 
 /**
  * One SharedValue per color list: flat rgb 0..1 triples, 1..LENS_MAX_COLORS
@@ -45,7 +48,7 @@ export type LensSpec = {
   min: number;
   max: number;
   decimals: number;
-  group: "gravity" | "glass";
+  group: "gravity" | "glass" | "hole";
 };
 
 export type LensKnobs = Record<LensKey, number>;
@@ -66,11 +69,14 @@ export const LENS_DEFAULTS: LensKnobs = {
   edge: 0.1,
   dispersion: 0.9,
   rim: 0.15,
-  specular: 1,
   halo: 0.15,
   spread: 0.2,
   rainbow: 1,
   glow: 0,
+  haloRadial: 0,
+  doppler: 0,
+  dopplerAngle: 180,
+  disk: 0,
 };
 
 export const LENS_SPEC: Record<LensKey, LensSpec> = {
@@ -83,30 +89,45 @@ export const LENS_SPEC: Record<LensKey, LensSpec> = {
   edge: { label: "Edge", min: 0, max: 0.5, decimals: 2, group: "glass" },
   dispersion: { label: "Dispersion", min: 0, max: 2, decimals: 2, group: "glass" },
   rim: { label: "Rim", min: 0, max: 1, decimals: 2, group: "glass" },
-  specular: { label: "Specular", min: 0, max: 2, decimals: 2, group: "glass" },
   halo: { label: "Halo", min: 0, max: 1, decimals: 2, group: "glass" },
   spread: { label: "Spread", min: 0, max: 1, decimals: 2, group: "glass" },
   rainbow: { label: "Rainbow", min: 0, max: 1, decimals: 2, group: "glass" },
   glow: { label: "Glow", min: 0, max: 4, decimals: 2, group: "glass" },
+  haloRadial: { label: "Radial halo", min: 0, max: 1, decimals: 2, group: "hole" },
+  doppler: { label: "Doppler", min: 0, max: 1, decimals: 2, group: "hole" },
+  dopplerAngle: { label: "Doppler °", min: 0, max: 360, decimals: 0, group: "hole" },
+  disk: { label: "Disk ×", min: 0, max: 1.5, decimals: 2, group: "hole" },
 };
 
 export const LENS_PRESETS: Record<LensPresetName, LensKnobs> = {
   Both: LENS_DEFAULTS,
   Gravity: { ...LENS_DEFAULTS, bubble: 0 },
   Gargantua: { ...LENS_DEFAULTS, einstein: 0, chroma: 0 },
+  "Black hole": {
+    ...LENS_DEFAULTS,
+    rainbow: 0,
+    edge: 0.05,
+    glow: 2.5,
+    halo: 0.5,
+    spread: 0.6,
+    einstein: 1.8,
+    haloRadial: 1,
+    doppler: 0.6,
+    dopplerAngle: 180,
+    disk: 0.6,
+  },
 };
 
 // ============================================================================
-// Color lists (rim / halo / specular)
+// Color lists (rim / halo)
 // ============================================================================
 
-export const LENS_COLOR_NAMES: readonly LensColorName[] = ["rim", "halo", "spec"];
+export const LENS_COLOR_NAMES: readonly LensColorName[] = ["rim", "halo"];
 
 /** Default lists: one white color each (the original look). Presets reset to these. */
 export const LENS_COLOR_DEFAULTS: Record<LensColorName, readonly string[]> = {
   rim: ["#ffffff"],
   halo: ["#ffffff"],
-  spec: ["#ffffff"],
 };
 
 export type Rgb = readonly [number, number, number];
@@ -199,6 +220,36 @@ export const setLensColorAt = (
 export const paletteColors = (index: number): string[] =>
   (BLACK_HOLE_PALETTES[index] ?? BLACK_HOLE_PALETTES[0]).colors.slice(0, LENS_MAX_COLORS);
 
+/** Index of a BLACK_HOLE_PALETTES entry by name (throws if it was renamed). */
+const paletteIndex = (name: string): number => {
+  const index = BLACK_HOLE_PALETTES.findIndex((palette) => palette.name === name);
+  if (index < 0) throw new Error(`lensTune: unknown palette ${name}`);
+  return index;
+};
+
+/**
+ * Palette (BLACK_HOLE_PALETTES index) a preset loads into a color list.
+ * Lists not named here reset to LENS_COLOR_DEFAULTS.
+ */
+export const LENS_PRESET_PALETTES: Partial<
+  Record<LensPresetName, Partial<Record<LensColorName, number>>>
+> = {
+  "Black hole": {
+    rim: paletteIndex("event-horizon"),
+    halo: paletteIndex("accretion-disk"),
+  },
+};
+
+/** Palette index a preset sets for a list, or null (the list resets to its default). */
+export const presetPick = (preset: LensPresetName, name: LensColorName): number | null =>
+  LENS_PRESET_PALETTES[preset]?.[name] ?? null;
+
+/** The color list a preset sets: its palette colors, or LENS_COLOR_DEFAULTS. */
+export const presetColors = (preset: LensPresetName, name: LensColorName): string[] => {
+  const pick = presetPick(preset, name);
+  return pick === null ? [...LENS_COLOR_DEFAULTS[name]] : paletteColors(pick);
+};
+
 // ============================================================================
 // SharedValues + presets
 // ============================================================================
@@ -206,7 +257,6 @@ export const paletteColors = (index: number): string[] =>
 const DEFAULT_FLAT: Record<LensColorName, number[]> = {
   rim: flatten(LENS_COLOR_DEFAULTS.rim),
   halo: flatten(LENS_COLOR_DEFAULTS.halo),
-  spec: flatten(LENS_COLOR_DEFAULTS.spec),
 };
 
 /** One SharedValue per knob and per color list, seeded with the defaults. */
@@ -220,21 +270,26 @@ export const useLensTune = (): LensTuneValues => ({
   edge: useSharedValue(LENS_DEFAULTS.edge),
   dispersion: useSharedValue(LENS_DEFAULTS.dispersion),
   rim: useSharedValue(LENS_DEFAULTS.rim),
-  specular: useSharedValue(LENS_DEFAULTS.specular),
   halo: useSharedValue(LENS_DEFAULTS.halo),
   spread: useSharedValue(LENS_DEFAULTS.spread),
   rainbow: useSharedValue(LENS_DEFAULTS.rainbow),
   glow: useSharedValue(LENS_DEFAULTS.glow),
+  haloRadial: useSharedValue(LENS_DEFAULTS.haloRadial),
+  doppler: useSharedValue(LENS_DEFAULTS.doppler),
+  dopplerAngle: useSharedValue(LENS_DEFAULTS.dopplerAngle),
+  disk: useSharedValue(LENS_DEFAULTS.disk),
   colors: {
     rim: useSharedValue(DEFAULT_FLAT.rim),
     halo: useSharedValue(DEFAULT_FLAT.halo),
-    spec: useSharedValue(DEFAULT_FLAT.spec),
   },
 });
 
-/** Set every knob to a preset and every color list to its default (plain set, JS side). */
+/**
+ * Set every knob to a preset and every color list to the preset's colors
+ * (its palette, else the default; plain set, JS side).
+ */
 export const applyLensPreset = (values: LensTuneValues, preset: LensPresetName) => {
   const next = LENS_PRESETS[preset];
   for (const key of LENS_KEYS) values[key].value = next[key];
-  for (const name of LENS_COLOR_NAMES) values.colors[name].value = DEFAULT_FLAT[name].slice();
+  for (const name of LENS_COLOR_NAMES) values.colors[name].value = flatten(presetColors(preset, name));
 };

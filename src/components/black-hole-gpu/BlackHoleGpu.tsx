@@ -20,8 +20,8 @@
  *   fixed height in every state (the stage size drives a GPU rebuild)
  * - Gear button in the navigation header toggles SettingsPanel (portal, floats over
  *   the HUD, never resizes the stage): Sim tab (status, Speed 0.25×–4×, tile chips
- *   8/4/2 px, Sticky chip) and Lens tab (14 live knobs, rim/halo/specular color
- *   lists with palette picks, three presets)
+ *   8/4/2 px, Sticky chip) and Lens tab (17 live knobs, rim/halo color
+ *   lists with palette picks, four presets)
  * - Wait for the push transition so the pre-build doesn't compete with it
  * - FpsOverlay ui row
  * - Dev: lens knobs + speed also in the DevTools Dials panel (lensDials.ts)

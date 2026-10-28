@@ -21,22 +21,27 @@ import { horizonOf } from "./vortexShaders";
 //   bubble      glass port of centerBubbleScene, centered on the hole, radius
 //               R = rh * bubble (R <= 0 disables it). Superellipse outline
 //               (shapeN), signed refraction (positive barrel, negative
-//               pincushion), rim band (edge) with chromatic dispersion, outer
-//               halo (halo, spread) and specular gain. Its sample points start
-//               from the gravity source g.
-//   colors      rim, halo and specular each read a list of 1..6 colors
-//               (rimColors/haloColors/specColors + counts; 6 = LENS_MAX_COLORS
-//               in gpuTypes.ts, hardcoded below). Rim and halo: a cyclic
-//               linear gradient around the bubble angle (same angle as the
-//               rainbow, seamless wrap); the rim then blends toward the
-//               6-stop rainbow by rainbow. Specular: a linear gradient from
-//               the highlight center (first color) to where its lobe dies
-//               (last color), t = clamp((1 - specDot / 0.72111) * 4, 0, 1);
-//               0.72111 is the length of the unnormalized light vector
-//               (-0.4, -0.6), so specDot peaks there, not at 1. One color is
-//               exactly the old single-color look. Note: that short vector
-//               also keeps the specular lobe itself faint (unchanged here).
-//   glow        static additive bloom of the rim and halo gradients, scaled
+//               pincushion), rim band (edge) with chromatic dispersion and
+//               outer halo (halo, spread). Its sample points start from the
+//               gravity source g.
+//   colors      rim and halo each read a list of 1..6 colors
+//               (rimColors/haloColors + counts; 6 = LENS_MAX_COLORS in
+//               gpuTypes.ts, hardcoded below). Angular: a cyclic linear
+//               gradient around the bubble angle (same angle as the rainbow,
+//               seamless wrap); the rim then blends toward the 6-stop rainbow
+//               by rainbow. One color is exactly the old single-color look.
+//   haloRadial  0 = the angular halo gradient above, 1 = a non-cyclic gradient
+//               over the same halo list by distance: first color at the bubble
+//               edge, last at the outer fade, t = clamp(e / spread, 0, 1).
+//   doppler     one-sided brightening: dop = max(1 + doppler * dot(dir, a), 0)
+//               with a the unit vector at dopplerAngle degrees (screen space,
+//               y down, 0 = right). Multiplies the rim and halo colors, so
+//               the halo mix, rim and bloom all follow. 0 = factor exactly 1.
+//   disk        opaque black disk of radius disk * rh centered on the hole,
+//               soft edge of 3 px, composited last (premultiplied black,
+//               alpha toward 1). 0 = off. Drawn only after the rh test, so an
+//               idle frame stays a passthrough.
+//   glow       static additive bloom of the rim and halo gradients, scaled
 //               by glow (0 = off, exact old look). With e = (dist - R) / R:
 //               rim  exp(-(e / edge)^2) * rim, brightest on the outline;
 //               halo exp(-2 e / spread) * halo outside the outline, fading
@@ -46,8 +51,9 @@ import { horizonOf } from "./vortexShaders";
 //   The hole itself is not drawn here: the lens only bends the backdrop.
 //   alpha       premultiplied, so a transparent backdrop (VortexSnapshot over
 //               the app) stays transparent: the bent backdrop keeps its own
-//               alpha, halo and rim paint toward opaque, bloom and specular
-//               are additive light (rgb may exceed alpha). Over an opaque
+//               alpha, halo and rim paint toward opaque, the disk
+//               paints opaque black, bloom is additive light (rgb may exceed
+//               alpha). Over an opaque
 //               backdrop alpha is 1 everywhere: the old look exactly.
 //
 // Raw WGSL body in a TypeGPU shell, same rules as vortexShaders: never a
@@ -80,11 +86,13 @@ export const lensFs = tgpu.fragmentFn({
   let haloN = clamp(i32(T.haloCount), 1, 6);
   let haloPos = hue * f32(haloN);
   let haloI = min(i32(floor(haloPos)), haloN - 1);
-  let haloCol = mix(
+  var haloCol = mix(
     L.$.t.haloColors[haloI].rgb,
     L.$.t.haloColors[(haloI + 1) % haloN].rgb,
     haloPos - f32(haloI)
   );
+  let dopAng = T.dopplerAngle * 0.01745329252;
+  let dop = max(1.0 + T.doppler * dot(dir, vec2f(cos(dopAng), sin(dopAng))), 0.0);
 
   var mask = 0.0;
   var halo = 0.0;
@@ -127,16 +135,17 @@ export const lensFs = tgpu.fragmentFn({
       rainbow = mix(vec3f(0.0, 0.0, 1.0), vec3f(1.0, 0.0, 1.0), f);
     }
 
-    let specDot = max(dot(dir, vec2f(-0.4, -0.6)), 0.0);
-    let spec = (pow(specDot, 32.0) * 0.6 + pow(specDot, 8.0) * 0.15) * T.specular;
-    let specN = clamp(i32(T.specCount), 1, 6);
-    let specPos = clamp((1.0 - specDot / 0.72111) * 4.0, 0.0, 1.0) * f32(specN - 1);
-    let specI = min(i32(floor(specPos)), max(specN - 2, 0));
-    let specCol = mix(
-      L.$.t.specColors[specI].rgb,
-      L.$.t.specColors[min(specI + 1, specN - 1)].rgb,
-      specPos - f32(specI)
+    let eRad = (dist - R) / R;
+    let radT = clamp(eRad / max(T.spread, 0.01), 0.0, 1.0);
+    let haloN2 = clamp(i32(T.haloCount), 1, 6);
+    let radPos = radT * f32(haloN2 - 1);
+    let radI = min(i32(floor(radPos)), max(haloN2 - 2, 0));
+    let haloRad = mix(
+      L.$.t.haloColors[radI].rgb,
+      L.$.t.haloColors[min(radI + 1, haloN2 - 1)].rgb,
+      radPos - f32(radI)
     );
+    haloCol = mix(haloCol, haloRad, T.haloRadial) * dop;
 
     let rimN = clamp(i32(T.rimCount), 1, 6);
     let rimPos = hue * f32(rimN);
@@ -146,9 +155,9 @@ export const lensFs = tgpu.fragmentFn({
       L.$.t.rimColors[(rimI + 1) % rimN].rgb,
       rimPos - f32(rimI)
     );
-    let rimCol = mix(rimGrad, rainbow, T.rainbow);
+    let rimCol = mix(rimGrad, rainbow, T.rainbow) * dop;
     let withRim = mix(interior, rimCol, edgeFactor * T.rim) + rimCol * (edgeFactor * T.rim / 3.0);
-    lit = withRim + specCol * spec;
+    lit = withRim;
     litA = mix(sMid4.a, 1.0, clamp(edgeFactor * T.rim, 0.0, 1.0));
 
     if (T.glow > 0.0) {
@@ -166,8 +175,15 @@ export const lensFs = tgpu.fragmentFn({
   let cb = textureSampleLevel(L.$.backdrop, L.$.samp, (g - dir * ca) / dims, 0.0).b;
   let outside = mix(vec3f(cr, cg4.g, cb), haloCol, halo);
   let outsideA = mix(cg4.a, 1.0, clamp(halo, 0.0, 1.0));
-  let rgb = mix(outside, lit, mask) + bloom;
-  return vec4f(rgb, clamp(mix(outsideA, litA, mask), 0.0, 1.0));
+  var rgb = mix(outside, lit, mask) + bloom;
+  var a = clamp(mix(outsideA, litA, mask), 0.0, 1.0);
+  if (T.disk > 0.0) {
+    let rd = T.disk * rh;
+    let dm = 1.0 - smoothstep(rd - 1.5, rd + 1.5, r);
+    rgb = mix(rgb, vec3f(0.0), dm);
+    a = mix(a, 1.0, dm);
+  }
+  return vec4f(rgb, a);
 }`
   .$uses({ L: lensLayout, horizonOf })
   .$name("lensFs");

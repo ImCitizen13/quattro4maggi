@@ -80,17 +80,17 @@ export const Params = d
   .$name("Params");
 
 /**
- * Max colors per lens color list (rim, halo, specular). Covers the largest
+ * Max colors per lens color list (rim, halo). Covers the largest
  * palette in src/lib/palettes.ts (5). lensShaders.ts hardcodes the same 6
  * when it clamps the counts: change both together.
  */
 export const LENS_MAX_COLORS = 6;
 
 /**
- * Lens tuning uniform: 17 × f32 knobs, then three color lists of
+ * Lens tuning uniform: 19 × f32 knobs, then two color lists of
  * LENS_MAX_COLORS × vec4f (rgb 0..1, w unused). A uniform array element is
  * 16 B-strided anyway, so vec4f makes the layout explicit; TypeGPU pads the
- * scalar block (68 B) up to the 16 B array alignment (80 B). Total 368 B.
+ * scalar block (76 B) up to the 16 B array alignment (80 B). Total 272 B.
  * Written every frame from SharedValues; defaults live in lensTune.ts.
  */
 export const LensTune = d
@@ -113,8 +113,6 @@ export const LensTune = d
     dispersion: d.f32,
     /** Prismatic rim strength. */
     rim: d.f32,
-    /** Specular highlight gain. */
-    specular: d.f32,
     /** Outer halo opacity. */
     halo: d.f32,
     /** Outer halo width, fraction of the bubble radius. */
@@ -123,16 +121,21 @@ export const LensTune = d
     rainbow: d.f32,
     /** Emissive bloom on the rim and halo gradients (0 = off). */
     glow: d.f32,
+    /** Halo color mix: 0 = angular gradient, 1 = radial (edge to outer fade). */
+    haloRadial: d.f32,
+    /** One-sided brightening of the rim and halo (0 = off). */
+    doppler: d.f32,
+    /** Direction of the brightened side, degrees (screen space, y down, 0 = right). */
+    dopplerAngle: d.f32,
+    /** Opaque black disk radius as a multiple of the horizon radius (0 = off). */
+    disk: d.f32,
     /** Colors used from each list, 1..LENS_MAX_COLORS. */
     rimCount: d.f32,
     haloCount: d.f32,
-    specCount: d.f32,
     /** Rim gradient stops around the bubble angle (cyclic). */
     rimColors: d.arrayOf(d.vec4f, LENS_MAX_COLORS),
-    /** Halo gradient stops around the bubble angle (cyclic). */
+    /** Halo gradient stops: around the bubble angle (cyclic) or edge to outer fade (radial). */
     haloColors: d.arrayOf(d.vec4f, LENS_MAX_COLORS),
-    /** Specular stops from the highlight center (first) to its falloff (last). */
-    specColors: d.arrayOf(d.vec4f, LENS_MAX_COLORS),
   })
   .$name("LensTune");
 

@@ -2,15 +2,17 @@
  * useLensDials — the lens knobs and sim speed in the DevTools Dials panel.
  *
  * FLOW:
- *   LENS_SPEC ─► DialKit config (Sim / Gravity / Glass / Color folders + preset actions)
- *   Color folder = one subfolder per effect (rim / halo / spec):
+ *   LENS_SPEC ─► DialKit config (Sim / Gravity / Glass / Hole / Color folders + preset actions)
+ *   Color folder = one subfolder per effect (rim / halo):
  *     palette select + count slider (1..6) + six native color dials
  *   panel change ─► useDialsListener ─► writes the existing SharedValues
  *     (same ones SettingsPanel drives; lensScene / vortexScene read them per frame)
  *     palette changed ─► paletteColors fills only that effect's list
  *       ─► setDialValues pushes the colors + count back to the panel
+ *       ─► rim palette only: rainbow set to 0 and pushed back (glass.rainbow)
  *     otherwise ─► setLensColors from the first `count` color dials
- *   preset action ─► applyLensPreset ─► setDialValues pushes it back to the panel
+ *   preset action ─► applyLensPreset ─► setDialValues pushes the knobs, the
+ *     preset's lists and their palette names (or Custom) back to the panel
  *
  * KEY FEATURES:
  * - Built from LENS_SPEC: ranges and step (10^-decimals) stay in one place
@@ -38,6 +40,8 @@ import {
   type LensSpec,
   type LensTuneValues,
   paletteColors,
+  presetColors,
+  presetPick,
   setLensColors,
 } from "./lensTune";
 import { DEFAULT_SPEED, SPEED_MAX, SPEED_MIN } from "./vortexConstants";
@@ -99,15 +103,16 @@ const LENS_DIALS = {
   sim: { speed: [DEFAULT_SPEED, SPEED_MIN, SPEED_MAX, 0.05] as Slider },
   gravity: sliders("gravity"),
   glass: sliders("glass"),
+  hole: sliders("hole"),
   color: {
     rim: colorFolder("rim"),
     halo: colorFolder("halo"),
-    spec: colorFolder("spec"),
   },
   presets: {
     gravity: { type: "action", label: "Gravity" },
     gargantua: { type: "action", label: "Gargantua" },
     both: { type: "action", label: "Both" },
+    blackHole: { type: "action", label: "Black hole" },
   },
 } as const;
 
@@ -115,6 +120,7 @@ const PRESET_ACTIONS: Record<string, LensPresetName> = {
   "presets.gravity": "Gravity",
   "presets.gargantua": "Gargantua",
   "presets.both": "Both",
+  "presets.blackHole": "Black hole",
 };
 
 // ============================================================================
@@ -131,7 +137,11 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
     LENS_DIALS,
     (values) => {
       speed.set(values.sim.speed);
-      const tuned: Record<string, number> = { ...values.gravity, ...values.glass };
+      const tuned: Record<string, number> = {
+        ...values.gravity,
+        ...values.glass,
+        ...values.hole,
+      };
       for (const key of LENS_KEYS) {
         const value = tuned[key];
         if (value !== undefined) lens[key].set(value);
@@ -145,6 +155,11 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
           const colors = paletteColors(index);
           setLensColors(lens, name, colors);
           setDialValues(DIAL_ID, { color: { [name]: listValues(colors) } });
+          // A rim palette replaces the rainbow, so turn the rainbow off.
+          if (name === "rim") {
+            lens.rainbow.set(0);
+            setDialValues(DIAL_ID, { glass: { rainbow: 0 } });
+          }
           continue;
         }
         const count = Math.max(1, Math.min(LENS_MAX_COLORS, Math.round(folder.count)));
@@ -157,14 +172,19 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
         const preset = PRESET_ACTIONS[path];
         if (!preset) return;
         applyLensPreset(lens, preset);
-        for (const name of LENS_COLOR_NAMES) lastPalette.current[name] = CUSTOM;
+        const paletteOf = (name: LensColorName) => {
+          const pick = presetPick(preset, name);
+          return pick === null ? CUSTOM : (PALETTE_OPTIONS[pick + 1] ?? CUSTOM);
+        };
+        for (const name of LENS_COLOR_NAMES) lastPalette.current[name] = paletteOf(name);
         setDialValues(DIAL_ID, {
           gravity: valuesFor("gravity", preset),
           glass: valuesFor("glass", preset),
+          hole: valuesFor("hole", preset),
           color: Object.fromEntries(
             LENS_COLOR_NAMES.map((name) => [
               name,
-              { palette: CUSTOM, ...listValues(LENS_COLOR_DEFAULTS[name]) },
+              { palette: paletteOf(name), ...listValues(presetColors(preset, name)) },
             ]),
           ),
         });

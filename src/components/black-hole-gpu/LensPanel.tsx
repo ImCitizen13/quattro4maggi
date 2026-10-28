@@ -3,10 +3,12 @@
  *
  * FLOW:
  *   SettingsPanel (Lens tab selected) ─► renders this body inside its own shell
- *   group tab ─► Gravity / Glass sliders, or the Colors lists (local state)
- *   preset chip ─► applyLensPreset writes every SharedValue, color lists reset
- *   Colors, per effect (rim / halo / specular):
+ *   group tab ─► Gravity / Glass / Hole sliders, or the Colors lists (local state)
+ *   preset chip ─► applyLensPreset writes every SharedValue; color lists load the
+ *     preset's palette (Black hole) or reset to default, texts and picks follow
+ *   Colors, per effect (rim / halo):
  *     palette dropdown ─► paletteColors ─► setLensColors fills only that list
+ *       (rim palette also sets Rainbow to 0)
  *     color text ─► parseColor ─► setLensColorAt (invalid text is ignored,
  *       previous color stays)
  *     − / + ─► drop the last color / repeat it (1..LENS_MAX_COLORS)
@@ -14,7 +16,7 @@
  *
  * KEY FEATURES:
  * - Body only: no Portal, no panel chrome, no close button (SettingsPanel owns them)
- * - Segmented Gravity | Glass | Colors group tabs and preset chips
+ * - Segmented Gravity | Glass | Hole | Colors group tabs and preset chips
  * - Active group only, three-column grid (sliders from LENS_SPEC, color cells)
  * - No re-render per drag tick: sliders and color lists are UI-thread SharedValues
  */
@@ -26,13 +28,14 @@ import { BLACK_HOLE_PALETTES } from "@/lib/palettes";
 import {
   applyLensPreset,
   getLensColors,
-  LENS_COLOR_DEFAULTS,
   LENS_COLOR_NAMES,
   LENS_KEYS,
   LENS_MAX_COLORS,
   LENS_SPEC,
   paletteColors,
   parseColor,
+  presetColors,
+  presetPick,
   rgbToHex,
   setLensColorAt,
   setLensColors,
@@ -53,7 +56,7 @@ export type LensTabProps = {
   width: number;
 };
 
-type LensGroup = "gravity" | "glass" | "colors";
+type LensGroup = "gravity" | "glass" | "hole" | "colors";
 
 type ColorTexts = Record<LensColorName, string[]>;
 
@@ -64,10 +67,11 @@ type PalettePicks = Record<LensColorName, number | null>;
 // Constants
 // ============================================================================
 
-const PRESETS: readonly LensPresetName[] = ["Gravity", "Gargantua", "Both"];
+const PRESETS: readonly LensPresetName[] = ["Gravity", "Gargantua", "Both", "Black hole"];
 const GROUPS: readonly { id: LensGroup; title: string }[] = [
   { id: "gravity", title: "Gravity" },
   { id: "glass", title: "Glass" },
+  { id: "hole", title: "Hole" },
   { id: "colors", title: "Colors" },
 ];
 
@@ -78,19 +82,12 @@ const COLUMNS = 3;
 const COLOR_LABELS: Record<LensColorName, string> = {
   rim: "Rim",
   halo: "Halo",
-  spec: "Specular",
 };
 
-const NO_PICKS: PalettePicks = { rim: null, halo: null, spec: null };
+const NO_PICKS: PalettePicks = { rim: null, halo: null };
 
-const keysOf = (group: "gravity" | "glass"): LensKey[] =>
+const keysOf = (group: "gravity" | "glass" | "hole"): LensKey[] =>
   LENS_KEYS.filter((key) => LENS_SPEC[key].group === group);
-
-const defaultTexts = (): ColorTexts => ({
-  rim: [...LENS_COLOR_DEFAULTS.rim],
-  halo: [...LENS_COLOR_DEFAULTS.halo],
-  spec: [...LENS_COLOR_DEFAULTS.spec],
-});
 
 // ============================================================================
 // Components
@@ -223,7 +220,6 @@ export const LensTab = ({ values, width }: LensTabProps) => {
   const [texts, setTexts] = useState<ColorTexts>(() => ({
     rim: getLensColors(values, "rim"),
     halo: getLensColors(values, "halo"),
-    spec: getLensColors(values, "spec"),
   }));
   const columnWidth = (width - (COLUMNS - 1) * COLUMN_GAP) / COLUMNS;
 
@@ -253,13 +249,20 @@ export const LensTab = ({ values, width }: LensTabProps) => {
   const pickPalette = (name: LensColorName, index: number) => {
     const colors = paletteColors(index);
     setMenu(null);
-    if (setLensColors(values, name, colors)) setList(name, colors, index);
+    if (setLensColors(values, name, colors)) {
+      setList(name, colors, index);
+      // A rim palette replaces the rainbow, so turn the rainbow off.
+      if (name === "rim") values.rainbow.value = 0;
+    }
   };
 
-  const pickPreset = (name: LensPresetName) => {
-    applyLensPreset(values, name);
-    setTexts(defaultTexts());
-    setPicks(NO_PICKS);
+  const pickPreset = (preset: LensPresetName) => {
+    applyLensPreset(values, preset);
+    setTexts({
+      rim: presetColors(preset, "rim"),
+      halo: presetColors(preset, "halo"),
+    });
+    setPicks({ rim: presetPick(preset, "rim"), halo: presetPick(preset, "halo") });
   };
 
   return (

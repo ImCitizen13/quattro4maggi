@@ -41,16 +41,17 @@ type Vec4Tuple = [number, number, number, number];
  *         ─► LensTune uniform buffer (seeded from the `tune` SharedValues)
  *         ─► linear sampler, one fullscreen render pipeline (no blend)
  *   per frame (composer, readsBackdrop) ─► write the tune knobs + the three
- *         color lists (packed to 6 vec4 each, plus counts)
+ *         two color lists (packed to 6 vec4 each, plus counts)
  *         ─► bind group (params, tune, backdrop, sampler)
  *         ─► one fullscreen pass into the composer's target ─► submit
  *
  * KEY FEATURES:
  * - Reads the tile pass as its backdrop and reconstructs the whole frame:
  *   point-mass lens (flipped second image inside the Einstein radius), small
- *   chromatic split, glass bubble (gargantua look) with rim, halo and
- *   specular color lists (1..6 colors, gradients, optional glow); every knob
- *   and list is a live SharedValue (no rebuild)
+ *   chromatic split, glass bubble (gargantua look) with rim and halo color
+ *   lists (1..6 colors, gradients, optional glow), radial halo, Doppler bias
+ *   and an opaque black disk; every knob and list is a live SharedValue
+ *   (no rebuild)
  * - Exact passthrough of the backdrop (alpha included) until the hole exists,
  *   so the idle transparent frame stays transparent
  * - Shares the vortex layer's root and Params buffer: no copies, no extra
@@ -117,7 +118,6 @@ export const createLensScene =
       "worklet";
       const rimFlat = tune.colors.rim.value;
       const haloFlat = tune.colors.halo.value;
-      const specFlat = tune.colors.spec.value;
       return {
         einstein: tune.einstein.value,
         falloff: tune.falloff.value,
@@ -128,17 +128,18 @@ export const createLensScene =
         edge: tune.edge.value,
         dispersion: tune.dispersion.value,
         rim: tune.rim.value,
-        specular: tune.specular.value,
         halo: tune.halo.value,
         spread: tune.spread.value,
         rainbow: tune.rainbow.value,
         glow: tune.glow.value,
+        haloRadial: tune.haloRadial.value,
+        doppler: tune.doppler.value,
+        dopplerAngle: tune.dopplerAngle.value,
+        disk: tune.disk.value,
         rimCount: countOf(rimFlat),
         haloCount: countOf(haloFlat),
-        specCount: countOf(specFlat),
         rimColors: packColors(rimFlat),
         haloColors: packColors(haloFlat),
-        specColors: packColors(specFlat),
       };
     };
 
