@@ -18,20 +18,21 @@
  * the caller keeps it alive and destroys it; the vortex never does. Passing a
  * new or resized texture rebuilds the scene.
  */
-export type VortexSource =
-  | { kind: "snapshot" }
-  | {
-      kind: "texture";
-      /** Caller-owned; never destroyed by the vortex. */
-      texture: GPUTexture;
-      /**
-       * The device the texture lives on (a GPUTexture does not expose it).
-       * For a Skia texture: `importDevice(Skia.getNativeDevice())`.
-       */
-      device: GPUDevice;
-      /** Redrawn while the vortex runs (informational; the scene always samples the current content). */
-      live: boolean;
-    };
+export type VortexSource = { kind: "snapshot" } | TextureSource;
+
+/** The `texture` variant of `VortexSource` (what `VortexCanvas` takes). */
+export type TextureSource = {
+  kind: "texture";
+  /** Caller-owned; never destroyed by the vortex. */
+  texture: GPUTexture;
+  /**
+   * The device the texture lives on (a GPUTexture does not expose it).
+   * For a Skia texture: `importDevice(Skia.getNativeDevice())`.
+   */
+  device: GPUDevice;
+  /** Redrawn while the vortex runs (informational; the scene always samples the current content). */
+  live: boolean;
+};
 
 /** The default source. */
 export const SNAPSHOT_SOURCE: VortexSource = { kind: "snapshot" };

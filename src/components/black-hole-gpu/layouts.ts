@@ -39,3 +39,10 @@ export const lensLayout = tgpu
     samp: { sampler: "filtering" },
   })
   .$name("lensLayout");
+
+/** Standby (VortexCanvas idle): just the source texture, shown 1:1. */
+export const standbyLayout = tgpu
+  .bindGroupLayout({
+    src: { texture: d.texture2d(d.f32) },
+  })
+  .$name("standbyLayout");

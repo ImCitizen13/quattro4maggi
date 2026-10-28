@@ -6,7 +6,11 @@ Route: `/skia-webgpu-vortex` (native tabs). Reuses the black-hole vortex from
 | Tab | Status |
 | --- | --- |
 | Skottie | Placeholder: Skia (Skottie) texture source, tasks 33/34 |
-| WebGPU | Placeholder: animated TypeGPU gradient as a WebGPU texture source, later |
+| WebGPU | Working: `VortexCanvas` over a Skia-animated shared texture (`LiveCanvasCard`), Destroy/Reset, standby vs running frame stats |
 | Snapshot | Working: `VortexSnapshot` around an RN card, Destroy/Reset |
+
+WebGPU tab flow: `drawSource(t)` (Skia draws a rotating gradient + dots into the
+shared texture, flush) ─► vortex standby/run ─► lens ─► blit, one UI-worklet
+frame. Frame stats print as `[VortexCanvas] standby|running ...` every 30 frames.
 
 Unfocused tabs unmount their content (`useIsFocused`) so no GPU work runs hidden.

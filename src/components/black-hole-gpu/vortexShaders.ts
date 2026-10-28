@@ -2,7 +2,7 @@ import tgpu from "typegpu";
 import * as d from "typegpu/data";
 import * as std from "typegpu/std";
 import { Particle } from "./gpuTypes";
-import { computeLayout as C, renderLayout as R } from "./layouts";
+import { computeLayout as C, renderLayout as R, standbyLayout } from "./layouts";
 import {
   RELAX_FLOOR,
   RELEASE_JITTER,
@@ -251,3 +251,21 @@ export const tileFs = tgpu
     return std.textureLoad(R.$.snap, xy, 0);
   })
   .$name("tileFs");
+
+// ---- Standby ----------------------------------------------------------------
+
+/**
+ * Standby fragment: the source texel under the pixel, 1:1 (no filtering, so a
+ * source the size of the canvas shows unchanged). Pairs with fullscreenVs.
+ */
+export const standbyFs = tgpu
+  .fragmentFn({
+    in: { frag: d.builtin.position },
+    out: d.vec4f,
+  })`{
+  let dims = vec2i(textureDimensions(SB.$.src));
+  let xy = clamp(vec2i(floor(in.frag.xy)), vec2i(0), dims - vec2i(1));
+  return textureLoad(SB.$.src, xy, 0);
+}`
+  .$uses({ SB: standbyLayout })
+  .$name("standbyFs");

@@ -49,6 +49,17 @@ composeLayered (per frame) — layers: [vortex (base), lens (readsBackdrop)]
    a layer returning false vetoes the frame: skips the rest + blit, composer
    returns false (hook skips present); undefined = drawn
 
+VortexCanvas (texture source, `standby: "source"`) — one UI-worklet frame, one present:
+   drawSource(t) (worklet; e.g. Skia draws into the shared texture + flush)
+     ─► vortex layer: phase 0 = STANDBY: one fullscreen pass, source 1:1
+                      (no compute, no histogram readback, no veto);
+                      phase ≠ 0 = RUNNING: step + tiles sampling the same texture
+     ─► lens (passes through while hole = 0) ─► blit ─► present
+   swallow(): phase flips, the next frame is the run's frame 0 (tiles at home
+     = the standby image, no pop); reset(): phase 0, standby again.
+   VortexSnapshot keeps `standby: "veto"` (the default): idle presents nothing.
+   onStats reports { mode: "standby" | "running", fps, encodeMs, sourceMs }.
+
 vortex render(ts, attachment) 'worklet' — reads SharedValues:
    phase  0 → one transparent frame, then return false (veto)
           new id → reset step state + keyframes + histogram, write seed/sticky,
@@ -98,6 +109,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 
 - `src/app/black-hole-gpu/index.tsx` — route (plain `View`, not `ThemeView`)
 - `VortexSnapshot.tsx` — wrapper: `swallow()` pulls its children into the GPU black hole (over `useVortexRun`)
+- `VortexCanvas.tsx` — WebGPU canvas for a live texture source: standby shows it 1:1 (optional per-frame `drawSource(t)` worklet), `swallow()` / `reset()` switch to the vortex and back in the same canvas; same handle and callbacks as `VortexSnapshot`
 - `BlackHoleGpu.tsx` — HUD + settings over `<VortexSnapshot prewarm touchOrigin={false} background={SPACE_COLOR}>` (14e): transition gate, run state mirrored via `onStateChange`, tile / Sticky as wrapper props, owns speed / progress / paused / seekTarget SharedValues, status text, lens tune / dials
 - `../pull-to-refresh/threads-example/SwallowableThreadItem.tsx` — list-delete usage (14h): a lazy wrapper per Threads post; the post's delete (trash) button calls `swallow()`, the row leaves the list on resolve
 - `useVortexRun.ts` — the run state machine hook: shared device, snapshot texture, scene memo (deps: snapshot texture, tile), phase/seed/sticky/progress/paused/seekTarget SharedValues, `actions` (release / pause / resume / reset / pickTile / toggleSticky / onScrubEnd); exports `RunState`, `ShowMode`

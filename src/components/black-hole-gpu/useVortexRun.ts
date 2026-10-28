@@ -20,6 +20,8 @@
  *
  * SOURCE: `source: { kind: "texture" }` skips the capture: release ─► running at once,
  *   the scene samples the caller's texture (never destroyed here); see vortexSource.ts
+ *   `standby: "source"` (VortexCanvas): idle draws that texture 1:1 every frame
+ *   instead of vetoing; `drawSource(t)` runs first in each frame (UI worklet)
  *
  * STATE: run = idle ─► capturing ─► running ⇄ paused, running/paused ─► done; reset ─► idle
  *
@@ -76,6 +78,14 @@ export type UseVortexRunOptions = {
    * runs on `source.device`. See `VortexSource`.
    */
   source?: VortexSource;
+  /**
+   * Idle behaviour: `"veto"` (default) presents nothing so the RN view shows;
+   * `"source"` draws the texture source 1:1 every frame (VortexCanvas).
+   * Read at scene build.
+   */
+  standby?: "veto" | "source";
+  /** Per-frame source worklet, called first in every frame. Read at scene build; keep it stable. */
+  drawSource?: (t: number) => void;
   /** The wrapped view can be captured (e.g. its image loaded). Release is a no-op while false. */
   ready: boolean;
   /** Initial tile size in px. Default DEFAULT_VORTEX.tile. */
@@ -165,6 +175,8 @@ export const useVortexRun = ({
   enabled,
   prewarm = true,
   source,
+  standby,
+  drawSource,
   ready,
   initialTile = DEFAULT_VORTEX.tile,
   initialSticky = true,
@@ -290,6 +302,8 @@ export const useVortexRun = ({
           progress,
           paused,
           seekTarget,
+          standby,
+          drawSource,
           seed: seedSv,
           sticky: stickySv,
           shared,

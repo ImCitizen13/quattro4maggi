@@ -10,7 +10,7 @@ import type {
   SceneProps,
 } from "../gargantua-type-gpu/composeLayered";
 import { Params, Particle, type ParamsData } from "./gpuTypes";
-import { computeLayout, renderLayout } from "./layouts";
+import { computeLayout, renderLayout, standbyLayout } from "./layouts";
 import type { LensShared } from "./lensScene";
 import {
   CHASE_AHEAD,
@@ -35,7 +35,7 @@ import {
   TRANSPARENT,
   WORKGROUP,
 } from "./vortexConstants";
-import { initFn, stepFn, tileFs, tileVs } from "./vortexShaders";
+import { fullscreenVs, initFn, standbyFs, stepFn, tileFs, tileVs } from "./vortexShaders";
 
 // ============================================================================
 // Types
@@ -74,8 +74,12 @@ export type VortexStats = {
   count: number;
   /** Frames per second over the last `STATS_EVERY` frames. */
   fps: number;
-  /** Mean CPU encode + submit time per frame, ms. */
+  /** Mean CPU encode + submit time per frame, ms (excludes `drawSource`). */
   encodeMs: number;
+  /** Mean `drawSource` time per frame (CPU, incl. Skia flush), ms; 0 without one. */
+  sourceMs: number;
+  /** What the window measured: the standby source draw or a running vortex. */
+  mode: "standby" | "running";
 };
 
 export type VortexSceneOptions = {
@@ -121,6 +125,22 @@ export type VortexSceneOptions = {
    * Omitted = no seeking.
    */
   seekTarget?: SharedValue<number>;
+  /**
+   * What phase 0 (idle) does. `"veto"` (default, VortexSnapshot): one
+   * transparent frame, then `render` returns false and the RN view underneath
+   * shows. `"source"` (VortexCanvas): draw the source texture 1:1 every frame
+   * (one fullscreen pass; no compute, no histogram readback), so the canvas
+   * itself shows the content.
+   */
+  standby?: "veto" | "source";
+  /**
+   * Per-frame source hook, called first in every `render` (standby and running)
+   * with the frame timestamp, before anything samples the source texture.
+   * Must be a worklet (it runs on the UI runtime) and capture only
+   * transferable values: create Skia objects on the JS thread and capture
+   * them. Read at scene build.
+   */
+  drawSource?: (t: number) => void;
   /** Handoff to the lens layer: setup stores the root and Params buffer here. */
   shared: LensShared;
   /** A run's first frame has been presented (tiles at home). JS thread. */
@@ -259,6 +279,8 @@ export const createVortexScene =
     progress,
     paused,
     seekTarget,
+    standby = "veto",
+    drawSource,
     shared,
     onStarted,
     onDone,
@@ -379,6 +401,21 @@ export const createVortexScene =
       snap: snapshot.createView(),
     });
 
+    // Standby draw (VortexCanvas): the source 1:1, built once, only if asked.
+    const standbyPipeline =
+      standby === "source"
+        ? root.createRenderPipeline({
+            vertex: fullscreenVs,
+            fragment: standbyFs,
+            targets: { format: presentationFormat },
+            primitive: { topology: "triangle-list" },
+          })
+        : null;
+    const standbyGroup =
+      standby === "source"
+        ? root.createBindGroup(standbyLayout, { src: snapshot.createView() })
+        : null;
+
     // ---- Run state: read and written only by `frame` ------------------------
     const run: RunState = {
       acc: 0,
@@ -398,6 +435,7 @@ export const createVortexScene =
     let last = 0;
     let frames = 0;
     let encodeMs = 0;
+    let sourceMs = 0;
     let statsStart = 0;
     // Last phase value seen; -1 so a scene built mid-run starts it at once.
     let lastPhase = -1;
@@ -676,21 +714,79 @@ export const createVortexScene =
       render: (timestamp, attachment, _backdrop) => {
         "worklet";
         const p = phase.value;
+        // Step 1 of the frame: the caller redraws the source (e.g. Skia into
+        // the shared texture, flushed) before anything samples it.
+        let srcMs = 0;
+        if (drawSource) {
+          const s0 = performance.now();
+          drawSource(timestamp);
+          srcMs = performance.now() - s0;
+        }
+        // A non-zero phase seen for the first time = a run starts this frame.
+        const starting = p !== lastPhase && p !== 0;
         if (p !== lastPhase) {
           lastPhase = p;
           last = 0;
           frames = 0;
           encodeMs = 0;
+          sourceMs = 0;
           statsStart = 0;
           if (p === 0) {
-            // Idle: zero the hole so the lens passes the transparent frame
-            // through, draw it once, then stop presenting.
+            // Idle: zero the hole so the lens passes the frame through.
             progress.value = 0;
             paramBuffer.writePartial({ hole: 0 });
-            clearFrame(attachment.view);
-            return true;
+            if (!standbyPipeline || !standbyGroup) {
+              // Veto mode: draw one transparent frame, then stop presenting.
+              clearFrame(attachment.view);
+              return true;
+            }
+            // Standby mode: fall through to the source draw below.
           }
-          // Run start: tiles at home, dt = 0.
+        }
+        if (p === 0) {
+          if (!standbyPipeline || !standbyGroup) return false;
+          // Standby: one fullscreen draw of the source, no compute, no readback.
+          const e0 = performance.now();
+          const encoder = device.createCommandEncoder();
+          const rpass = encoder.beginRenderPass({
+            colorAttachments: [
+              {
+                view: attachment.view,
+                clearValue: [0, 0, 0, 0],
+                loadOp: "clear",
+                storeOp: "store",
+              },
+            ],
+          });
+          standbyPipeline.with(rpass).with(standbyGroup).draw(3);
+          rpass.end();
+          device.queue.submit([encoder.finish()]);
+          encodeMs += performance.now() - e0;
+          sourceMs += srcMs;
+          frames += 1;
+          if (statsStart === 0) statsStart = timestamp;
+          if (frames === STATS_EVERY) {
+            const fps = (frames * 1000) / (timestamp - statsStart);
+            if (onStats) {
+              scheduleOnRN(onStats, {
+                count,
+                fps,
+                encodeMs: encodeMs / frames,
+                sourceMs: sourceMs / frames,
+                mode: "standby",
+              });
+            }
+            frames = 0;
+            encodeMs = 0;
+            sourceMs = 0;
+            statsStart = timestamp;
+          }
+          return true;
+        }
+        if (starting) {
+          // Run start: tiles at home, dt = 0. In a standby canvas the tiles
+          // sample the same texture the standby pass just showed 1:1, so the
+          // switch is invisible; the lens passes it through while hole is 0.
           const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
           // Hole center for this run: the origin if set, else `center`.
           const o = origin ? origin.value : null;
@@ -715,15 +811,23 @@ export const createVortexScene =
         // Clamp in the worklet, before the sim sees the value.
         const timeScale = Math.min(Math.max(speed.value, SPEED_MIN), SPEED_MAX);
         encodeMs += frame(attachment.view, dt, timeScale, false, 0, 0, 0, 0);
+        sourceMs += srcMs;
         frames += 1;
         if (statsStart === 0) statsStart = timestamp;
         if (frames === STATS_EVERY) {
           const fps = (frames * 1000) / (timestamp - statsStart);
           if (onStats) {
-            scheduleOnRN(onStats, { count, fps, encodeMs: encodeMs / frames });
+            scheduleOnRN(onStats, {
+              count,
+              fps,
+              encodeMs: encodeMs / frames,
+              sourceMs: sourceMs / frames,
+              mode: "running",
+            });
           }
           frames = 0;
           encodeMs = 0;
+          sourceMs = 0;
           statsStart = timestamp;
         }
         return true;
