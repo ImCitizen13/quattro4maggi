@@ -49,6 +49,9 @@ export type SettingsPanelProps = {
   status: string;
   /** Screen width, px. */
   width: number;
+  /** Freeze-content chip state; the chip shows only when `onToggleFreeze` is given (live-source demos). */
+  freezeContent?: boolean;
+  onToggleFreeze?: () => void;
   onPickTile: (size: number) => void;
   onToggleSticky: () => void;
   /** Called when the close button is pressed. */
@@ -80,6 +83,8 @@ export const SettingsPanel = ({
   sticky,
   status,
   width,
+  freezeContent = false,
+  onToggleFreeze,
   onPickTile,
   onToggleSticky,
   onClose,
@@ -141,6 +146,16 @@ export const SettingsPanel = ({
                 <Text style={styles.label}>Sticky</Text>
               </PressableScale>
             </View>
+            {onToggleFreeze && (
+              <View style={styles.row}>
+                <PressableScale
+                  style={[styles.chip, freezeContent && styles.chipActive]}
+                  onPress={onToggleFreeze}
+                >
+                  <Text style={styles.label}>Freeze content on Destroy</Text>
+                </PressableScale>
+              </View>
+            )}
           </View>
         ) : (
           <LensTab values={lensValues} width={bodyWidth} />
