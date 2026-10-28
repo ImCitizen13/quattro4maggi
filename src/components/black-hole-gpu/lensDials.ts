@@ -27,8 +27,8 @@ import { setDialValues, useDialsListener } from "@/lib/dials";
 import { BLACK_HOLE_PALETTES } from "@/lib/palettes";
 import {
   applyLensPreset,
-  LENS_COLOR_DEFAULTS,
   LENS_COLOR_NAMES,
+  LENS_DEFAULT_PRESET,
   LENS_DEFAULTS,
   LENS_KEYS,
   LENS_MAX_COLORS,
@@ -78,12 +78,23 @@ const slotValues = (colors: readonly string[]) =>
     COLOR_SLOTS.map((slot, i) => [slot, colors[Math.min(i, colors.length - 1)]]),
   ) as Record<(typeof COLOR_SLOTS)[number], string>;
 
-/** One effect's folder: palette select, count, six color dials. */
+/** Palette select value for the list a preset sets (its palette name, else Custom). */
+const paletteOf = (preset: LensPresetName, name: LensColorName) => {
+  const pick = presetPick(preset, name);
+  return pick === null ? CUSTOM : (PALETTE_OPTIONS[pick + 1] ?? CUSTOM);
+};
+
+/** One effect's folder: palette select, count, six color dials (from the default preset). */
 const colorFolder = (name: LensColorName) => {
-  const slots = slotValues(LENS_COLOR_DEFAULTS[name]);
+  const colors = presetColors(LENS_DEFAULT_PRESET, name);
+  const slots = slotValues(colors);
   return {
-    palette: { type: "select" as const, options: PALETTE_OPTIONS, default: CUSTOM },
-    count: [LENS_COLOR_DEFAULTS[name].length, 1, LENS_MAX_COLORS, 1] as Slider,
+    palette: {
+      type: "select" as const,
+      options: PALETTE_OPTIONS,
+      default: paletteOf(LENS_DEFAULT_PRESET, name),
+    },
+    count: [colors.length, 1, LENS_MAX_COLORS, 1] as Slider,
     c1: { type: "color" as const, default: slots.c1 },
     c2: { type: "color" as const, default: slots.c2 },
     c3: { type: "color" as const, default: slots.c3 },
@@ -172,11 +183,7 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
         const preset = PRESET_ACTIONS[path];
         if (!preset) return;
         applyLensPreset(lens, preset);
-        const paletteOf = (name: LensColorName) => {
-          const pick = presetPick(preset, name);
-          return pick === null ? CUSTOM : (PALETTE_OPTIONS[pick + 1] ?? CUSTOM);
-        };
-        for (const name of LENS_COLOR_NAMES) lastPalette.current[name] = paletteOf(name);
+        for (const name of LENS_COLOR_NAMES) lastPalette.current[name] = paletteOf(preset, name);
         setDialValues(DIAL_ID, {
           gravity: valuesFor("gravity", preset),
           glass: valuesFor("glass", preset),
@@ -184,7 +191,7 @@ export const useLensDials = (lens: LensTuneValues, speed: SharedValue<number>) =
           color: Object.fromEntries(
             LENS_COLOR_NAMES.map((name) => [
               name,
-              { palette: paletteOf(name), ...listValues(presetColors(preset, name)) },
+              { palette: paletteOf(preset, name), ...listValues(presetColors(preset, name)) },
             ]),
           ),
         });

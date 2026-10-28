@@ -35,7 +35,7 @@ export const TILE_SIZES = [8, 4, 2] as const;
 // ---- Speed ------------------------------------------------------------------
 
 /** Sim speed multiplier a run starts at. Scales sim time only, paths are identical. */
-export const DEFAULT_SPEED = 2.5;
+export const DEFAULT_SPEED = 1;
 /** Lowest sim speed multiplier (slider floor, scene clamp). */
 export const SPEED_MIN = 0.25;
 /** Highest sim speed multiplier (slider ceiling, scene clamp). */

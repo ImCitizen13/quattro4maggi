@@ -84,7 +84,14 @@ const COLOR_LABELS: Record<LensColorName, string> = {
   halo: "Halo",
 };
 
-const NO_PICKS: PalettePicks = { rim: null, halo: null };
+/** The palette a list currently equals (e.g. the startup Black hole lists), or null. */
+const matchPalette = (colors: readonly string[]): number | null => {
+  const key = colors.join(",").toLowerCase();
+  const index = BLACK_HOLE_PALETTES.findIndex(
+    (_, i) => paletteColors(i).join(",").toLowerCase() === key,
+  );
+  return index < 0 ? null : index;
+};
 
 const keysOf = (group: "gravity" | "glass" | "hole"): LensKey[] =>
   LENS_KEYS.filter((key) => LENS_SPEC[key].group === group);
@@ -215,7 +222,10 @@ const ColorList = ({
 export const LensTab = ({ values, width }: LensTabProps) => {
   const [group, setGroup] = useState<LensGroup>("glass");
   const [menu, setMenu] = useState<LensColorName | null>(null);
-  const [picks, setPicks] = useState<PalettePicks>(NO_PICKS);
+  const [picks, setPicks] = useState<PalettePicks>(() => ({
+    rim: matchPalette(getLensColors(values, "rim")),
+    halo: matchPalette(getLensColors(values, "halo")),
+  }));
   // The texts are the source of truth for the inputs; seeded from the lists.
   const [texts, setTexts] = useState<ColorTexts>(() => ({
     rim: getLensColors(values, "rim"),
@@ -252,7 +262,7 @@ export const LensTab = ({ values, width }: LensTabProps) => {
     if (setLensColors(values, name, colors)) {
       setList(name, colors, index);
       // A rim palette replaces the rainbow, so turn the rainbow off.
-      if (name === "rim") values.rainbow.value = 0;
+      if (name === "rim") values.rainbow.set(0);
     }
   };
 

@@ -59,7 +59,8 @@ export { LENS_MAX_COLORS };
 // Knob defaults, ranges, presets
 // ============================================================================
 
-export const LENS_DEFAULTS: LensKnobs = {
+/** The original glass look (rainbow rim, no hole effects): Both / Gravity / Gargantua build on it. */
+export const LENS_ORIGINAL: LensKnobs = {
   einstein: 1.8,
   falloff: 6,
   chroma: 0.03,
@@ -78,6 +79,26 @@ export const LENS_DEFAULTS: LensKnobs = {
   dopplerAngle: 180,
   disk: 0,
 };
+
+/** The black-hole look (tuned in the Dials on 2026-10-28). Also the startup default. */
+export const LENS_BLACK_HOLE: LensKnobs = {
+  ...LENS_ORIGINAL,
+  refraction: -0.59,
+  edge: 0.05,
+  halo: 0.5,
+  spread: 0.6,
+  rainbow: 0,
+  glow: 2.5,
+  haloRadial: 1,
+  doppler: 0.54,
+  dopplerAngle: 297,
+  disk: 1.5,
+};
+
+/** Preset the knobs and color lists start from (see LENS_PRESET_PALETTES for its colors). */
+export const LENS_DEFAULT_PRESET: LensPresetName = "Black hole";
+
+export const LENS_DEFAULTS: LensKnobs = LENS_BLACK_HOLE;
 
 export const LENS_SPEC: Record<LensKey, LensSpec> = {
   einstein: { label: "Einstein ×", min: 0, max: 4, decimals: 2, group: "gravity" },
@@ -100,22 +121,10 @@ export const LENS_SPEC: Record<LensKey, LensSpec> = {
 };
 
 export const LENS_PRESETS: Record<LensPresetName, LensKnobs> = {
-  Both: LENS_DEFAULTS,
-  Gravity: { ...LENS_DEFAULTS, bubble: 0 },
-  Gargantua: { ...LENS_DEFAULTS, einstein: 0, chroma: 0 },
-  "Black hole": {
-    ...LENS_DEFAULTS,
-    rainbow: 0,
-    edge: 0.05,
-    glow: 2.5,
-    halo: 0.5,
-    spread: 0.6,
-    einstein: 1.8,
-    haloRadial: 1,
-    doppler: 0.6,
-    dopplerAngle: 180,
-    disk: 0.6,
-  },
+  Both: LENS_ORIGINAL,
+  Gravity: { ...LENS_ORIGINAL, bubble: 0 },
+  Gargantua: { ...LENS_ORIGINAL, einstein: 0, chroma: 0 },
+  "Black hole": LENS_BLACK_HOLE,
 };
 
 // ============================================================================
@@ -124,7 +133,7 @@ export const LENS_PRESETS: Record<LensPresetName, LensKnobs> = {
 
 export const LENS_COLOR_NAMES: readonly LensColorName[] = ["rim", "halo"];
 
-/** Default lists: one white color each (the original look). Presets reset to these. */
+/** One white color each (the original look): presets without a palette reset to these. */
 export const LENS_COLOR_DEFAULTS: Record<LensColorName, readonly string[]> = {
   rim: ["#ffffff"],
   halo: ["#ffffff"],
@@ -254,9 +263,10 @@ export const presetColors = (preset: LensPresetName, name: LensColorName): strin
 // SharedValues + presets
 // ============================================================================
 
+/** Startup color lists: the LENS_DEFAULT_PRESET palettes. */
 const DEFAULT_FLAT: Record<LensColorName, number[]> = {
-  rim: flatten(LENS_COLOR_DEFAULTS.rim),
-  halo: flatten(LENS_COLOR_DEFAULTS.halo),
+  rim: flatten(presetColors(LENS_DEFAULT_PRESET, "rim")),
+  halo: flatten(presetColors(LENS_DEFAULT_PRESET, "halo")),
 };
 
 /** One SharedValue per knob and per color list, seeded with the defaults. */
