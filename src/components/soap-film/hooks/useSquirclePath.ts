@@ -17,7 +17,7 @@ import { SQUIRCLE_PATH_SEGMENTS } from "../soapFilmConfig";
 // ============================================================================
 
 export type UseSquirclePathParams = {
-  /** Canvas size from `<Canvas onSize>`; the squircle is centered in it. */
+  /** Canvas size from `<Canvas onLayout>`; the squircle is centered in it. */
   canvasSize: SharedValue<SkSize>;
   /** Half-size in points (already `SQUIRCLE_BASE_SIZE * scale`). */
   halfSize: SharedValue<number>;

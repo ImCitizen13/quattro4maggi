@@ -82,7 +82,7 @@ export type SoapFilmProps = {
 
 export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
   // Canvas size, not window size — the canvas sits below the header.
-  // Written by `<Canvas onSize>` on the UI thread — no re-render on layout.
+  // Written by `<Canvas onLayout>` into a SharedValue — no re-render on layout.
   const canvasSize = useSharedValue<SkSize>({ width: 0, height: 0 });
 
   const [generator, setGenerator] = useState<FilmGenerator>("curl");
@@ -170,7 +170,12 @@ export function SoapFilm({ showTuningPanel = true }: SoapFilmProps) {
   return (
     <View style={styles.container}>
       <GestureDetector gesture={composedGesture}>
-        <Canvas style={styles.canvas} onSize={canvasSize}>
+        <Canvas
+          style={styles.canvas}
+          onLayout={({ nativeEvent: { layout } }) => {
+            canvasSize.value = { width: layout.width, height: layout.height };
+          }}
+        >
           <Group>
             <Path path={path} style="fill">
               <SoapFilmShader

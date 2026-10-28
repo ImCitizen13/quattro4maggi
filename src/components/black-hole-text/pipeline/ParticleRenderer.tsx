@@ -89,7 +89,7 @@ export function ParticleRenderer({
   const sprite = useMemo(() => {
     // CPU raster surface: MakeOffscreen (GPU) can return null on first mount
     // before the GPU context exists, and useMemo would cache that null
-    const surface = Skia.Surface.Make(SPRITE_SIZE, SPRITE_SIZE);
+    const surface = Skia.Surface.MakeRaster(SPRITE_SIZE, SPRITE_SIZE);
     if (!surface) return null;
     const paint = Skia.Paint();
     paint.setAntiAlias(true);

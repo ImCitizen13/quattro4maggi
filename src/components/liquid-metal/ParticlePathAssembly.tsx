@@ -118,7 +118,7 @@ const sampleTargets = (
 ): Float32Array | null => {
   const w = Math.round(width);
   const h = Math.round(height);
-  const surface = Skia.Surface.MakeOffscreen(w, h) ?? Skia.Surface.Make(w, h);
+  const surface = Skia.Surface.MakeOffscreen(w, h) ?? Skia.Surface.MakeRaster(w, h);
   if (!surface) return null;
 
   const paint = Skia.Paint();
@@ -326,7 +326,7 @@ export function ParticlePathAssembly({
     surface.getCanvas().drawCircle(c, c, c * 0.62, paint);
     // Detach from the offscreen GPU context — a texture-backed snapshot is
     // not drawable in the on-screen canvas's context
-    return surface.makeImageSnapshot().makeNonTextureImage();
+    return surface.makeImageSnapshot().makeRasterImageSync();
   }, [color]);
 
   const n = scatter?.n ?? 0;
