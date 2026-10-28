@@ -71,11 +71,6 @@ const demos = [
     href: "/black-hole-gpu",
     tags: ["type-gpu"],
   },
-  {
-    name: "Vortex Snapshot",
-    href: "/vortex-snapshot",
-    tags: ["type-gpu"],
-  },
 ] satisfies Demo[];
 
 export default function HomeScreen() {

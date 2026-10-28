@@ -81,9 +81,7 @@ Timeline of one run (sim time, scaled by speed): the hole grows in from 0 s
 ## Files
 
 - `src/app/black-hole-gpu/index.tsx` — route (plain `View`, not `ThemeView`)
-- `src/app/vortex-snapshot/index.tsx` — route for the VortexSnapshot test screen
 - `VortexSnapshot.tsx` — wrapper: `swallow()` pulls its children into the GPU black hole (over `useVortexRun`)
-- `VortexSnapshotDemo.tsx` — test screen: three wrapped cards over colored blobs, tap to swallow, Reset
 - `BlackHoleGpu.tsx` — HUD + settings over `<VortexSnapshot prewarm touchOrigin={false} background={SPACE_COLOR}>` (14e): transition gate, run state mirrored via `onStateChange`, tile / Sticky as wrapper props, owns speed / progress / paused / seekTarget SharedValues, status text, lens tune / dials
 - `../pull-to-refresh/threads-example/SwallowableThreadItem.tsx` — list-delete usage (14h): a lazy wrapper per Threads post; the post's delete (trash) button calls `swallow()`, the row leaves the list on resolve
 - `useVortexRun.ts` — the run state machine hook: shared device, snapshot texture, scene memo (deps: snapshot texture, tile), phase/seed/sticky/progress/paused/seekTarget SharedValues, `actions` (release / pause / resume / reset / pickTile / toggleSticky / onScrubEnd); exports `RunState`, `ShowMode`
@@ -181,7 +179,7 @@ ref.current?.swallow().then(() => removeCard()).catch(() => {});
   keeps its scene until reset or unmount (tearing down at done would pop the lens
   off before the caller removes the view). `prewarm` builds on mount instead
   (the Black Hole GPU screen uses the hook's prewarm default).
-- Measured (14d, iPhone 17 Pro Simulator, `/vortex-snapshot` cards ~360×120 pt,
+- Measured (14d, iPhone 17 Pro Simulator, former `/vortex-snapshot` test screen, cards ~360×120 pt,
   4 px tiles, lazy): `swallow()` → first GPU frame 367–450 ms (5 runs: 385, 450,
   367, 401; three cards at once included). Reset mid-run rejects every pending
   swallow ("unmounted") and the remounted cards run again. A wide card takes
