@@ -56,12 +56,14 @@ Metro logs:
 
 | Metric | Result |
 | --- | --- |
-| Tap → first GPU running frame (Skottie list) | (pending device test) |
+| Tap → first GPU running frame (Skottie list) | 15 ms (iPhone 17 Pro simulator) |
 | Tap → first GPU frame (snapshot path, baseline) | ~430 ms |
-| Standby fps / ms per frame / skia ms | (pending device test) |
-| Running fps / ms per frame, 8 px tiles | (pending device test) |
-| Running fps / ms per frame, 4 px tiles | (pending device test) |
-| Raw Jitter Lottie (wabi-and-more_dark) plays, no crash | (pending device test) |
+| Standby fps / ms per frame / skia ms | 60 fps / 16.67 ms / 0.4–1.2 ms, encode 0.3–0.8 ms (iPhone 17 Pro simulator) |
+| Running fps / ms per frame, 8 px tiles | not measured (simulator run used 4 px tiles) |
+| Running fps / ms per frame, 4 px tiles | 58–60 fps at 122,310 tiles, encode ~1.0 ms (1.1–1.6 ms in the Skia+WebGPU tab), skia 0.7–1.1 ms (iPhone 17 Pro simulator) |
+| Raw Jitter Lottie (wabi-and-more_dark) plays, no crash | Pass on the iPhone 17 Pro simulator (Skia 3.8.1, no `nm` workaround) |
+
+These are simulator numbers, not a physical iPhone.
 
 ## Skottie list source
 
