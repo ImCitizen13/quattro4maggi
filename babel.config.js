@@ -24,6 +24,7 @@ const workletsPluginOptions = {
       "src/components/gargantua-type-gpu",
       "src/components/black-hole-text",
       "src/components/black-hole-gpu",
+      "src/components/skia-webgpu-vortex",
     ],
   },
 };

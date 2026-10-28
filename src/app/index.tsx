@@ -71,6 +71,11 @@ const demos = [
     href: "/black-hole-gpu",
     tags: ["type-gpu"],
   },
+  {
+    name: "Skia + WebGPU Vortex",
+    href: "/skia-webgpu-vortex",
+    tags: ["skia", "type-gpu"],
+  },
 ] satisfies Demo[];
 
 export default function HomeScreen() {
