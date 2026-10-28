@@ -64,7 +64,7 @@ export const LENS_ORIGINAL: LensKnobs = {
   einstein: 1.8,
   falloff: 6,
   chroma: 0.03,
-  bubble: 2.8,
+  bubble: 1.4,
   refraction: 0.5,
   shapeN: 2,
   edge: 0.1,
