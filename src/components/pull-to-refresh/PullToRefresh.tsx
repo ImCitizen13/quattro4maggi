@@ -47,9 +47,15 @@ import {
   useRefreshLifecycle,
 } from "./RefreshLifecycleContext";
 import { StickyStatusHeader } from "./StickyHeader";
-import { postForIndex, reshuffle } from "./threads-example/posts";
+import { postForIndex } from "./threads-example/posts";
 import SwallowableThreadItem from "./threads-example/SwallowableThreadItem";
+import { ThreadDivider } from "./threads-example/ThreadDivider";
 import ThreadsView from "./threads-example/ThreadsView";
+import {
+  ITEMS,
+  SIMULATE_FAILURE,
+  useThreadsFeed,
+} from "./threads-example/useThreadsFeed";
 import { NEON_COLORS } from "./constants";
 import NeonView from "./neon-example/NeonView";
 import NeonItemView from "./neon-example/NeonItemView";
@@ -58,7 +64,7 @@ import NeonItemView from "./neon-example/NeonItemView";
 // Constants
 // ============================================================================
 
-export const ITEMS = Array.from({ length: 10 }, (_, i) => i);
+export { ITEMS, SIMULATE_FAILURE, ThreadDivider };
 
 /**
  * Row spacing lives here, not in a `gap` on the content container. The inset
@@ -71,20 +77,12 @@ export function ItemSeparator() {
   return <View style={styles.separator} />;
 }
 
-/** Full-bleed hairline between Threads post cards, like the real app's feed. */
-export function ThreadDivider() {
-  return <View style={styles.threadDivider} />;
-}
-
 /** How far the arc winds up over the course of the pull, in degrees. */
 const PULL_SWEEP = 270;
 
 const NEUTRAL_COLOR = "#fff";
 const SUCCESS_COLOR = "#4ade80";
 const ERROR_COLOR = "#f87171";
-
-/** Flip to watch the error path: a rejected refresh exits red, not white. */
-export const SIMULATE_FAILURE = false;
 
 // ============================================================================
 // Types
@@ -280,7 +278,7 @@ export function PullToRefresh({}: PullToRefreshProps) {
    * content just arrived. Rows keep stable keys, so FlatList reorders the
    * existing cells rather than remounting them.
    */
-  const [feedOrder, setFeedOrder] = useState(ITEMS);
+  const { feedOrder, onRefresh, removePost } = useThreadsFeed();
 
   /**
    * The header slot holds the sticky status bar *or* the inset indicator, never
@@ -297,36 +295,6 @@ export function PullToRefresh({}: PullToRefreshProps) {
     () => ({ indicatorType, effectiveLayout }),
     [indicatorType, effectiveLayout],
   );
-
-  // Stands in for a real fetch. The real version forwards `signal`:
-  //   await fetch(url, { signal }).then((r) => r.json())
-  // so a timed-out request is actually torn down instead of left running.
-  const onRefresh = async (signal: AbortSignal) => {
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () =>
-          SIMULATE_FAILURE
-            ? reject(new Error("Network request failed"))
-            : resolve(null),
-        2000,
-      );
-      signal.addEventListener("abort", () => {
-        clearTimeout(timer);
-        reject(new Error("Aborted"));
-      });
-    });
-
-    // Success only — a rejected refresh throws above and never reaches here, so
-    // a failed pull leaves the existing order untouched. Reshuffling now (while
-    // the indicator is still held open) means the settle reveals the new feed.
-    // setFeedOrder(reshuffle);
-    // Bring back posts deleted into the black hole (no-op when none were).
-    setFeedOrder((order) => (order.length === ITEMS.length ? order : ITEMS));
-  };
-
-  /** A Threads post finished its swallow: drop it, the rows below spring up. */
-  const removePost = (id: number) =>
-    setFeedOrder((order) => order.filter((i) => i !== id));
 
   const { progress, phase, spin, outcome, gesture, onScrollHandler } =
     useCustomRefreshControl({ onRefresh });
@@ -497,11 +465,6 @@ export const styles = StyleSheet.create({
   },
   separator: {
     height: 10,
-  },
-  threadDivider: {
-    height: StyleSheet.hairlineWidth,
-    width: "100%",
-    backgroundColor: "#2a2a2a",
   },
   itemStyle: {
     width: "90%",

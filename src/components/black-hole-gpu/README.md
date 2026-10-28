@@ -14,6 +14,22 @@ shipped), id 15 (progress-driven run: Destroy, Pause/Reset, scrubbable bar,
 settings panel) verified on the Simulator (15a-15d). See
 [Status & handoff](#status--handoff).
 
+## Tabs
+
+`src/app/black-hole-gpu/_layout.tsx` is a `NativeTabs` layout (dark tint):
+
+| Tab     | File          | Content                                                     |
+| ------- | ------------- | ----------------------------------------------------------- |
+| Demo    | `index.tsx`   | `BlackHoleGpu` (plain `View`, not `ThemeView`)              |
+| Threads | `threads.tsx` | `ThreadsExample` — posts swallowed on delete                |
+| Wiki    | `wiki.tsx`    | `react-native-webview` of the Black hole Wikipedia article  |
+
+Demo and Threads mount their GPU content only while focused
+(`useIsFocused`), so a hidden tab holds no canvas or render loop. The Threads
+example lives in `src/components/pull-to-refresh/threads-example/`
+(`ThreadsExample`, `useThreadsFeed`, `ThreadDivider`), shared with
+`PullToRefresh`.
+
 ## Architecture
 
 ```
