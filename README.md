@@ -27,6 +27,9 @@ Clone them. Learn from them. Ship them.
 | [Soap Film](./src/components/soap-film/README.md) | — | Animated soap-film iridescence you can disturb by dragging, with the thickness field and its color mapping kept as separate stages |
 | [Liquid Bubble Live](./src/components/liquid-bubble-live/README.md) | — | One draggable, pinchable glass bubble that refracts bouncing images live through a Skia backdrop shader |
 | [Liquid Bubble Interaction](./src/components/liquid-bubble-interaction/README.md) | — | A trigger bubble that blooms the greeting into four labelled glass bubbles that float and bounce in a single shader pass |
+| [Black Hole Text](./src/components/black-hole-text/README.md) | — | A Skia atlas driven by a UI-thread worklet, moving a growing number of particles on simple Kepler orbits |
+| [Black Hole GPU](./src/components/black-hole-gpu/README.md) | — | Three demos of a WebGPU black-hole vortex: compute shaders move huge particle counts, snapshotting any wrapped view and swallowing it |
+| [Skia + WebGPU Vortex](./src/components/skia-webgpu-vortex/README.md) | — | Skia content drawn straight into a WebGPU canvas and swallowed by the vortex, zero-copy because both run on the same Dawn device |
 
 ---
 
@@ -46,6 +49,7 @@ bun run start
 - [Expo](https://expo.dev) + [Expo Router](https://docs.expo.dev/router/introduction/)
 - [React Native Skia](https://shopify.github.io/react-native-skia/)
 - [Reanimated 4](https://docs.swmansion.com/react-native-reanimated/)
+- [React Native WebGPU](https://github.com/wcandillon/react-native-webgpu) + [TypeGPU](https://docs.swmansion.com/TypeGPU/)
 - [Bun](https://bun.sh)
 
 ---
