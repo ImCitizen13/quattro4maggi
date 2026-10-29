@@ -134,7 +134,7 @@ export function LiveCanvasCard() {
   const onStats = (s: VortexStats) => {
     const ms = 1000 / s.fps;
     const line = `${s.mode} ${s.fps.toFixed(0)} fps  ${ms.toFixed(2)} ms/frame  encode ${s.encodeMs.toFixed(2)}  skia ${s.sourceMs.toFixed(2)}`;
-    console.log(`[VortexCanvas] ${line}`);
+    // console.log(`[VortexCanvas] ${line}`);
     setStats(line);
   };
 
