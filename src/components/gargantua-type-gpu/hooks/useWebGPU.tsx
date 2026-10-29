@@ -58,7 +58,7 @@ export type UseWebGPUOptions = {
   sampler?: FrameSampler | null;
 };
 
-interface SceneProps {
+export type SceneProps = {
   context: GPUCanvasContext;
   device: GPUDevice;
   gpu: GPU;
@@ -67,12 +67,13 @@ interface SceneProps {
   /** Stable canvas layout-point dimensions captured before canvas.width is set. */
   canvasWidth: number;
   canvasHeight: number;
-}
+};
 
-type RenderScene = (timestamp: number) => void;
-type SceneCleanup = (() => void | Promise<void>) | void;
-type SceneResize = (canvasWidth: number, canvasHeight: number) => void;
-type SceneResult =
+/** Return `false` to skip `present()` this frame (nothing drawn). */
+export type RenderScene = (timestamp: number) => void | boolean;
+export type SceneCleanup = (() => void | Promise<void>) | void;
+export type SceneResize = (canvasWidth: number, canvasHeight: number) => void;
+export type SceneResult =
   | RenderScene
   | {
       render: RenderScene;
@@ -86,7 +87,7 @@ type SceneResult =
        */
       resize?: SceneResize;
     };
-type Scene = (props: SceneProps) => SceneResult | Promise<SceneResult>;
+export type Scene = (props: SceneProps) => SceneResult | Promise<SceneResult>;
 
 /**
  * Reusable WebGPU lifecycle hook.
@@ -115,9 +116,32 @@ export const useWebGPU = (
   size?: { width: number; height: number } | null,
   /** Frame-loop options. See {@link UseWebGPUOptions}. */
   options: UseWebGPUOptions = {},
+) => useWebGPUOnDevice(useDevice().device, scene, deps, size, options);
+
+/**
+ * Same as {@link useWebGPU}, but renders on a caller-owned device.
+ *
+ * `useDevice()` creates a NEW device per call, and GPU resources cannot cross
+ * devices — a texture captured on another device (e.g. a view snapshot) can't
+ * be bound on the one `useWebGPU` makes. Pass the device that owns them.
+ */
+export const useWebGPUOnDevice = (
+  device: GPUDevice | null,
+  scene: Scene | null,
+  deps: DependencyList = [],
+  /**
+   * Optional caller-measured layout-point size for the canvas. When provided,
+   * setup waits for the first non-zero size instead of polling `clientWidth`,
+   * and any subsequent size change triggers a resize routine
+   * (canvas.width/height update, context.configure, scene.resize) without
+   * tearing down the scene. Pass `null`/omit to keep the legacy poll-then-
+   * freeze behavior used by other screens.
+   */
+  size?: { width: number; height: number } | null,
+  /** Frame-loop options. See {@link UseWebGPUOptions}. */
+  options: UseWebGPUOptions = {},
 ) => {
   const { mode = "js-raf", sampler = null } = options;
-  const { device } = useDevice();
   const canvasRef = useCanvasRef();
   const animationFrameId = useRef<number | null>(null);
   /**
@@ -333,8 +357,8 @@ export const useWebGPU = (
             const loop = () => {
               frameId.value = requestAnimationFrame(loop);
               try {
-                renderScene(Date.now());
-                context.present();
+                const drawn = renderScene(Date.now());
+                if (drawn !== false) context.present();
               } catch (error) {
                 console.error("[WebGPU render error]", error);
               }
@@ -359,8 +383,8 @@ export const useWebGPU = (
             const timestamp = Date.now();
             const workStart = performance.now();
             try {
-              renderScene(timestamp);
-              context.present();
+              const drawn = renderScene(timestamp);
+              if (drawn !== false) context.present();
             } catch (error) {
               // Keep RAF alive while still surfacing frame-level failures.
               console.error("[WebGPU render error]", error);

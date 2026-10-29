@@ -104,7 +104,7 @@ interface BubbleConfig {
  */
 function skDataToTexture(device: GPUDevice, data: SkData): GPUTexture | null {
   const img = perf.measure("decode", () =>
-    Skia.Image.MakeImageFromEncoded(data),
+    Skia.Image.MakeFromEncoded(data),
   );
   if (!img) return null;
 

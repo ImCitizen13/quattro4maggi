@@ -148,7 +148,7 @@ export function bakePathSdf(
   const h = Math.max(1, Math.round(height));
 
   // --- 1. Rasterize the path as white on transparent -------------------------
-  const surface = Skia.Surface.MakeOffscreen(w, h) ?? Skia.Surface.Make(w, h);
+  const surface = Skia.Surface.MakeOffscreen(w, h) ?? Skia.Surface.MakeRaster(w, h);
   if (!surface) return null;
 
   const canvas = surface.getCanvas();
@@ -216,7 +216,7 @@ export function bakePathSdf(
     packed[i * 4 + 3] = 1;
   }
 
-  const image = Skia.Image.MakeImage(
+  const image = Skia.Image.MakeRaster(
     {
       width: w,
       height: h,

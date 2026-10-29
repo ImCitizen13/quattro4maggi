@@ -5,6 +5,7 @@
 import { SPRING_FOLLOW_PROPS } from "@/components/wabi-and-more/constants";
 import {
   SPRING_BOUNCE_ANIMATION,
+  SPRING_BUBBLE_INFLATE,
   SPRING_CONFIG,
 } from "@/lib/animations/constants";
 import { useMemo } from "react";
@@ -21,6 +22,7 @@ import {
 } from "react-native-gesture-handler";
 import {
   clamp,
+  useAnimatedReaction,
   DerivedValue,
   SharedValue,
   useSharedValue,
@@ -121,6 +123,84 @@ export function useBubblePanGesture({
     bubbleY,
     targetX,
     targetY,
+    isActive,
+    velocityX,
+    velocityY,
+    panGesture,
+  };
+}
+
+export type UseBubbleDragHomeGestureParams = {
+  /** Rest position the bubble springs back to on release, pt. */
+  restX: number;
+  restY: number;
+};
+
+export type UseBubbleDragHomeGestureReturn = {
+  bubbleX: SharedValue<number>;
+  bubbleY: SharedValue<number>;
+  /** 1 while the pan is active, 0 otherwise. */
+  isActive: SharedValue<number>;
+  /** Raw gesture velocity, pt/s. */
+  velocityX: SharedValue<number>;
+  velocityY: SharedValue<number>;
+  panGesture: PanGesture;
+};
+
+/**
+ * Bubble drag (translation, not jump-to-finger) + spring home on release.
+ */
+export function useBubbleDragHomeGesture({
+  restX,
+  restY,
+}: UseBubbleDragHomeGestureParams): UseBubbleDragHomeGestureReturn {
+  const bubbleX = useSharedValue(restX);
+  const bubbleY = useSharedValue(restY);
+  const startX = useSharedValue(restX);
+  const startY = useSharedValue(restY);
+  const isActive = useSharedValue(0);
+  const velocityX = useSharedValue(0);
+  const velocityY = useSharedValue(0);
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .onBegin(() => {
+          "worklet";
+          isActive.value = 1;
+          startX.value = bubbleX.value;
+          startY.value = bubbleY.value;
+        })
+        .onUpdate((e) => {
+          "worklet";
+          bubbleX.value = startX.value + e.translationX;
+          bubbleY.value = startY.value + e.translationY;
+          velocityX.value = e.velocityX;
+          velocityY.value = e.velocityY;
+        })
+        .onFinalize((e) => {
+          "worklet";
+          isActive.value = 0;
+          velocityX.value = e.velocityX;
+          velocityY.value = e.velocityY;
+        }),
+    [bubbleX, bubbleY, startX, startY, isActive, velocityX, velocityY],
+  );
+
+  useAnimatedReaction(
+    () => isActive.value,
+    (active, prev) => {
+      if (active === 0 && prev === 1) {
+        bubbleX.value = withSpring(restX, SPRING_BUBBLE_INFLATE);
+        bubbleY.value = withSpring(restY, SPRING_BUBBLE_INFLATE);
+      }
+    },
+    [restX, restY],
+  );
+
+  return {
+    bubbleX,
+    bubbleY,
     isActive,
     velocityX,
     velocityY,

@@ -40,7 +40,7 @@
       "distribution": "internal",
       "environment": "production",
       "autoIncrement": true,
-      "channel": "production",
+      "channel": "testflight_1.0.0",
       "android": {
         "buildType": "apk"
       },

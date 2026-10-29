@@ -417,7 +417,7 @@ export function getSoapFilmRampImage(): SkImage {
     bytes[i * 4 + 3] = 255;
   }
 
-  const image = Skia.Image.MakeImage(
+  const image = Skia.Image.MakeRaster(
     {
       width,
       height: 1,
@@ -467,7 +467,7 @@ export function buildSoapFilmRampImage(colors: readonly string[]): SkImage {
     bytes[i * 4 + 3] = 255;
   }
 
-  const image = Skia.Image.MakeImage(
+  const image = Skia.Image.MakeRaster(
     {
       width,
       height: 1,

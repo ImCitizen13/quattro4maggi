@@ -54,7 +54,7 @@ export default function RootLayout() {
             <Stack>
               <Stack.Screen
                 name="index"
-                options={{ headerShown: false, title: "Demos" }}
+                options={{ headerShown: true, title: "Demos" }}
               />
               <Stack.Screen
                 name="bouncy-scale-ball"
@@ -87,7 +87,7 @@ export default function RootLayout() {
               <Stack.Screen
                 name="wabi-and-more"
                 options={{ headerShown: false }}
-              />{" "}
+              />
               <Stack.Screen
                 name="gargantua-type-gpu"
                 options={{ headerShown: false }}

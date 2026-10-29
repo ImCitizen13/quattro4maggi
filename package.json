@@ -8,6 +8,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "start:dials": "WITH_ROZENITE=true expo start",
+    "dials:check-prod": "bun scripts/check-dials-prod.ts",
+    "dials:build": "cd plugins/rozenite-plugin-dialkit && bun install && bun run build && cd ../.. && rm -rf node_modules/rozenite-plugin-dialkit && bun install",
     "prewarm-worklets": "mkdir -p node_modules/react-native-worklets/.worklets && expo export --platform all --output-dir /tmp/prewarm-worklets --clear || true",
     "eas-build-post-install": "bun run prewarm-worklets"
   },
@@ -48,18 +51,23 @@
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-skia": "3.3.0",
+    "react-native-skia": "3.8.1",
     "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
-    "react-native-webgpu": "0.13.0",
-    "react-native-worklets": "0.10.1",
+    "react-native-webgpu": "0.19.2",
+    "react-native-webview": "13.16.1",
+    "react-native-worklets": "0.10.4",
     "typegpu": "^0.12.4",
     "unplugin-typegpu": "^0.12.3"
   },
   "devDependencies": {
+    "@rozenite/metro": "2.5.0",
+    "@rozenite/plugin-bridge": "2.5.0",
     "@types/react": "~19.2.10",
+    "dialkit": "2.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~57.0.2",
+    "rozenite-plugin-dialkit": "file:./plugins/rozenite-plugin-dialkit",
     "typescript": "~6.0.3"
   },
   "overrides": {
@@ -67,5 +75,9 @@
     "ajv": "^6.14.0",
     "@isaacs/brace-expansion": ">=5.0.1"
   },
-  "private": true
+  "private": true,
+  "patchedDependencies": {
+    "metro@0.84.5": "patches/metro@0.84.5.patch",
+    "metro-runtime@0.84.5": "patches/metro-runtime@0.84.5.patch"
+  }
 }

@@ -62,3 +62,11 @@ src/components/premuim/shaders.ts
 
 /agent-rules
 *.local
+
+docs/bugs/
+backlog/
+recordings/
+
+# Rozenite plugin build output + its own install
+plugins/*/dist/
+plugins/*/node_modules/
